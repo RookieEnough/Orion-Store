@@ -1,115 +1,188 @@
+<div align="center">
+  <img src="https://github.com/RookieEnough/Orion-Store/blob/main/assets/orion_logo_512.png" width="120" height="120" alt="OrionStore Logo" />
+  
+  # OrionStore
+  
+  **The Modern, Serverless App Store for the Open Web.**
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![React](https://img.shields.io/badge/react-%2320232a.svg?style=flat&logo=react&logoColor=%2361DAFB)](https://reactjs.org/)
+  [![TailwindCSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=flat&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+  [![Capacitor](https://img.shields.io/badge/capacitor-%231199EE.svg?style=flat&logo=capacitor&logoColor=white)](https://capacitorjs.com/)
+  [![GitHub Actions](https://img.shields.io/badge/github%20actions-%232671E5.svg?style=flat&logo=githubactions&logoColor=white)](https://github.com/features/actions)
 
-# Nexus OpenStore
+  <p align="center">
+    <a href="#-features">Features</a> •
+    <a href="#-how-it-works">Architecture</a> •
+    <a href="#-native-android-build">Native Build</a> •
+    <a href="#-deployment">Deployment</a> •
+    <a href="#-auto-mirror-system">Auto-Mirror</a>
+  </p>
+</div>
 
-A modern, open-source app store for Android and PC, built with React and Tailwind CSS.
+---
 
-## Features
-- **Material You 3 Design**: Vibrant, Gen Z aesthetic with Acid/Neon accents.
-- **Dark Mode**: Built-in theme toggling.
-- **Dual Platform**: Sections for Android and PC software.
-- **Native Bridge**: Detects installed apps and provides updates when running as an APK.
-- **Static Configuration**: Simple JSON-based app management.
+## 📱 Preview
 
-## Managing Apps
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=dIzAipwgj6A" target="_blank">
+    <img src="https://img.youtube.com/vi/dIzAipwgj6A/maxresdefault.jpg" alt="Watch the Demo" width="100%" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);" />
+  </a>
+  <p><i>Click the image above to watch the demo video</i></p>
+</div>
 
-You do not need to edit code to add apps. The store is driven by the `apps.json` file. When you update `apps.json` in your repository, the store automatically updates.
+<br />
 
-### Adding an App
+<div align="center">
+  <!-- Upload these images to an 'assets' folder in your repo -->
+  <img src="assets/home.PNG" height="350" alt="Home Screen" style="border-radius: 15px; margin: 5px;" />
+  <img src="assets/dark.PNG" height="350" alt="Dark Mode" style="border-radius: 15px; margin: 5px;" />
+  <img src="assets/detail.PNG" height="350" alt="App Details" style="border-radius: 15px; margin: 5px;" />
+</div>
 
-Simply add a new entry to `apps.json` with the direct download link to your APK file.
+---
 
-```json
-{
-  "id": "spotube",
-  "name": "Spotube",
-  "description": "A great music app.",
-  "icon": "https://link-to-icon.png",
-  "version": "3.4.0",
-  "latestVersion": "3.4.0",
-  "downloadUrl": "https://github.com/user/repo/releases/download/v3.4.0/app.apk",
-  "repoUrl": "https://github.com/user/repo",
-  "category": "Media",
-  "platform": "Android",
-  "size": "25 MB",
-  "author": "Developer Name",
-  "screenshots": [
-    "https://link-to-screenshot1.jpg",
-    "https://link-to-screenshot2.jpg"
-  ]
-}
+## 🚀 Features
+
+OrionStore is a **Progressive Android Application** that acts as a fully functional App Store without requiring a dedicated backend server. It runs entirely on GitHub and can be compiled to a native APK using **Capacitor**.
+
+*   **🎨 Material You 3 Design:** A vibrant, Gen Z aesthetic featuring "Acid" and "Neon" accents with smooth animations.
+*   **🤖 Native Android Support:** Built with Capacitor to run directly on Android devices with native performance.
+*   **🌗 Adaptive Theming:** Seamless Light, Dusk, and Dark modes.
+*   **☁️ Serverless Architecture:** Powered 100% by GitHub JSON & Releases. No database required.
+*   **🤖 Auto-Mirroring Engine:** Built-in scraper (Puppeteer) that finds updates for apps like Spotify, Instagram, etc., and re-uploads them to your repo automatically.
+*   **⚡ Smart Caching:** LocalStorage caching strategy for instant loads and offline capability.
+---
+
+## 🛠 How It Works
+
+OrionStore uses a unique **"Repo-as-a-Backend"** approach:
+
+1.  **Frontend (`App.tsx`):** Fetches `config.json` and `apps.json` from the repository.
+2.  **Database (`apps.json`):** Contains metadata (Name, Icon, Description) and links to GitHub Repositories.
+3.  **The Engine:**
+    *   The app checks the `mirror.json` file for the absolute latest releases.
+    *   If `releaseKeyword` is set, it scans the **last 10 releases** of a repo to find the specific app variant you need (supporting multi-app monorepos).
+    *   It compares the remote version with the local version stored in the browser/app.
+
+---
+
+## 📱 Native Android Build
+
+This project is configured with **Capacitor**, allowing you to convert the web app into a native `.apk` file easily.
+
+### Prerequisites
+1.  Install Android Studio.
+2.  Install dependencies:
+    ```bash
+    npm install @capacitor/core @capacitor/cli @capacitor/android
+    npx cap add android
+    ```
+
+### Building the APK
+```bash
+# 1. Build the React web project
+npm run build
+
+# 2. Sync the web assets to the native Android project
+npx cap sync
+
+# 3. Open Android Studio to build the Signed APK
+npx cap open android
 ```
+## 👨‍💻 Developer Mode
 
-## 🚀 Auto-Update Mirroring
+OrionStore includes a hidden debug menu for power users and contributors to manage API limits and data sources.
 
-The store includes a sophisticated workflow (`.github/workflows/auto_mirror.yml`) that can automatically check external websites for updates, download the APK, extract the version number, and publish a new release if it's an update.
+### 🔓 How to Unlock
+1.  Navigate to the **About** tab (or stay on Home).
+2.  Tap the **"OrionStore"** logo in the top-left header **9 times** rapidly.
+3.  A toast notification will appear confirming you are now a developer.
+4.  Scroll down to the bottom of the **About** tab to see the new options.
 
-### Setup Auto-Updates
+### 🛠️ Capabilities
+*   **🔑 API Key Management:** Input your own **GitHub Personal Access Token (PAT)** to increase API rate limits from **60/hr** to **5000/hr**. This is essential if you are browsing the store frequently or developing.
+*   **🔀 Data Source Toggle:** Switch between **Remote** (Live JSON from GitHub) and **Local** (Hardcoded `localData.ts`) modes. Useful for testing new apps without committing to the repo.
+*   **🔥 Nuke Cache:** A "Wipe Cache & Reset" button to clear all `localStorage` data and reset the app state if things get stuck.
+---
 
-1.  Open `mirror_config.json` in your repository.
-2.  Add apps you want to track using **Direct Download Links** (Permlinks).
+## 🤖 Auto-Mirror System
+
+This is the heart of the automation. You don't need to manually upload APKs.
+
+### 1. Configuration
+Edit `mirror_config.json` to tell the bot which apps to track.
 
 ```json
 [
   {
-    "id": "telegram-premium",
-    "name": "Telegram",
-    "downloadUrl": "https://telegram.org/dl/android/apk"
+    "id": "instagram-mod",
+    "name": "Instagram",
+    "downloadUrl": "https://an1.com/1029-instagram-apk.html",
+    "mode": "scrape",
+    "wait": 30000
   }
 ]
 ```
 
-3.  The workflow runs automatically at **00:00 UTC** every day.
-4.  It detects the version inside the downloaded APK.
-5.  If that version doesn't exist in your Releases, it creates a new Release tagged `telegram-premium-v10.1.1`.
+### 2. The Workflow (`.github/workflows/auto_mirror.yml`)
+*   Runs daily at **00:00 UTC**.
+*   **Direct Mode:** Wget/Curl direct links.
+*   **Scrape Mode:** Uses **Puppeteer** with stealth plugins to bypass Cloudflare, navigate download pages (like AN1 or APKDone), and extract the APK.
+*   **Publishing:** It parses the APK via `aapt` to get the *real* internal version number, tags it, and uploads it to GitHub Releases.
 
-### Manual Mirroring
+### 3. The Generator (`mirror_generator.py`)
+*   Runs after every release.
+*   Scans your Releases page.
+*   Updates `mirror.json` with direct download links so the Frontend doesn't hit GitHub API rate limits.
 
-If you just want to mirror a single file once:
-1.  Go to **Actions** -> **Mirror APK (Manual)**.
-2.  Enter the `App ID` (e.g., `spotify-mod`).
-3.  Enter the `Download URL`.
-4.  Run Workflow. It will auto-detect the version and publish it.
+---
 
-### Connecting to apps.json
+## 📦 Deployment (Self-Hosting)
 
-Once setup, ensure your `apps.json` points to your own repo:
+You can host your own version of OrionStore in less than 5 minutes.
 
-```json
-{
-  "id": "telegram-premium",
-  "githubRepo": "YourUsername/YourStoreRepo",
-  "releaseKeyword": "telegram-premium",
-  ...
-}
+1.  **Fork** this repository.
+2.  Navigate to **Settings > Pages**.
+3.  Select `Source: Deploy from a branch` -> `main` -> `/ (root)`.
+4.  Click **Save**.
+5.  Edit `constants.ts` and `apps.json` to point to your new repository URLs.
+
+### Local Development
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/yourname/OrionStore.git
+
+# 2. Install dependencies
+npm install
+
+# 3. Start development server
+npm start
 ```
 
-## Project Structure
-- `index.html`: Entry point with Tailwind CSS (CDN) and Import Maps.
-- `App.tsx`: Main application logic and routing.
-- `apps.json`: The database of apps.
-- `mirror_config.json`: Configuration for the auto-updater.
-- `components/`: UI components (AppCard, AppDetail).
+---
 
-## How to Host on GitHub Pages
-1. Create a new repository on GitHub.
-2. Upload all these files to the repository.
-3. Go to **Settings > Pages**.
-4. Select the `main` branch and save.
-5. Your store will be live at `https://yourusername.github.io/your-repo`.
+## 🤝 Contributing
 
-## Troubleshooting
+Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
-### Build Error: "Dependency 'androidx.core:core:1.17.0' requires compileSdk 36"
-If you see a build error stating that `androidx.core:core` requires `compileSdk 36` (Android 15) while you are on `android-35`, it is because a dependency (likely from Capacitor or a transitive library) pulled in a very new version of the core library.
+1.  Fork the Project
+2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4.  Push to the Branch (`git push origin feature/AmazingFeature`)
+5.  Open a Pull Request
 
-**Fix:**
-Open your `android/app/build.gradle` file and add this code block at the very bottom of the file to force a compatible version:
+---
 
-```gradle
-configurations.all {
-    resolutionStrategy {
-        force 'androidx.core:core:1.15.0'
-        force 'androidx.core:core-ktx:1.15.0'
-    }
-}
-```
+## 💖 Support
+
+This project is open-source and free. If you enjoy using it, consider buying me a coffee!
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H4TIXL3)
+
+---
+
+<div align="center">
+  <p>Made with 💜 for Geeks by <a href="https://github.com/RookieEnough">RookieZ</a></p>
+</div>
