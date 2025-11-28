@@ -34,9 +34,9 @@
 
 <div align="center">
   <!-- Upload these images to an 'assets' folder in your repo -->
-  <img src="assets/home.png" height="350" alt="Home Screen" style="border-radius: 15px; margin: 5px;" />
-  <img src="assets/dark.png" height="350" alt="Dark Mode" style="border-radius: 15px; margin: 5px;" />
-  <img src="assets/detail.png" height="350" alt="App Details" style="border-radius: 15px; margin: 5px;" />
+  <img src="assets/home.PNG" height="350" alt="Home Screen" style="border-radius: 15px; margin: 5px;" />
+  <img src="assets/dark.PNG" height="350" alt="Dark Mode" style="border-radius: 15px; margin: 5px;" />
+  <img src="assets/detail.PNG" height="350" alt="App Details" style="border-radius: 15px; margin: 5px;" />
 </div>
 
 ---
