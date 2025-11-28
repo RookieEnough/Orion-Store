@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/RookieEnough/Orion-Data/main/assets/orion_logo_512.png" width="120" height="120" alt="OrionStore Logo" />
+  <img src="https://github.com/RookieEnough/Orion-Store/blob/main/assets/orion_logo_512.png" width="120" height="120" alt="OrionStore Logo" />
   
   # OrionStore
   
