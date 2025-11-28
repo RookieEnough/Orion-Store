@@ -3,7 +3,7 @@
   
   # OrionStore
   
-  **The Modern, Serverless App Store for Android.**
+  **The Modern, Serverless App Store for the Open Web.**
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![React](https://img.shields.io/badge/react-%2320232a.svg?style=flat&logo=react&logoColor=%2361DAFB)](https://reactjs.org/)
@@ -24,14 +24,10 @@
 ## 📱 Preview
 
 <div align="center">
-  <!-- 
-    TIP: To add a video, go to your Repo > Issues > New Issue. 
-    Drag and drop your MP4 file there. 
-    Copy the generated link and replace the link below.
-  -->
-  <a href="assets/demo.gif">
-    <img src="assets/demo.gif" alt="OrionStore Demo Video" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);" width="100%" />
+  <a href="https://www.youtube.com/watch?v=dIzAipwgj6A" target="_blank">
+    <img src="https://img.youtube.com/vi/dIzAipwgj6A/maxresdefault.jpg" alt="Watch the Demo" width="100%" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);" />
   </a>
+  <p><i>Click the image above to watch the demo video</i></p>
 </div>
 
 <br />
@@ -47,13 +43,15 @@
 
 ## 🚀 Features
 
-OrionStore is a **Progressive Android Application** that acts as a fully functional App Store without requiring a dedicated backend server. It runs entirely on GitHub.
+OrionStore is a **Progressive Web App (PWA)** that acts as a fully functional App Store without requiring a dedicated backend server. It runs entirely on GitHub.
 
 *   **🎨 Material You 3 Design:** A vibrant, Gen Z aesthetic featuring "Acid" and "Neon" accents with smooth animations.
 *   **🌗 Adaptive Theming:** Seamless Light, Dusk, and Dark modes.
 *   **☁️ Serverless Architecture:** Powered 100% by GitHub JSON & Releases. No database required.
 *   **🤖 Auto-Mirroring Engine:** Built-in scraper (Puppeteer) that finds updates for apps like Spotify, Instagram, etc., and re-uploads them to your repo automatically.
 *   **⚡ Smart Caching:** LocalStorage caching strategy for instant loads and offline capability.
+*   **📱 Responsive:** Native-like experience on Android, fully functional on Desktop/PC.
+
 ---
 
 ## 🛠 How It Works
@@ -151,4 +149,3 @@ This project is open-source and free. If you enjoy using it, consider buying me 
 <div align="center">
   <p>Made with 💜 for Geeks by <a href="https://github.com/RookieEnough">RookieZ</a></p>
 </div>
-
