@@ -24,18 +24,23 @@
 ## 📱 Preview
 
 <div align="center">
-  <!-- REPLACE THE LINK BELOW WITH YOUR ACTUAL DEMO VIDEO/GIF LINK -->
-  <a href="https://your-demo-video-link.com">
-    <img src="https://via.placeholder.com/800x400.png?text=Click+to+Watch+App+Demo" alt="OrionStore Demo Video" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);" width="100%" />
+  <!-- 
+    TIP: To add a video, go to your Repo > Issues > New Issue. 
+    Drag and drop your MP4 file there. 
+    Copy the generated link and replace the link below.
+  -->
+  <a href="assets/demo.gif">
+    <img src="assets/demo.gif" alt="OrionStore Demo Video" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);" width="100%" />
   </a>
 </div>
 
 <br />
 
 <div align="center">
-  <img src="https://via.placeholder.com/200x400.png?text=Home+Screen" height="350" alt="Home Screen" style="border-radius: 15px; margin: 5px;" />
-  <img src="https://via.placeholder.com/200x400.png?text=Dark+Mode" height="350" alt="Dark Mode" style="border-radius: 15px; margin: 5px;" />
-  <img src="https://via.placeholder.com/200x400.png?text=App+Details" height="350" alt="App Details" style="border-radius: 15px; margin: 5px;" />
+  <!-- Upload these images to an 'assets' folder in your repo -->
+  <img src="assets/home.png" height="350" alt="Home Screen" style="border-radius: 15px; margin: 5px;" />
+  <img src="assets/dark.png" height="350" alt="Dark Mode" style="border-radius: 15px; margin: 5px;" />
+  <img src="assets/detail.png" height="350" alt="App Details" style="border-radius: 15px; margin: 5px;" />
 </div>
 
 ---
