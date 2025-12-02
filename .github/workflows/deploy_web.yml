@@ -32,10 +32,15 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        # Changed from 'npm ci' to 'npm install' because package-lock.json might not exist yet
+        run: npm install
 
       - name: Build
         run: npm run build
+
+      - name: Disable Jekyll
+        # Crucial: Tells GitHub Pages NOT to use Jekyll, so it serves your files exactly as built
+        run: touch ./dist/.nojekyll
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
