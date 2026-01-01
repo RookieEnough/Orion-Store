@@ -66,7 +66,7 @@ export const AppDetail = memo(function AppDetail({ app, onClose }: AppDetailProp
 
           <p className="text-theme-sub mb-6 leading-relaxed">{app.description}</p>
 
-          {app.screenshots?.length > 0 && (
+          {app.screenshots.length > 0 && (
             <div className="mb-6">
               <h3 className="font-bold text-theme-text mb-3">Screenshots</h3>
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">

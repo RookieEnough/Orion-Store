@@ -8,7 +8,8 @@ export const Header = memo(function Header() {
   const config = useConfig();
   const { cycleTheme, handleDevTap } = useStore();
 
-  const hasStoreUpdate = config?.latestStoreVersion && compareVersions(config.latestStoreVersion, CURRENT_STORE_VERSION) > 0;
+  const hasStoreUpdate = config?.latestStoreVersion !== undefined && compareVersions(config.latestStoreVersion, CURRENT_STORE_VERSION) > 0;
+  const downloadUrl = config?.storeDownloadUrl;
 
   return (
     <header className="absolute top-0 left-0 w-full z-20 px-6 py-6 flex justify-between items-center">
@@ -22,9 +23,9 @@ export const Header = memo(function Header() {
       </div>
 
       <div className="flex items-center gap-3">
-        {hasStoreUpdate && (
+        {hasStoreUpdate && downloadUrl && (
           <button
-            onClick={() => config?.storeDownloadUrl && (window.location.href = config.storeDownloadUrl)}
+            onClick={() => { window.location.href = downloadUrl; }}
             className="px-3 py-2 rounded-xl bg-acid/20 text-acid-dark dark:text-acid border border-acid/30 font-bold text-xs flex items-center gap-2 animate-pulse"
           >
             <i className="fas fa-arrow-circle-up" />

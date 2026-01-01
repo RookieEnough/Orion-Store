@@ -4,9 +4,9 @@ import type { AppItem } from '@/types';
 
 interface AppCardProps {
   app: AppItem;
-  onClick: (app: AppItem) => void;
+  onClick: (app: AppItem | null) => void;
   hasUpdate: boolean;
-  localVersion?: string;
+  localVersion?: string | undefined;
 }
 
 export const AppCard = memo(function AppCard({ app, onClick, hasUpdate, localVersion }: AppCardProps) {
@@ -28,7 +28,7 @@ export const AppCard = memo(function AppCard({ app, onClick, hasUpdate, localVer
           <p className="text-theme-sub text-sm truncate">{app.author}</p>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-xs font-medium text-theme-sub bg-theme-element px-2 py-1 rounded-lg">{app.size}</span>
-            <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-lg">{localVersion || app.version}</span>
+            <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-lg">{localVersion ?? app.version}</span>
           </div>
         </div>
       </div>

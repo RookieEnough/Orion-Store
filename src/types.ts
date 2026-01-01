@@ -17,17 +17,17 @@ export interface AppItem {
   version: string;
   latestVersion: string;
   downloadUrl: string;
-  variants?: AppVariant[];
-  repoUrl?: string;
-  githubRepo?: string;
+  variants?: AppVariant[] | undefined;
+  repoUrl?: string | undefined;
+  githubRepo?: string | undefined;
   category: AppCategory;
   platform: Platform;
   size: string;
   author: string;
   screenshots: string[];
-  isInstalled?: boolean;
-  releaseKeyword?: string;
-  packageName?: string;
+  isInstalled?: boolean | undefined;
+  releaseKeyword?: string | undefined;
+  packageName?: string | undefined;
 }
 
 export interface SocialLinks {
@@ -51,16 +51,16 @@ export interface FAQItem {
 
 export interface StoreConfig {
   appsJsonUrl: string;
-  mirrorJsonUrl?: string;
+  mirrorJsonUrl?: string | undefined;
   maintenanceMode: boolean;
-  maintenanceMessage?: string;
-  announcement?: string;
-  minStoreVersion?: string;
-  latestStoreVersion?: string;
-  storeDownloadUrl?: string;
-  socials?: SocialLinks;
-  devProfile?: DevProfile;
-  faqs?: FAQItem[];
-  supportEmail?: string;
-  easterEggUrl?: string;
+  maintenanceMessage?: string | undefined;
+  announcement?: string | undefined;
+  minStoreVersion?: string | undefined;
+  latestStoreVersion?: string | undefined;
+  storeDownloadUrl?: string | undefined;
+  socials?: SocialLinks | undefined;
+  devProfile?: DevProfile | undefined;
+  faqs?: FAQItem[] | undefined;
+  supportEmail?: string | undefined;
+  easterEggUrl?: string | undefined;
 }

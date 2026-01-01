@@ -17,9 +17,9 @@ export const storage = {
     try { localStorage.setItem(key, value); }
     catch (e) {
       if ((e as DOMException).name === 'QuotaExceededError') {
-        const saved = KEYS_TO_PRESERVE.map(k => [k, localStorage.getItem(k)] as const).filter(([, v]) => v);
+        const saved = KEYS_TO_PRESERVE.map(k => [k, localStorage.getItem(k)] as const).filter((pair): pair is [string, string] => pair[1] !== null);
         localStorage.clear();
-        saved.forEach(([k, v]) => localStorage.setItem(k, v!));
+        saved.forEach(([k, v]) => localStorage.setItem(k, v));
         try { localStorage.setItem(key, value); } catch { /* full */ }
       }
     }

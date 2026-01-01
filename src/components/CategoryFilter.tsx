@@ -37,7 +37,7 @@ export const CategoryFilter = memo(function CategoryFilter() {
           </ul>
         )}
       </div>
-      <button onClick={() => loadApps(true)} className={`shrink-0 w-12 h-12 rounded-2xl border border-theme-border bg-card flex items-center justify-center text-theme-sub hover:text-primary hover:border-primary transition-all shadow-xs active:scale-95 ${isRefreshing ? 'animate-spin text-primary' : ''}`} title="Refresh">
+      <button onClick={() => { void loadApps(true); }} className={`shrink-0 w-12 h-12 rounded-2xl border border-theme-border bg-card flex items-center justify-center text-theme-sub hover:text-primary hover:border-primary transition-all shadow-xs active:scale-95 ${isRefreshing ? 'animate-spin text-primary' : ''}`} title="Refresh">
         <i className="fas fa-sync-alt" />
       </button>
     </div>

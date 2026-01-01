@@ -9,70 +9,67 @@ import type { AppItem, AppVariant, StoreConfig, Tab } from '@/types';
 type Theme = 'light' | 'dusk' | 'dark';
 
 interface Release {
-  name?: string;
-  tag_name?: string;
-  published_at?: string;
-  assets?: { name: string; browser_download_url: string; size: number }[];
+  name?: string | undefined;
+  tag_name?: string | undefined;
+  published_at?: string | undefined;
+  assets?: { name: string; browser_download_url: string; size: number }[] | undefined;
+}
+
+interface CacheItem {
+  ts: number;
+  data: Release[];
+  etag?: string | null | undefined;
 }
 
 interface AppState {
-  // Theme
   theme: Theme;
   setTheme: (t: Theme) => void;
   cycleTheme: () => void;
-
-  // Navigation
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
-
-  // Apps
   apps: AppItem[];
   isLoading: boolean;
   isRefreshing: boolean;
   config: StoreConfig | null;
   loadApps: (manual?: boolean) => Promise<void>;
-
-  // Installed
   installedVersions: Record<string, string>;
   registerInstall: (id: string, ver: string) => void;
   checkHasUpdate: (app: AppItem) => boolean;
-
-  // Selected
   selectedApp: AppItem | null;
   setSelectedApp: (app: AppItem | null) => void;
-
-  // Search
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   selectedCategory: string;
   setSelectedCategory: (c: string) => void;
-
-  // Dev Mode
   isDevUnlocked: boolean;
   devTapCount: number;
   devToast: { msg: string; show: boolean };
   handleDevTap: () => void;
-
-  // Settings
   useRemoteJson: boolean;
   toggleSourceMode: () => void;
   githubToken: string;
   setGithubToken: (t: string) => void;
-
-  // UI
   showFAQ: boolean;
   setShowFAQ: (s: boolean) => void;
-
-  // Download
+  isLegend: boolean;
+  setIsLegend: (v: boolean) => void;
   handleDownload: (app: AppItem, url?: string) => void;
 }
+
+const getInitialApps = (): AppItem[] => {
+  if (storage.get(STORAGE_KEYS.CACHE_VERSION) !== CACHE_VERSION) return localAppsData.map(sanitizeApp);
+  try {
+    const cached = storage.get(STORAGE_KEYS.CACHED_APPS);
+    const parsed: unknown = cached ? JSON.parse(cached) : [];
+    return Array.isArray(parsed) ? (parsed as Partial<AppItem>[]).map(sanitizeApp) : localAppsData.map(sanitizeApp);
+  } catch { return localAppsData.map(sanitizeApp); }
+};
 
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
-      // Theme
       theme: 'light',
-      setTheme: (theme) => {
+      setTheme: theme => {
         document.documentElement.classList.remove('light', 'dusk', 'dark');
         document.documentElement.classList.add(theme);
         set({ theme });
@@ -82,19 +79,13 @@ export const useStore = create<AppState>()(
         get().setTheme(t === 'light' ? 'dusk' : t === 'dusk' ? 'dark' : 'light');
       },
 
-      // Navigation
       activeTab: 'android',
-      setActiveTab: (activeTab) => {
+      setActiveTab: activeTab => {
         set({ activeTab, searchQuery: '', selectedCategory: 'All' });
         window.scrollTo({ top: 0, behavior: 'smooth' });
       },
 
-      // Apps
-      apps: (() => {
-        if (storage.get(STORAGE_KEYS.CACHE_VERSION) !== CACHE_VERSION) return localAppsData.map(sanitizeApp);
-        try { return JSON.parse(storage.get(STORAGE_KEYS.CACHED_APPS) || '[]').map(sanitizeApp); }
-        catch { return localAppsData.map(sanitizeApp); }
-      })(),
+      apps: getInitialApps(),
       isLoading: false,
       isRefreshing: false,
       config: null,
@@ -102,11 +93,11 @@ export const useStore = create<AppState>()(
       loadApps: async (manual = false) => {
         const { useRemoteJson, githubToken, apps } = get();
         if (manual) set({ isRefreshing: true });
-        if (!apps.length) set({ isLoading: true });
+        if (apps.length === 0) set({ isLoading: true });
 
         try {
           let raw: AppItem[] = localAppsData;
-          let mirror: Record<string, unknown> | null = null;
+          let mirror: Record<string, Release[]> | null = null;
 
           if (useRemoteJson) {
             const [cfgRes, appsRes, mirrorRes] = await Promise.all([
@@ -116,39 +107,41 @@ export const useStore = create<AppState>()(
             ]);
 
             if (cfgRes?.ok) {
-              const cfg = await cfgRes.json();
+              const cfg = (await cfgRes.json()) as StoreConfig;
               set({ config: cfg });
               if (cfg.maintenanceMode) { set({ isLoading: false, isRefreshing: false }); return; }
             }
-            if (appsRes?.ok) raw = await appsRes.json();
-            if (mirrorRes?.ok) mirror = await mirrorRes.json();
+            if (appsRes?.ok) raw = (await appsRes.json()) as AppItem[];
+            if (mirrorRes?.ok) mirror = (await mirrorRes.json()) as Record<string, Release[]>;
           }
 
           raw = raw.map(sanitizeApp);
-          const cache = new Map<string, unknown[]>();
-          if (mirror) Object.entries(mirror).forEach(([k, v]) => cache.set(k, Array.isArray(v) ? v : [v]));
-
-          // Find repos needing fetch
-          const toFetch: string[] = [];
-          if (manual || githubToken) {
-            raw.forEach(app => {
-              if (app.downloadUrl && app.downloadUrl !== '#' && app.downloadUrl.startsWith('http')) return;
-              if (app.githubRepo && mirror?.[app.githubRepo]) return;
-              if (app.githubRepo) toFetch.push(cleanGithubRepo(app.githubRepo));
-            });
+          const cache = new Map<string, Release[]>();
+          if (mirror) {
+            for (const [k, v] of Object.entries(mirror)) {
+              cache.set(k, Array.isArray(v) ? v : [v]);
+            }
           }
 
-          // Parallel GitHub fetches (batch of 5)
+          const toFetch: string[] = [];
+          if (manual || githubToken) {
+            for (const app of raw) {
+              if (app.downloadUrl && app.downloadUrl !== '#' && app.downloadUrl.startsWith('http')) continue;
+              if (app.githubRepo && mirror?.[app.githubRepo]) continue;
+              if (app.githubRepo) toFetch.push(cleanGithubRepo(app.githubRepo));
+            }
+          }
+
           const CACHE_TTL = githubToken ? 600000 : 3600000;
-          const batches = [];
+          const batches: string[][] = [];
           for (let i = 0; i < toFetch.length; i += 5) batches.push(toFetch.slice(i, i + 5));
 
           for (const batch of batches) {
-            await Promise.all(batch.map(async (repo) => {
+            await Promise.all(batch.map(async repo => {
               if (!repo) return;
               const key = `gh_v3_${repo}`;
               const cached = storage.get(key);
-              const item = cached ? JSON.parse(cached) : null;
+              const item: CacheItem | null = cached ? (JSON.parse(cached) as CacheItem) : null;
 
               if (item && Date.now() - item.ts < CACHE_TTL && !manual) { cache.set(repo, item.data); return; }
 
@@ -161,22 +154,23 @@ export const useStore = create<AppState>()(
                   cache.set(repo, item.data);
                   storage.set(key, JSON.stringify({ ...item, ts: Date.now() }));
                 } else if (res.ok) {
-                  const data = await res.json();
+                  const data = (await res.json()) as Release[];
                   cache.set(repo, data);
                   storage.set(key, JSON.stringify({ ts: Date.now(), data, etag: res.headers.get('ETag') }));
-                } else if (item) cache.set(repo, item.data);
+                } else if (item) {
+                  cache.set(repo, item.data);
+                }
               } catch { if (item) cache.set(repo, item.data); }
             }));
           }
 
-          // Process apps
           const processed = raw.map(app => {
             if (app.downloadUrl !== '#' && app.downloadUrl.length > 5 && !manual) return app;
 
             const repo = cleanGithubRepo(app.githubRepo);
-            const releases = repo ? cache.get(repo) as Release[] : null;
+            const releases = repo ? cache.get(repo) : undefined;
 
-            if (repo && releases?.length) {
+            if (repo && releases && releases.length > 0) {
               const match = findRelease(releases, app.releaseKeyword);
               if (match) {
                 const variants: AppVariant[] = match.assets
@@ -188,7 +182,7 @@ export const useStore = create<AppState>()(
               }
             }
 
-            if (repo && (!releases?.length || app.downloadUrl === '#')) {
+            if (repo && (releases === undefined || releases.length === 0 || app.downloadUrl === '#')) {
               return { ...app, version: 'View on GitHub', latestVersion: 'Unknown', downloadUrl: `https://github.com/${repo}/releases`, size: '?' };
             }
             return app;
@@ -201,22 +195,18 @@ export const useStore = create<AppState>()(
         finally { set({ isLoading: false, isRefreshing: false }); }
       },
 
-      // Installed
       installedVersions: {},
       registerInstall: (id, ver) => set(s => ({ installedVersions: { ...s.installedVersions, [id]: ver } })),
-      checkHasUpdate: (app) => hasUpdate(get().installedVersions[app.id], app.latestVersion),
+      checkHasUpdate: app => hasUpdate(get().installedVersions[app.id], app.latestVersion),
 
-      // Selected
       selectedApp: null,
-      setSelectedApp: (selectedApp) => set({ selectedApp }),
+      setSelectedApp: selectedApp => set({ selectedApp }),
 
-      // Search
       searchQuery: '',
-      setSearchQuery: (searchQuery) => set({ searchQuery }),
+      setSearchQuery: searchQuery => set({ searchQuery }),
       selectedCategory: 'All',
-      setSelectedCategory: (selectedCategory) => set({ selectedCategory }),
+      setSelectedCategory: selectedCategory => set({ selectedCategory }),
 
-      // Dev Mode
       isDevUnlocked: false,
       devTapCount: 0,
       devToast: { msg: '', show: false },
@@ -227,7 +217,7 @@ export const useStore = create<AppState>()(
           setTimeout(() => set({ devToast: { msg: '', show: false } }), 2000);
         };
 
-        if (isDevUnlocked) return showToast('You are already a developer.');
+        if (isDevUnlocked) { showToast('You are already a developer.'); return; }
 
         const count = devTapCount + 1;
         set({ devTapCount: count });
@@ -241,65 +231,65 @@ export const useStore = create<AppState>()(
         }
       },
 
-      // Settings
       useRemoteJson: true,
       toggleSourceMode: () => set(s => ({ useRemoteJson: !s.useRemoteJson })),
       githubToken: '',
-      setGithubToken: (githubToken) => {
+      setGithubToken: githubToken => {
         set({ githubToken });
-        setTimeout(() => get().loadApps(true), 500);
+        setTimeout(() => { void get().loadApps(true); }, 500);
       },
 
-      // UI
       showFAQ: false,
-      setShowFAQ: (showFAQ) => set({ showFAQ }),
+      setShowFAQ: showFAQ => set({ showFAQ }),
+      isLegend: false,
+      setIsLegend: isLegend => set({ isLegend }),
 
-      // Download
       handleDownload: (app, specificUrl) => {
-        const url = sanitizeUrl(specificUrl || app.downloadUrl);
+        const url = sanitizeUrl(specificUrl ?? app.downloadUrl);
         if (url === '#') return;
 
         const isWeb = !url.toLowerCase().endsWith('.apk') && !url.toLowerCase().endsWith('.exe');
         if (isWeb) { window.open(url, '_blank'); return; }
 
         get().registerInstall(app.id, app.latestVersion);
-        app.platform === 'PC' ? window.open(url, '_blank') : (window.location.href = url);
+        if (app.platform === 'PC') { window.open(url, '_blank'); } else { window.location.href = url; }
       },
     }),
     {
       name: 'orion-store',
-      partialize: (state) => ({
+      partialize: state => ({
         theme: state.theme,
         installedVersions: state.installedVersions,
         isDevUnlocked: state.isDevUnlocked,
         useRemoteJson: state.useRemoteJson,
         githubToken: state.githubToken,
+        isLegend: state.isLegend,
       }),
-    }
-  )
+    },
+  ),
 );
 
-// Helpers
-function findRelease(releases: Release[], keyword?: string) {
+function findRelease(releases: Release[], keyword?: string  ) {
   for (const r of releases) {
     const apks = r.assets?.filter(a => a.name.toLowerCase().endsWith('.apk')) ?? [];
-    if (!apks.length) continue;
+    if (apks.length === 0) continue;
 
     if (keyword) {
       const kw = keyword.toLowerCase();
-      const match = r.name?.toLowerCase().includes(kw) || r.tag_name?.toLowerCase().includes(kw) || apks.some(a => a.name.toLowerCase().includes(kw));
-      if (match) {
+      const nameMatch = r.name?.toLowerCase().includes(kw) ?? false;
+      const tagMatch = r.tag_name?.toLowerCase().includes(kw) ?? false;
+      const assetMatch = apks.some(a => a.name.toLowerCase().includes(kw));
+      if (nameMatch || tagMatch || assetMatch) {
         const assets = apks.some(a => a.name.toLowerCase().includes(kw)) ? apks.filter(a => a.name.toLowerCase().includes(kw)) : apks;
-        return { ver: r.tag_name || r.published_at?.split('T')[0] || 'Unknown', assets };
+        return { ver: r.tag_name ?? r.published_at?.split('T')[0] ?? 'Unknown', assets };
       }
     } else {
-      return { ver: r.tag_name || r.published_at?.split('T')[0] || 'Unknown', assets: apks };
+      return { ver: r.tag_name ?? r.published_at?.split('T')[0] ?? 'Unknown', assets: apks };
     }
   }
   return null;
 }
 
-// Selectors (for performance - components only re-render when selected state changes)
 export const useTheme = () => useStore(s => s.theme);
 export const useApps = () => useStore(s => s.apps);
 export const useConfig = () => useStore(s => s.config);
@@ -309,9 +299,8 @@ export const useDevProfile = () => useStore(s => s.config?.devProfile ?? DEFAULT
 export const useSupportEmail = () => useStore(s => s.config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL);
 export const useEasterEggUrl = () => useStore(s => s.config?.easterEggUrl ?? DEFAULT_EASTER_EGG);
 
-// Init theme on load
 if (typeof window !== 'undefined') {
   const theme = useStore.getState().theme;
   document.documentElement.classList.add(theme);
-  useStore.getState().loadApps();
+  void useStore.getState().loadApps();
 }

@@ -1,12 +1,11 @@
 import { memo, useState } from 'react';
 import { useStore, useSocialLinks, useDevProfile, useEasterEggUrl } from '@/store';
-import { useLocalStorage } from '@/hooks';
-import { storage, STORAGE_KEYS } from '@/utils/storage';
+import { storage } from '@/utils/storage';
 import { CURRENT_STORE_VERSION } from '@/constants';
 import { SectionDivider } from './SectionDivider';
 
 export const AboutView = memo(function AboutView() {
-  const { isDevUnlocked, useRemoteJson, toggleSourceMode, githubToken, setGithubToken, setShowFAQ } = useStore();
+  const { isDevUnlocked, useRemoteJson, toggleSourceMode, githubToken, setGithubToken, setShowFAQ, isLegend, setIsLegend } = useStore();
   const socialLinks = useSocialLinks();
   const devProfile = useDevProfile();
   const easterEggUrl = useEasterEggUrl();
@@ -14,7 +13,6 @@ export const AboutView = memo(function AboutView() {
   const [profileImgError, setProfileImgError] = useState(false);
   const [isEditingToken, setIsEditingToken] = useState(false);
   const [easterEggCount, setEasterEggCount] = useState(0);
-  const [isLegend, setIsLegend] = useLocalStorage(STORAGE_KEYS.LEGEND, false);
 
   const handleProfileClick = () => {
     const newCount = easterEggCount + 1;
