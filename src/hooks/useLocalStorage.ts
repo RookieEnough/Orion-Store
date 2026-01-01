@@ -1,30 +1,20 @@
 import { useState, useCallback } from 'react';
 import { storage } from '@/utils/storage';
 
-export function useLocalStorage<T>(
-  key: string,
-  initialValue: T
-): [T, (value: T | ((prev: T) => T)) => void] {
-  const [storedValue, setStoredValue] = useState<T>(() => {
+export function useLocalStorage<T>(key: string, initial: T): [T, (v: T | ((p: T) => T)) => void] {
+  const [value, setValue] = useState<T>(() => {
     const item = storage.get(key);
-    if (item === null) return initialValue;
-    try {
-      return JSON.parse(item) as T;
-    } catch {
-      return item as unknown as T;
-    }
+    if (item === null) return initial;
+    try { return JSON.parse(item); } catch { return item as T; }
   });
 
-  const setValue = useCallback(
-    (value: T | ((prev: T) => T)) => {
-      setStoredValue((prev) => {
-        const newValue = value instanceof Function ? value(prev) : value;
-        storage.set(key, JSON.stringify(newValue));
-        return newValue;
-      });
-    },
-    [key]
-  );
+  const set = useCallback((v: T | ((p: T) => T)) => {
+    setValue(prev => {
+      const next = v instanceof Function ? v(prev) : v;
+      storage.set(key, JSON.stringify(next));
+      return next;
+    });
+  }, [key]);
 
-  return [storedValue, setValue];
+  return [value, set];
 }

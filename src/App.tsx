@@ -3,38 +3,20 @@ import { Header, BottomNav, ScrollToTop, AppGrid, AboutView, AppDetail, FAQModal
 
 function AppContent() {
   const {
-    activeTab,
-    selectedApp,
-    setSelectedApp,
-    handleDownload,
-    checkHasUpdate,
-    installedVersions,
-    supportEmail,
-    showFAQ,
-    setShowFAQ,
-    faqs,
-    theme,
-    showDevToast,
-    devToastMessage,
+    activeTab, selectedApp, setSelectedApp, handleDownload, checkHasUpdate,
+    installedVersions, supportEmail, showFAQ, setShowFAQ, faqs, showDevToast, devToastMessage,
   } = useAppContext();
 
   return (
     <div className="min-h-screen bg-surface text-theme-text transition-colors duration-300 font-sans selection:bg-primary/30">
       <Header />
-
       <main className="max-w-7xl mx-auto w-full pt-24">
-        {activeTab === 'android' && (
-          <AppGrid platform="Android" title="Featured Apps" searchPlaceholder="Search Android Apps..." />
-        )}
-        {activeTab === 'pc' && (
-          <AppGrid platform="PC" title="PC Software" searchPlaceholder="Search PC Software..." showBanner />
-        )}
+        {activeTab === 'android' && <AppGrid platform="Android" title="Featured Apps" searchPlaceholder="Search Android Apps..." />}
+        {activeTab === 'pc' && <AppGrid platform="PC" title="PC Software" searchPlaceholder="Search PC Software..." showBanner />}
         {activeTab === 'about' && <AboutView />}
       </main>
-
       <BottomNav />
       <ScrollToTop />
-
       {selectedApp && (
         <AppDetail
           app={selectedApp}
@@ -45,9 +27,7 @@ function AppContent() {
           supportEmail={supportEmail}
         />
       )}
-
       {showFAQ && <FAQModal items={faqs} onClose={() => setShowFAQ(false)} />}
-
       <Toast message={devToastMessage} type="info" visible={showDevToast} />
     </div>
   );

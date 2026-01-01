@@ -6,264 +6,141 @@ import { CACHE_VERSION, REMOTE_CONFIG_URL, DEFAULT_APPS_JSON, DEFAULT_MIRROR_JSO
 import { localAppsData } from '@/data/localData';
 import type { AppItem, AppVariant, StoreConfig } from '@/types';
 
-interface UseAppsReturn {
-  apps: AppItem[];
-  isLoading: boolean;
-  isRefreshing: boolean;
-  config: StoreConfig | null;
-  installedVersions: Record<string, string>;
-  refresh: () => void;
-  registerInstall: (appId: string, version: string) => void;
-}
-
-export function useApps(useRemote: boolean, githubToken: string): UseAppsReturn {
+export function useApps(useRemote: boolean, token: string) {
   const [apps, setApps] = useState<AppItem[]>(() => {
-    const cached = storage.get(STORAGE_KEYS.CACHED_APPS);
-    const cacheVer = storage.get(STORAGE_KEYS.CACHE_VERSION);
-    if (cacheVer !== CACHE_VERSION || !cached) {
-      return localAppsData.map(sanitizeApp);
-    }
-    try {
-      return JSON.parse(cached).map(sanitizeApp);
-    } catch {
-      return localAppsData.map(sanitizeApp);
-    }
+    if (storage.get(STORAGE_KEYS.CACHE_VERSION) !== CACHE_VERSION) return localAppsData.map(sanitizeApp);
+    try { return JSON.parse(storage.get(STORAGE_KEYS.CACHED_APPS) || '[]').map(sanitizeApp); }
+    catch { return localAppsData.map(sanitizeApp); }
   });
-
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [config, setConfig] = useState<StoreConfig | null>(null);
-  const [installedVersions, setInstalledVersions] = useLocalStorage<Record<string, string>>(
-    STORAGE_KEYS.INSTALLED_APPS,
-    {}
-  );
-
+  const [installed, setInstalled] = useLocalStorage<Record<string, string>>(STORAGE_KEYS.INSTALLED_APPS, {});
   const appsRef = useRef(apps);
-  useEffect(() => {
-    appsRef.current = apps;
-  }, [apps]);
+  useEffect(() => { appsRef.current = apps; }, [apps]);
 
-  const loadApps = useCallback(
-    async (isManualRefresh = false) => {
-      if (isManualRefresh) setIsRefreshing(true);
-      if (appsRef.current.length === 0) setIsLoading(true);
+  const load = useCallback(async (manual = false) => {
+    if (manual) setIsRefreshing(true);
+    if (!appsRef.current.length) setIsLoading(true);
 
-      try {
-        let rawApps: AppItem[] = [];
-        let mirrorData: Record<string, unknown> | null = null;
+    try {
+      let raw: AppItem[] = localAppsData;
+      let mirror: Record<string, unknown> | null = null;
 
-        if (useRemote) {
-          // Fetch config
-          try {
-            const configRes = await fetchWithTimeout(`${REMOTE_CONFIG_URL}?t=${Date.now()}`, { timeout: 3000 });
-            if (configRes.ok) {
-              const configData = await configRes.json();
-              setConfig(configData);
-              if (configData.maintenanceMode) {
-                setIsLoading(false);
-                setIsRefreshing(false);
-                return;
-              }
-            }
-          } catch {
-            // Continue with defaults
+      if (useRemote) {
+        try {
+          const cfg = await fetchWithTimeout(`${REMOTE_CONFIG_URL}?t=${Date.now()}`, { timeout: 3000 });
+          if (cfg.ok) {
+            const data = await cfg.json();
+            setConfig(data);
+            if (data.maintenanceMode) return;
           }
-
-          // Fetch apps
-          try {
-            const appsRes = await fetchWithTimeout(`${DEFAULT_APPS_JSON}?t=${Date.now()}`);
-            if (appsRes.ok) rawApps = await appsRes.json();
-          } catch {
-            rawApps = localAppsData;
-          }
-
-          // Fetch mirror
-          try {
-            const mirrorRes = await fetchWithTimeout(`${DEFAULT_MIRROR_JSON}?t=${Date.now()}`, { timeout: 5000 });
-            if (mirrorRes.ok) mirrorData = await mirrorRes.json();
-          } catch {
-            // Mirror fetch failed
-          }
-        } else {
-          rawApps = localAppsData;
-        }
-
-        rawApps = rawApps.map(sanitizeApp);
-
-        // Build repo cache from mirror
-        const repoCache = new Map<string, unknown[]>();
-        if (mirrorData) {
-          Object.entries(mirrorData).forEach(([key, data]) => {
-            repoCache.set(key, Array.isArray(data) ? data : [data]);
-          });
-        }
-
-        // Find repos needing API fetch
-        const canUseApi = isManualRefresh || !!githubToken;
-        const reposToFetch = new Set<string>();
-
-        rawApps.forEach((app) => {
-          const hasStaticLink = app.downloadUrl && app.downloadUrl !== '#' && app.downloadUrl.startsWith('http');
-          const hasMirror = app.githubRepo && mirrorData && mirrorData[app.githubRepo];
-          if (!hasStaticLink && !hasMirror && app.githubRepo && canUseApi) {
-            reposToFetch.add(cleanGithubRepo(app.githubRepo));
-          }
-        });
-
-        // Fetch from GitHub API
-        if (reposToFetch.size > 0) {
-          const CACHE_KEY_PREFIX = 'gh_smart_v3_';
-          const CACHE_DURATION = githubToken ? 10 * 60 * 1000 : 60 * 60 * 1000;
-
-          for (const repo of shuffleArray([...reposToFetch])) {
-            if (!repo) continue;
-            const storageKey = `${CACHE_KEY_PREFIX}${repo}`;
-            const cached = storage.get(storageKey);
-            const cachedItem = cached ? JSON.parse(cached) : null;
-
-            if (cachedItem && Date.now() - cachedItem.timestamp < CACHE_DURATION && !isManualRefresh) {
-              repoCache.set(repo, cachedItem.data);
-              continue;
-            }
-
-            const headers: HeadersInit = {};
-            if (githubToken) headers['Authorization'] = `Bearer ${githubToken}`;
-            if (cachedItem?.etag) headers['If-None-Match'] = cachedItem.etag;
-
-            try {
-              const res = await fetch(`https://api.github.com/repos/${repo}/releases`, { headers });
-              if (res.status === 304 && cachedItem) {
-                repoCache.set(repo, cachedItem.data);
-                storage.set(storageKey, JSON.stringify({ ...cachedItem, timestamp: Date.now() }));
-              } else if (res.ok) {
-                const data = await res.json();
-                repoCache.set(repo, data);
-                storage.set(storageKey, JSON.stringify({ timestamp: Date.now(), data, etag: res.headers.get('ETag') }));
-              } else if (cachedItem) {
-                repoCache.set(repo, cachedItem.data);
-              }
-            } catch {
-              if (cachedItem) repoCache.set(repo, cachedItem.data);
-            }
-          }
-        }
-
-        // Process apps with release data
-        const processedApps = rawApps.map((app) => {
-          if (app.downloadUrl !== '#' && app.downloadUrl.length > 5 && !isManualRefresh) {
-            return app;
-          }
-
-          const repo = cleanGithubRepo(app.githubRepo);
-          const releasesData = repo ? (repoCache.get(repo) as unknown[]) : null;
-
-          if (repo && releasesData?.length) {
-            const result = findMatchingRelease(releasesData, app.releaseKeyword);
-            if (result) {
-              const variants: AppVariant[] = result.assets
-                .map((a) => ({ arch: determineArch(a.name), url: a.browser_download_url }))
-                .sort((a, b) => getArchScore(b.arch) - getArchScore(a.arch));
-
-              return {
-                ...app,
-                version: result.version,
-                latestVersion: result.version,
-                downloadUrl: variants[0]?.url ?? app.downloadUrl,
-                variants,
-                size: `${(result.assets[0]?.size ?? 0 / 1024 / 1024).toFixed(1)} MB`,
-              };
-            }
-          }
-
-          // Fallback to GitHub releases page
-          if (repo && (!releasesData?.length || app.downloadUrl === '#')) {
-            return {
-              ...app,
-              version: 'View on GitHub',
-              latestVersion: 'Unknown',
-              downloadUrl: `https://github.com/${repo}/releases`,
-              size: '?',
-            };
-          }
-
-          return app;
-        });
-
-        setApps(processedApps);
-        storage.set(STORAGE_KEYS.CACHED_APPS, JSON.stringify(processedApps));
-        storage.set(STORAGE_KEYS.CACHE_VERSION, CACHE_VERSION);
-      } catch (error) {
-        console.error('Error loading apps:', error);
-      } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        } catch {}
+        try {
+          const res = await fetchWithTimeout(`${DEFAULT_APPS_JSON}?t=${Date.now()}`);
+          if (res.ok) raw = await res.json();
+        } catch {}
+        try {
+          const res = await fetchWithTimeout(`${DEFAULT_MIRROR_JSON}?t=${Date.now()}`, { timeout: 5000 });
+          if (res.ok) mirror = await res.json();
+        } catch {}
       }
-    },
-    [useRemote, githubToken]
-  );
 
-  useEffect(() => {
-    loadApps(false);
-  }, [loadApps]);
+      raw = raw.map(sanitizeApp);
+      const cache = new Map<string, unknown[]>();
+      if (mirror) Object.entries(mirror).forEach(([k, v]) => cache.set(k, Array.isArray(v) ? v : [v]));
 
-  const registerInstall = useCallback(
-    (appId: string, version: string) => {
-      setInstalledVersions((prev) => ({ ...prev, [appId]: version }));
-    },
-    [setInstalledVersions]
-  );
+      // Find repos needing fetch
+      const toFetch = new Set<string>();
+      if (manual || token) {
+        raw.forEach(app => {
+          if (app.downloadUrl && app.downloadUrl !== '#' && app.downloadUrl.startsWith('http')) return;
+          if (app.githubRepo && mirror?.[app.githubRepo]) return;
+          if (app.githubRepo) toFetch.add(cleanGithubRepo(app.githubRepo));
+        });
+      }
+
+      // Fetch from GitHub
+      const CACHE_TTL = token ? 600000 : 3600000;
+      for (const repo of shuffleArray([...toFetch])) {
+        if (!repo) continue;
+        const key = `gh_v3_${repo}`;
+        const cached = storage.get(key);
+        const item = cached ? JSON.parse(cached) : null;
+
+        if (item && Date.now() - item.ts < CACHE_TTL && !manual) { cache.set(repo, item.data); continue; }
+
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        if (item?.etag) headers['If-None-Match'] = item.etag;
+
+        try {
+          const res = await fetch(`https://api.github.com/repos/${repo}/releases`, { headers });
+          if (res.status === 304 && item) {
+            cache.set(repo, item.data);
+            storage.set(key, JSON.stringify({ ...item, ts: Date.now() }));
+          } else if (res.ok) {
+            const data = await res.json();
+            cache.set(repo, data);
+            storage.set(key, JSON.stringify({ ts: Date.now(), data, etag: res.headers.get('ETag') }));
+          } else if (item) cache.set(repo, item.data);
+        } catch { if (item) cache.set(repo, item.data); }
+      }
+
+      // Process apps
+      const processed = raw.map(app => {
+        if (app.downloadUrl !== '#' && app.downloadUrl.length > 5 && !manual) return app;
+
+        const repo = cleanGithubRepo(app.githubRepo);
+        const releases = repo ? cache.get(repo) as Release[] : null;
+
+        if (repo && releases?.length) {
+          const match = findRelease(releases, app.releaseKeyword);
+          if (match) {
+            const variants: AppVariant[] = match.assets
+              .map(a => ({ arch: determineArch(a.name), url: a.browser_download_url }))
+              .sort((a, b) => getArchScore(b.arch) - getArchScore(a.arch));
+            return { ...app, version: match.ver, latestVersion: match.ver, downloadUrl: variants[0]?.url ?? '#', variants, size: `${(match.assets[0]?.size / 1048576).toFixed(1)} MB` };
+          }
+        }
+
+        if (repo && (!releases?.length || app.downloadUrl === '#')) {
+          return { ...app, version: 'View on GitHub', latestVersion: 'Unknown', downloadUrl: `https://github.com/${repo}/releases`, size: '?' };
+        }
+        return app;
+      });
+
+      setApps(processed);
+      storage.set(STORAGE_KEYS.CACHED_APPS, JSON.stringify(processed));
+      storage.set(STORAGE_KEYS.CACHE_VERSION, CACHE_VERSION);
+    } catch (e) { console.error('Load error:', e); }
+    finally { setIsLoading(false); setIsRefreshing(false); }
+  }, [useRemote, token]);
+
+  useEffect(() => { load(); }, [load]);
 
   return {
-    apps,
-    isLoading,
-    isRefreshing,
-    config,
-    installedVersions,
-    refresh: () => loadApps(true),
-    registerInstall,
+    apps, isLoading, isRefreshing, config, installedVersions: installed,
+    refresh: () => load(true),
+    registerInstall: useCallback((id: string, ver: string) => setInstalled(p => ({ ...p, [id]: ver })), [setInstalled]),
   };
 }
 
-interface ReleaseAsset {
-  name: string;
-  browser_download_url: string;
-  size: number;
-}
+interface Release { name?: string; tag_name?: string; published_at?: string; assets?: { name: string; browser_download_url: string; size: number }[] }
 
-interface Release {
-  name?: string;
-  tag_name?: string;
-  published_at?: string;
-  assets?: ReleaseAsset[];
-}
-
-function findMatchingRelease(
-  releases: unknown[],
-  keyword?: string
-): { version: string; assets: ReleaseAsset[] } | null {
-  for (const release of releases as Release[]) {
-    const assets = release.assets ?? [];
-    const apks = assets.filter((a) => a.name.toLowerCase().endsWith('.apk'));
+function findRelease(releases: Release[], keyword?: string) {
+  for (const r of releases) {
+    const apks = r.assets?.filter(a => a.name.toLowerCase().endsWith('.apk')) ?? [];
     if (!apks.length) continue;
 
     if (keyword) {
       const kw = keyword.toLowerCase();
-      const nameMatch = release.name?.toLowerCase().includes(kw);
-      const tagMatch = release.tag_name?.toLowerCase().includes(kw);
-      const fileMatch = apks.some((a) => a.name.toLowerCase().includes(kw));
-
-      if (nameMatch || tagMatch || fileMatch) {
-        const matchedAssets = fileMatch ? apks.filter((a) => a.name.toLowerCase().includes(kw)) : apks;
-        return {
-          version: release.tag_name || release.published_at?.split('T')[0] || 'Unknown',
-          assets: matchedAssets,
-        };
+      const match = r.name?.toLowerCase().includes(kw) || r.tag_name?.toLowerCase().includes(kw) || apks.some(a => a.name.toLowerCase().includes(kw));
+      if (match) {
+        const assets = apks.some(a => a.name.toLowerCase().includes(kw)) ? apks.filter(a => a.name.toLowerCase().includes(kw)) : apks;
+        return { ver: r.tag_name || r.published_at?.split('T')[0] || 'Unknown', assets };
       }
     } else {
-      return {
-        version: release.tag_name || release.published_at?.split('T')[0] || 'Unknown',
-        assets: apks,
-      };
+      return { ver: r.tag_name || r.published_at?.split('T')[0] || 'Unknown', assets: apks };
     }
   }
   return null;

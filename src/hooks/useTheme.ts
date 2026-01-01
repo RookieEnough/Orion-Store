@@ -8,17 +8,12 @@ export function useTheme() {
   const [theme, setTheme] = useLocalStorage<Theme>(STORAGE_KEYS.THEME, 'light');
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove('light', 'dusk', 'dark');
-    root.classList.add(theme);
+    document.documentElement.classList.remove('light', 'dusk', 'dark');
+    document.documentElement.classList.add(theme);
   }, [theme]);
 
   const cycleTheme = useCallback(() => {
-    setTheme((current) => {
-      if (current === 'light') return 'dusk';
-      if (current === 'dusk') return 'dark';
-      return 'light';
-    });
+    setTheme(t => t === 'light' ? 'dusk' : t === 'dusk' ? 'dark' : 'light');
   }, [setTheme]);
 
   return { theme, setTheme, cycleTheme };

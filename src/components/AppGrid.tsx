@@ -13,26 +13,15 @@ interface AppGridProps {
 }
 
 export const AppGrid = memo(function AppGrid({ platform, title, searchPlaceholder, showBanner }: AppGridProps) {
-  const {
-    apps,
-    isLoading,
-    searchQuery,
-    selectedCategory,
-    setSelectedApp,
-    checkHasUpdate,
-    installedVersions,
-    config,
-  } = useAppContext();
+  const { apps, isLoading, searchQuery, selectedCategory, setSelectedApp, checkHasUpdate, installedVersions, config } = useAppContext();
 
   const filteredApps = useMemo(() => {
-    return apps.filter((app) => {
-      const matchesPlatform = app.platform === platform;
-      const matchesSearch =
-        app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        app.description.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedCategory === 'All' || app.category === selectedCategory;
-      return matchesPlatform && matchesSearch && matchesCategory;
-    });
+    const query = searchQuery.toLowerCase();
+    return apps.filter(app =>
+      app.platform === platform &&
+      (selectedCategory === 'All' || app.category === selectedCategory) &&
+      (app.name.toLowerCase().includes(query) || app.description.toLowerCase().includes(query))
+    );
   }, [apps, platform, searchQuery, selectedCategory]);
 
   if (isLoading) {
@@ -58,15 +47,9 @@ export const AppGrid = memo(function AppGrid({ platform, title, searchPlaceholde
 
       {showBanner && (
         <div className="bg-gradient-to-r from-primary to-purple-600 p-6 rounded-3xl mb-8 text-white relative overflow-hidden shadow-2xl shadow-primary/20">
-          <div className="absolute -right-10 -bottom-10 opacity-20 text-9xl">
-            <i className="fas fa-laptop-code" />
-          </div>
-          <div className="relative z-10">
-            <h3 className="text-2xl font-bold mb-2">Desktop Station</h3>
-            <p className="text-indigo-100 font-medium mb-4 max-w-xs">
-              Professional grade open-source tools for your workstation.
-            </p>
-          </div>
+          <i className="fas fa-laptop-code absolute -right-10 -bottom-10 opacity-20 text-9xl" />
+          <h3 className="text-2xl font-bold mb-2 relative z-10">Desktop Station</h3>
+          <p className="text-indigo-100 font-medium max-w-xs relative z-10">Professional grade open-source tools for your workstation.</p>
         </div>
       )}
 
@@ -74,28 +57,18 @@ export const AppGrid = memo(function AppGrid({ platform, title, searchPlaceholde
       <CategoryFilter platform={platform} />
 
       <div className="flex items-center justify-between mb-4 mt-4">
-        <h2 className="text-xl font-bold text-theme-text">
-          {selectedCategory === 'All' ? title : `${selectedCategory} Apps`}
-        </h2>
-        <span className="text-xs font-bold bg-acid text-black px-3 py-1 rounded-full">
-          {filteredApps.length}
-        </span>
+        <h2 className="text-xl font-bold text-theme-text">{selectedCategory === 'All' ? title : `${selectedCategory} Apps`}</h2>
+        <span className="text-xs font-bold bg-acid text-black px-3 py-1 rounded-full">{filteredApps.length}</span>
       </div>
 
       {filteredApps.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredApps.map((app) => (
-            <AppCard
-              key={app.id}
-              app={app}
-              onClick={setSelectedApp}
-              hasUpdate={checkHasUpdate(app)}
-              localVersion={installedVersions[app.id]}
-            />
+          {filteredApps.map(app => (
+            <AppCard key={app.id} app={app} onClick={setSelectedApp} hasUpdate={checkHasUpdate(app)} localVersion={installedVersions[app.id]} />
           ))}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-12 text-center animate-fade-in opacity-60">
+        <div className="flex flex-col items-center justify-center py-12 text-center opacity-60">
           <div className="w-20 h-20 bg-theme-element rounded-full flex items-center justify-center mb-4">
             <i className="fas fa-search text-3xl text-theme-sub" />
           </div>
