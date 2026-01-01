@@ -1,5 +1,5 @@
-import { memo, useState } from 'react';
-import { CATEGORY_GRADIENTS } from '@/constants';
+import { memo } from 'react';
+import { AppIcon } from './AppIcon';
 import type { AppItem } from '@/types';
 
 interface AppCardProps {
@@ -10,9 +10,6 @@ interface AppCardProps {
 }
 
 export const AppCard = memo(function AppCard({ app, onClick, hasUpdate, localVersion }: AppCardProps) {
-  const [imgError, setImgError] = useState(false);
-  const gradient = CATEGORY_GRADIENTS[app.category] || CATEGORY_GRADIENTS['Default'];
-
   return (
     <div
       onClick={() => onClick(app)}
@@ -20,42 +17,18 @@ export const AppCard = memo(function AppCard({ app, onClick, hasUpdate, localVer
     >
       {hasUpdate && (
         <div className="absolute top-3 right-3 z-10">
-          <span className="bg-acid text-black text-[10px] font-black px-2 py-1 rounded-full animate-pulse">
-            UPDATE
-          </span>
+          <span className="bg-acid text-black text-[10px] font-black px-2 py-1 rounded-full animate-pulse">UPDATE</span>
         </div>
       )}
 
       <div className="flex items-start gap-4">
-        <div className="relative shrink-0">
-          {imgError ? (
-            <div
-              className={`w-16 h-16 rounded-2xl ${gradient} flex items-center justify-center text-white text-2xl font-black shadow-lg`}
-            >
-              {app.name.charAt(0)}
-            </div>
-          ) : (
-            <img
-              src={app.icon}
-              alt={app.name}
-              onError={() => setImgError(true)}
-              className="w-16 h-16 rounded-2xl object-cover shadow-lg bg-theme-element"
-            />
-          )}
-        </div>
-
+        <AppIcon src={app.icon} name={app.name} category={app.category} size="md" />
         <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-theme-text text-lg truncate group-hover:text-primary transition-colors">
-            {app.name}
-          </h3>
+          <h3 className="font-bold text-theme-text text-lg truncate group-hover:text-primary transition-colors">{app.name}</h3>
           <p className="text-theme-sub text-sm truncate">{app.author}</p>
           <div className="flex items-center gap-2 mt-2">
-            <span className="text-xs font-medium text-theme-sub bg-theme-element px-2 py-1 rounded-lg">
-              {app.size}
-            </span>
-            <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-lg">
-              {localVersion || app.version}
-            </span>
+            <span className="text-xs font-medium text-theme-sub bg-theme-element px-2 py-1 rounded-lg">{app.size}</span>
+            <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-lg">{localVersion || app.version}</span>
           </div>
         </div>
       </div>

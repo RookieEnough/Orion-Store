@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { CATEGORY_GRADIENTS } from '@/constants';
+import { AppIcon } from './AppIcon';
 import type { AppItem } from '@/types';
 
 interface AppDetailProps {
@@ -11,23 +11,12 @@ interface AppDetailProps {
   supportEmail: string;
 }
 
-export const AppDetail = memo(function AppDetail({
-  app,
-  onClose,
-  onDownload,
-  localVersion,
-  hasUpdate,
-  supportEmail,
-}: AppDetailProps) {
-  const [imgError, setImgError] = useState(false);
+export const AppDetail = memo(function AppDetail({ app, onClose, onDownload, localVersion, hasUpdate, supportEmail }: AppDetailProps) {
   const [showVariants, setShowVariants] = useState(false);
-  const gradient = CATEGORY_GRADIENTS[app.category] || CATEGORY_GRADIENTS['Default'];
 
   const handleReport = () => {
     const subject = encodeURIComponent(`[OrionStore] Issue with ${app.name}`);
-    const body = encodeURIComponent(
-      `App: ${app.name}\nVersion: ${app.latestVersion}\nIssue: \n\n(Please describe the issue)`
-    );
+    const body = encodeURIComponent(`App: ${app.name}\nVersion: ${app.latestVersion}\nIssue: \n\n(Please describe the issue)`);
     window.open(`mailto:${supportEmail}?subject=${subject}&body=${body}`);
   };
 
@@ -38,49 +27,24 @@ export const AppDetail = memo(function AppDetail({
       <div className="relative bg-surface border-t sm:border border-theme-border rounded-t-[2rem] sm:rounded-3xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up no-scrollbar">
         {/* Header */}
         <div className="sticky top-0 bg-surface/90 backdrop-blur-xl z-10 p-4 flex justify-between items-center border-b border-theme-border">
-          <button
-            onClick={onClose}
-            className="w-10 h-10 rounded-full bg-theme-element flex items-center justify-center text-theme-sub hover:text-theme-text transition-colors"
-          >
+          <button onClick={onClose} className="w-10 h-10 rounded-full bg-theme-element flex items-center justify-center text-theme-sub hover:text-theme-text transition-colors">
             <i className="fas fa-times" />
           </button>
-          <button
-            onClick={handleReport}
-            className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 hover:bg-red-500/20 transition-colors"
-            title="Report Issue"
-          >
+          <button onClick={handleReport} className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 hover:bg-red-500/20 transition-colors" title="Report Issue">
             <i className="fas fa-exclamation-triangle" />
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-6">
           {/* App Info */}
           <div className="flex items-start gap-4 mb-6">
-            {imgError ? (
-              <div
-                className={`w-20 h-20 rounded-2xl ${gradient} flex items-center justify-center text-white text-3xl font-black shadow-lg shrink-0`}
-              >
-                {app.name.charAt(0)}
-              </div>
-            ) : (
-              <img
-                src={app.icon}
-                alt={app.name}
-                onError={() => setImgError(true)}
-                className="w-20 h-20 rounded-2xl object-cover shadow-lg bg-theme-element shrink-0"
-              />
-            )}
+            <AppIcon src={app.icon} name={app.name} category={app.category} size="lg" />
             <div className="flex-1 min-w-0">
               <h2 className="text-2xl font-black text-theme-text">{app.name}</h2>
               <p className="text-theme-sub">{app.author}</p>
               <div className="flex flex-wrap gap-2 mt-2">
-                <span className="text-xs font-bold bg-primary/10 text-primary px-2 py-1 rounded-lg">
-                  {app.category}
-                </span>
-                <span className="text-xs font-medium bg-theme-element text-theme-sub px-2 py-1 rounded-lg">
-                  {app.size}
-                </span>
+                <span className="text-xs font-bold bg-primary/10 text-primary px-2 py-1 rounded-lg">{app.category}</span>
+                <span className="text-xs font-medium bg-theme-element text-theme-sub px-2 py-1 rounded-lg">{app.size}</span>
               </div>
             </div>
           </div>
@@ -101,47 +65,33 @@ export const AppDetail = memo(function AppDetail({
             </div>
           )}
 
-          {/* Description */}
           <p className="text-theme-sub mb-6 leading-relaxed">{app.description}</p>
 
           {/* Screenshots */}
-          {app.screenshots && app.screenshots.length > 0 && (
+          {app.screenshots?.length > 0 && (
             <div className="mb-6">
               <h3 className="font-bold text-theme-text mb-3">Screenshots</h3>
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
                 {app.screenshots.map((src, i) => (
-                  <img
-                    key={i}
-                    src={src}
-                    alt={`Screenshot ${i + 1}`}
-                    className="h-48 rounded-xl object-cover shadow-lg"
-                  />
+                  <img key={i} src={src} alt={`Screenshot ${i + 1}`} className="h-48 rounded-xl object-cover shadow-lg" />
                 ))}
               </div>
             </div>
           )}
 
-          {/* Download Button */}
+          {/* Download */}
           <div className="space-y-3">
             {app.variants && app.variants.length > 1 ? (
               <>
-                <button
-                  onClick={() => setShowVariants(!showVariants)}
-                  className="w-full py-4 rounded-2xl font-bold bg-primary text-white shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                >
+                <button onClick={() => setShowVariants(!showVariants)} className="w-full py-4 rounded-2xl font-bold bg-primary text-white shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
                   <i className={`fas fa-${hasUpdate ? 'sync-alt' : 'download'}`} />
                   {hasUpdate ? 'Update' : 'Download'} ({app.variants.length} variants)
                   <i className={`fas fa-chevron-${showVariants ? 'up' : 'down'} text-xs ml-2`} />
                 </button>
-
                 {showVariants && (
                   <div className="space-y-2 animate-fade-in">
                     {app.variants.map((variant, i) => (
-                      <button
-                        key={i}
-                        onClick={() => onDownload(app, variant.url)}
-                        className="w-full py-3 px-4 rounded-xl font-medium bg-theme-element text-theme-text hover:bg-theme-hover transition-all flex items-center justify-between"
-                      >
+                      <button key={i} onClick={() => onDownload(app, variant.url)} className="w-full py-3 px-4 rounded-xl font-medium bg-theme-element text-theme-text hover:bg-theme-hover transition-all flex items-center justify-between">
                         <span>{variant.arch}</span>
                         <i className="fas fa-download text-primary" />
                       </button>
@@ -150,24 +100,15 @@ export const AppDetail = memo(function AppDetail({
                 )}
               </>
             ) : (
-              <button
-                onClick={() => onDownload(app)}
-                className="w-full py-4 rounded-2xl font-bold bg-primary text-white shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-              >
+              <button onClick={() => onDownload(app)} className="w-full py-4 rounded-2xl font-bold bg-primary text-white shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
                 <i className={`fas fa-${hasUpdate ? 'sync-alt' : 'download'}`} />
                 {hasUpdate ? 'Update' : 'Download'}
               </button>
             )}
 
             {app.repoUrl && (
-              <a
-                href={app.repoUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="w-full py-3 rounded-xl font-medium bg-theme-element text-theme-text hover:bg-theme-hover transition-all flex items-center justify-center gap-2"
-              >
-                <i className="fab fa-github" />
-                View Source
+              <a href={app.repoUrl} target="_blank" rel="noreferrer" className="w-full py-3 rounded-xl font-medium bg-theme-element text-theme-text hover:bg-theme-hover transition-all flex items-center justify-center gap-2">
+                <i className="fab fa-github" />View Source
               </a>
             )}
           </div>

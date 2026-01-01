@@ -7,6 +7,32 @@ export function sanitizeUrl(url?: string): string {
   return url;
 }
 
+export function cleanGithubRepo(repo?: string): string {
+  if (!repo) return '';
+  return repo.replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/\/$/, '');
+}
+
+export function getArchScore(arch: string): number {
+  const scores: Record<string, number> = {
+    Universal: 5,
+    ARM64: 4,
+    ARMv7: 3,
+    x64: 2,
+    x86: 1,
+  };
+  return scores[arch] ?? 0;
+}
+
+export function determineArch(filename: string): string {
+  const lower = filename.toLowerCase();
+  if (lower.includes('arm64') || lower.includes('v8a')) return 'ARM64';
+  if (lower.includes('armeabi') || lower.includes('v7a')) return 'ARMv7';
+  if (lower.includes('x86_64') || lower.includes('x64')) return 'x64';
+  if (lower.includes('x86')) return 'x86';
+  if (lower.includes('universal') || lower.includes('all')) return 'Universal';
+  return 'Universal';
+}
+
 export function sanitizeApp(app: Partial<AppItem>): AppItem {
   return {
     id: String(app.id || crypto.randomUUID()),
@@ -20,9 +46,7 @@ export function sanitizeApp(app: Partial<AppItem>): AppItem {
     latestVersion: String(app.latestVersion || 'Latest'),
     downloadUrl: sanitizeUrl(String(app.downloadUrl || '#')),
     size: String(app.size || '?'),
-    screenshots: Array.isArray(app.screenshots)
-      ? app.screenshots.map(sanitizeUrl)
-      : [],
+    screenshots: Array.isArray(app.screenshots) ? app.screenshots.map(sanitizeUrl) : [],
     variants: app.variants,
     repoUrl: app.repoUrl,
     githubRepo: app.githubRepo,
@@ -30,14 +54,4 @@ export function sanitizeApp(app: Partial<AppItem>): AppItem {
     packageName: app.packageName,
     isInstalled: app.isInstalled,
   };
-}
-
-export function determineArch(filename: string): string {
-  const lower = filename.toLowerCase();
-  if (lower.includes('arm64') || lower.includes('v8a')) return 'ARM64';
-  if (lower.includes('armeabi') || lower.includes('v7a')) return 'ARMv7';
-  if (lower.includes('x86_64') || lower.includes('x64')) return 'x64';
-  if (lower.includes('x86')) return 'x86';
-  if (lower.includes('universal') || lower.includes('all')) return 'Universal';
-  return 'Universal';
 }
