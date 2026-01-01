@@ -1,18 +1,20 @@
 import { memo, useState } from 'react';
+import { useStore, useSupportEmail } from '@/store';
 import { AppIcon } from './AppIcon';
 import type { AppItem } from '@/types';
 
 interface AppDetailProps {
   app: AppItem;
   onClose: () => void;
-  onDownload: (app: AppItem, url?: string) => void;
-  localVersion?: string;
-  hasUpdate: boolean;
-  supportEmail: string;
 }
 
-export const AppDetail = memo(function AppDetail({ app, onClose, onDownload, localVersion, hasUpdate, supportEmail }: AppDetailProps) {
+export const AppDetail = memo(function AppDetail({ app, onClose }: AppDetailProps) {
+  const { handleDownload, checkHasUpdate, installedVersions } = useStore();
+  const supportEmail = useSupportEmail();
   const [showVariants, setShowVariants] = useState(false);
+
+  const localVersion = installedVersions[app.id];
+  const hasUpdate = checkHasUpdate(app);
 
   const handleReport = () => {
     const subject = encodeURIComponent(`[OrionStore] Issue with ${app.name}`);
@@ -25,7 +27,6 @@ export const AppDetail = memo(function AppDetail({ app, onClose, onDownload, loc
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
 
       <div className="relative bg-surface border-t sm:border border-theme-border rounded-t-[2rem] sm:rounded-3xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up no-scrollbar">
-        {/* Header */}
         <div className="sticky top-0 bg-surface/90 backdrop-blur-xl z-10 p-4 flex justify-between items-center border-b border-theme-border">
           <button onClick={onClose} className="w-10 h-10 rounded-full bg-theme-element flex items-center justify-center text-theme-sub hover:text-theme-text transition-colors">
             <i className="fas fa-times" />
@@ -36,7 +37,6 @@ export const AppDetail = memo(function AppDetail({ app, onClose, onDownload, loc
         </div>
 
         <div className="p-6">
-          {/* App Info */}
           <div className="flex items-start gap-4 mb-6">
             <AppIcon src={app.icon} name={app.name} category={app.category} size="lg" />
             <div className="flex-1 min-w-0">
@@ -49,7 +49,6 @@ export const AppDetail = memo(function AppDetail({ app, onClose, onDownload, loc
             </div>
           </div>
 
-          {/* Version Info */}
           {localVersion && (
             <div className="bg-theme-element rounded-2xl p-4 mb-6">
               <div className="flex justify-between items-center">
@@ -67,7 +66,6 @@ export const AppDetail = memo(function AppDetail({ app, onClose, onDownload, loc
 
           <p className="text-theme-sub mb-6 leading-relaxed">{app.description}</p>
 
-          {/* Screenshots */}
           {app.screenshots?.length > 0 && (
             <div className="mb-6">
               <h3 className="font-bold text-theme-text mb-3">Screenshots</h3>
@@ -79,7 +77,6 @@ export const AppDetail = memo(function AppDetail({ app, onClose, onDownload, loc
             </div>
           )}
 
-          {/* Download */}
           <div className="space-y-3">
             {app.variants && app.variants.length > 1 ? (
               <>
@@ -91,7 +88,7 @@ export const AppDetail = memo(function AppDetail({ app, onClose, onDownload, loc
                 {showVariants && (
                   <div className="space-y-2 animate-fade-in">
                     {app.variants.map((variant, i) => (
-                      <button key={i} onClick={() => onDownload(app, variant.url)} className="w-full py-3 px-4 rounded-xl font-medium bg-theme-element text-theme-text hover:bg-theme-hover transition-all flex items-center justify-between">
+                      <button key={i} onClick={() => handleDownload(app, variant.url)} className="w-full py-3 px-4 rounded-xl font-medium bg-theme-element text-theme-text hover:bg-theme-hover transition-all flex items-center justify-between">
                         <span>{variant.arch}</span>
                         <i className="fas fa-download text-primary" />
                       </button>
@@ -100,7 +97,7 @@ export const AppDetail = memo(function AppDetail({ app, onClose, onDownload, loc
                 )}
               </>
             ) : (
-              <button onClick={() => onDownload(app)} className="w-full py-4 rounded-2xl font-bold bg-primary text-white shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+              <button onClick={() => handleDownload(app)} className="w-full py-4 rounded-2xl font-bold bg-primary text-white shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
                 <i className={`fas fa-${hasUpdate ? 'sync-alt' : 'download'}`} />
                 {hasUpdate ? 'Update' : 'Download'}
               </button>

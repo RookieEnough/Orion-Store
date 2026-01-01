@@ -1,7 +1,9 @@
 import { memo } from 'react';
-import type { FAQItem } from '@/types';
+import { useFaqs } from '@/store';
 
-export const FAQModal = memo(function FAQModal({ items, onClose }: { items: FAQItem[]; onClose: () => void }) {
+export const FAQModal = memo(function FAQModal({ onClose }: { onClose: () => void }) {
+  const items = useFaqs();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />

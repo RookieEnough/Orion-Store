@@ -63,7 +63,7 @@ export const DEFAULT_FAQS: FAQItem[] = [
   {
     question: 'Will there be more apps?',
     answer:
-      'Yes, if there'll be more interesting apps to add on. As long as I find open-source or useful tools that deserve a spotlight, the library will keep growing.',
+      'Yes, if there will be more interesting apps to add on. As long as I find open-source or useful tools that deserve a spotlight, the library will keep growing.',
     icon: 'fa-layer-group',
   },
   {

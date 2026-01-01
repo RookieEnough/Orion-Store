@@ -1,10 +1,12 @@
 import { memo } from 'react';
-import { useAppContext } from '@/context/AppContext';
+import { useStore, useTheme, useConfig } from '@/store';
 import { compareVersions } from '@/utils';
 import { CURRENT_STORE_VERSION } from '@/constants';
 
 export const Header = memo(function Header() {
-  const { theme, cycleTheme, handleDevTap, config } = useAppContext();
+  const theme = useTheme();
+  const config = useConfig();
+  const { cycleTheme, handleDevTap } = useStore();
 
   const hasStoreUpdate = config?.latestStoreVersion && compareVersions(config.latestStoreVersion, CURRENT_STORE_VERSION) > 0;
 

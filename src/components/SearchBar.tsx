@@ -1,8 +1,20 @@
-import { memo } from 'react';
-import { useAppContext } from '@/context/AppContext';
+import { memo, useState, useEffect } from 'react';
+import { useStore } from '@/store';
 
-export const SearchBar = memo(function SearchBar({ placeholder }: { placeholder: string }) {
-  const { searchQuery, setSearchQuery } = useAppContext();
+export const SearchBar = memo(function SearchBar() {
+  const { searchQuery, setSearchQuery, activeTab } = useStore();
+  const [local, setLocal] = useState(searchQuery);
+
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(local), 200);
+    return () => clearTimeout(t);
+  }, [local, setSearchQuery]);
+
+  // Sync when tab changes
+  useEffect(() => setLocal(searchQuery), [searchQuery]);
+
+  const placeholder = activeTab === 'pc' ? 'Search PC apps...' : 'Search apps...';
 
   return (
     <div className="relative mb-6 group z-10 animate-fade-in">
@@ -11,13 +23,13 @@ export const SearchBar = memo(function SearchBar({ placeholder }: { placeholder:
         <i className="fas fa-search text-lg pl-4 pr-3 text-theme-sub group-focus-within:text-acid transition-colors" />
         <input
           type="text"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
+          value={local}
+          onChange={e => setLocal(e.target.value)}
           placeholder={placeholder}
           className="w-full bg-transparent border-none outline-none text-theme-text placeholder-gray-500 h-12 font-medium text-lg"
         />
-        {searchQuery && (
-          <button onClick={() => setSearchQuery('')} className="w-10 h-10 flex items-center justify-center text-theme-sub hover:text-red-500 transition-colors">
+        {local && (
+          <button onClick={() => { setLocal(''); setSearchQuery(''); }} className="w-10 h-10 flex items-center justify-center text-theme-sub hover:text-red-500 transition-colors">
             <i className="fas fa-times" />
           </button>
         )}

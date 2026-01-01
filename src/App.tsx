@@ -1,42 +1,35 @@
-import { AppProvider, useAppContext } from '@/context/AppContext';
-import { Header, BottomNav, ScrollToTop, AppGrid, AboutView, AppDetail, FAQModal, Toast } from '@/components';
+import { useStore, useTheme, useConfig } from '@/store';
+import { Header, SearchBar, CategoryFilter, AppGrid, AppDetail, BottomNav, Toast, ScrollToTop, FAQModal, AboutView } from '@/components';
 
-function AppContent() {
-  const {
-    activeTab, selectedApp, setSelectedApp, handleDownload, checkHasUpdate,
-    installedVersions, supportEmail, showFAQ, setShowFAQ, faqs, showDevToast, devToastMessage,
-  } = useAppContext();
+export default function App() {
+  const { activeTab, selectedApp, setSelectedApp, showFAQ, setShowFAQ, devToast, isLoading, isRefreshing } = useStore();
+  const theme = useTheme();
+  const config = useConfig();
+
+  if (config?.maintenanceMode) return <div className="min-h-screen flex items-center justify-center bg-bg text-text">Maintenance Mode</div>;
 
   return (
-    <div className="min-h-screen bg-surface text-theme-text transition-colors duration-300 font-sans selection:bg-primary/30">
+    <div className={`min-h-screen bg-bg text-text transition-colors ${theme}`}>
       <Header />
-      <main className="max-w-7xl mx-auto w-full pt-24">
-        {activeTab === 'android' && <AppGrid platform="Android" title="Featured Apps" searchPlaceholder="Search Android Apps..." />}
-        {activeTab === 'pc' && <AppGrid platform="PC" title="PC Software" searchPlaceholder="Search PC Software..." showBanner />}
-        {activeTab === 'about' && <AboutView />}
+      {activeTab !== 'about' && (
+        <>
+          <SearchBar />
+          <CategoryFilter />
+        </>
+      )}
+      <main className="pb-24">
+        {activeTab === 'about' ? <AboutView /> : <AppGrid />}
       </main>
       <BottomNav />
       <ScrollToTop />
-      {selectedApp && (
-        <AppDetail
-          app={selectedApp}
-          onClose={() => setSelectedApp(null)}
-          onDownload={handleDownload}
-          localVersion={installedVersions[selectedApp.id]}
-          hasUpdate={checkHasUpdate(selectedApp)}
-          supportEmail={supportEmail}
-        />
+      {selectedApp && <AppDetail app={selectedApp} onClose={() => setSelectedApp(null)} />}
+      {showFAQ && <FAQModal onClose={() => setShowFAQ(false)} />}
+      {devToast.show && <Toast message={devToast.msg} />}
+      {(isLoading || isRefreshing) && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50 pointer-events-none">
+          <div className="w-8 h-8 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+        </div>
       )}
-      {showFAQ && <FAQModal items={faqs} onClose={() => setShowFAQ(false)} />}
-      <Toast message={devToastMessage} type="info" visible={showDevToast} />
     </div>
-  );
-}
-
-export default function App() {
-  return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
   );
 }

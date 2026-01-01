@@ -1,19 +1,15 @@
 import { memo, useMemo } from 'react';
-import { useAppContext } from '@/context/AppContext';
+import { useStore, useApps, useConfig } from '@/store';
 import { AppCard } from './AppCard';
-import { SearchBar } from './SearchBar';
-import { CategoryFilter } from './CategoryFilter';
-import type { Platform } from '@/types';
 
-interface AppGridProps {
-  platform: Platform;
-  title: string;
-  searchPlaceholder: string;
-  showBanner?: boolean;
-}
+export const AppGrid = memo(function AppGrid() {
+  const apps = useApps();
+  const config = useConfig();
+  const { activeTab, isLoading, searchQuery, selectedCategory, setSelectedApp, checkHasUpdate, installedVersions } = useStore();
 
-export const AppGrid = memo(function AppGrid({ platform, title, searchPlaceholder, showBanner }: AppGridProps) {
-  const { apps, isLoading, searchQuery, selectedCategory, setSelectedApp, checkHasUpdate, installedVersions, config } = useAppContext();
+  const platform = activeTab === 'pc' ? 'PC' : 'Android';
+  const title = activeTab === 'pc' ? 'PC Apps' : 'Android Apps';
+  const showBanner = activeTab === 'pc';
 
   const filteredApps = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -34,7 +30,7 @@ export const AppGrid = memo(function AppGrid({ platform, title, searchPlaceholde
   }
 
   return (
-    <div className="px-6 pt-2 pb-28 space-y-2 animate-fade-in">
+    <div className="px-6 pt-24 pb-28 space-y-2 animate-fade-in">
       {config?.announcement && (
         <div className="bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-300 p-4 rounded-2xl mb-6 flex items-start gap-3">
           <i className="fas fa-bullhorn mt-1" />
@@ -52,9 +48,6 @@ export const AppGrid = memo(function AppGrid({ platform, title, searchPlaceholde
           <p className="text-indigo-100 font-medium max-w-xs relative z-10">Professional grade open-source tools for your workstation.</p>
         </div>
       )}
-
-      <SearchBar placeholder={searchPlaceholder} />
-      <CategoryFilter platform={platform} />
 
       <div className="flex items-center justify-between mb-4 mt-4">
         <h2 className="text-xl font-bold text-theme-text">{selectedCategory === 'All' ? title : `${selectedCategory} Apps`}</h2>

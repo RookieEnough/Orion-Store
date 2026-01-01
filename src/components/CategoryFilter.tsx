@@ -1,11 +1,12 @@
 import { memo, useState, useEffect, useMemo } from 'react';
-import { useAppContext } from '@/context/AppContext';
-import type { Platform } from '@/types';
+import { useStore, useApps } from '@/store';
 
-export const CategoryFilter = memo(function CategoryFilter({ platform }: { platform: Platform }) {
-  const { apps, selectedCategory, setSelectedCategory, isRefreshing, refresh } = useAppContext();
+export const CategoryFilter = memo(function CategoryFilter() {
+  const apps = useApps();
+  const { activeTab, selectedCategory, setSelectedCategory, isRefreshing, loadApps } = useStore();
   const [isOpen, setIsOpen] = useState(false);
 
+  const platform = activeTab === 'pc' ? 'PC' : 'Android';
   const categories = useMemo(() => {
     const cats = new Set(apps.filter(a => a.platform === platform).map(a => a.category));
     return ['All', ...cats];
@@ -36,7 +37,7 @@ export const CategoryFilter = memo(function CategoryFilter({ platform }: { platf
           </ul>
         )}
       </div>
-      <button onClick={refresh} className={`shrink-0 w-12 h-12 rounded-2xl border border-theme-border bg-card flex items-center justify-center text-theme-sub hover:text-primary hover:border-primary transition-all shadow-xs active:scale-95 ${isRefreshing ? 'animate-spin text-primary' : ''}`} title="Refresh">
+      <button onClick={() => loadApps(true)} className={`shrink-0 w-12 h-12 rounded-2xl border border-theme-border bg-card flex items-center justify-center text-theme-sub hover:text-primary hover:border-primary transition-all shadow-xs active:scale-95 ${isRefreshing ? 'animate-spin text-primary' : ''}`} title="Refresh">
         <i className="fas fa-sync-alt" />
       </button>
     </div>
