@@ -1,17 +1,8 @@
+export type AppCategory = 'Utility' | 'Privacy' | 'Media' | 'Development' | 'Social' | 'Educational';
 
-export enum AppCategory {
-  UTILITY = 'Utility',
-  PRIVACY = 'Privacy',
-  MEDIA = 'Media',
-  DEVELOPMENT = 'Development',
-  SOCIAL = 'Social',
-  EDUCATIONAL = 'Educational'
-}
+export type Platform = 'Android' | 'PC';
 
-export enum Platform {
-  ANDROID = 'Android',
-  PC = 'PC'
-}
+export type Tab = 'android' | 'pc' | 'about';
 
 export interface AppVariant {
   arch: string;
@@ -27,7 +18,7 @@ export interface AppItem {
   latestVersion: string;
   downloadUrl: string;
   variants?: AppVariant[];
-  repoUrl?: string; 
+  repoUrl?: string;
   githubRepo?: string;
   category: AppCategory;
   platform: Platform;
@@ -35,8 +26,8 @@ export interface AppItem {
   author: string;
   screenshots: string[];
   isInstalled?: boolean;
-  releaseKeyword?: string; // Used to match assets in GitHub Releases
-  packageName?: string; // Android Package Name (e.g., com.google.android.youtube)
+  releaseKeyword?: string;
+  packageName?: string;
 }
 
 export interface SocialLinks {
@@ -65,16 +56,11 @@ export interface StoreConfig {
   maintenanceMessage?: string;
   announcement?: string;
   minStoreVersion?: string;
-  // Self-Update Mechanism
   latestStoreVersion?: string;
   storeDownloadUrl?: string;
-  // Dynamic Content
   socials?: SocialLinks;
   devProfile?: DevProfile;
   faqs?: FAQItem[];
-  // Dynamic Meta
   supportEmail?: string;
   easterEggUrl?: string;
 }
-
-export type Tab = 'android' | 'pc' | 'about';

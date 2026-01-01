@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --surface: #f8fafc;
+  --card: #ffffff;
+  --text: #1e293b;
+  --text-sub: #64748b;
+  --border: #e2e8f0;
+  --element: #f1f5f9;
+  --hover: #e2e8f0;
+  --input: #ffffff;
+}
+
+.dusk {
+  --surface: #1e1f2e;
+  --card: #282a3a;
+  --text: #e2e8f0;
+  --text-sub: #94a3b8;
+  --border: #3f4156;
+  --element: #2d2f42;
+  --hover: #3f4156;
+  --input: #2d2f42;
+}
+
+.dark {
+  --surface: #0f0f0f;
+  --card: #1a1a1a;
+  --text: #f1f5f9;
+  --text-sub: #94a3b8;
+  --border: #2a2a2a;
+  --element: #1f1f1f;
+  --hover: #2a2a2a;
+  --input: #1f1f1f;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  @apply bg-surface text-theme-text antialiased;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
