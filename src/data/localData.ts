@@ -51,7 +51,7 @@ export const localAppsData: AppItem[] = [
     id: 'termux',
     name: 'Termux',
     description: 'Android terminal emulator and Linux environment. Run command-line programs on your phone.',
-    icon: 'https://avatars.githubusercontent.com/u/16285org',
+    icon: 'https://avatars.githubusercontent.com/u/16285',
     version: 'Latest',
     latestVersion: 'Latest',
     downloadUrl: '#',
