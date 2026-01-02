@@ -1,6 +1,6 @@
 {
   "name": "orion-store",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "OrionStore - The Modern, Serverless App Store for the Open Web",
   "type": "module",
   "scripts": {
@@ -12,23 +12,23 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.10.2",
-    "@types/react": "^18.3.17",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
     "eslint": "^9.17.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "prettier": "^3.4.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.51.0",
-    "vite": "^6.0.5"
+    "vite": "^7.3.0"
   }
 }
