@@ -1,5 +1,3 @@
-const KEYS_TO_PRESERVE = ['theme_preference', 'isDevUnlocked', 'isLegend', 'gh_token', 'installed_apps', 'use_remote_json'];
-
 export const STORAGE_KEYS = {
   THEME: 'theme_preference',
   DEV_UNLOCKED: 'isDevUnlocked',
@@ -10,6 +8,15 @@ export const STORAGE_KEYS = {
   CACHED_APPS: 'orion_cached_apps_v2',
   CACHE_VERSION: 'orion_cache_ver',
 } as const;
+
+const KEYS_TO_PRESERVE: string[] = [
+  STORAGE_KEYS.THEME,
+  STORAGE_KEYS.DEV_UNLOCKED,
+  STORAGE_KEYS.LEGEND,
+  STORAGE_KEYS.GH_TOKEN,
+  STORAGE_KEYS.INSTALLED_APPS,
+  STORAGE_KEYS.USE_REMOTE,
+];
 
 export const storage = {
   get: (key: string) => { try { return localStorage.getItem(key); } catch { return null; } },

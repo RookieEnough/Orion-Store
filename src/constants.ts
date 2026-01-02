@@ -1,7 +1,7 @@
 import type { AppCategory, DevProfile, FAQItem, SocialLinks } from './types';
 
 // Version & Cache
-export const CURRENT_STORE_VERSION = '1.0.0';
+export const CURRENT_STORE_VERSION = '1.1.0';
 export const CACHE_VERSION = 'v1_3';
 export const NETWORK_TIMEOUT_MS = 8000;
 
