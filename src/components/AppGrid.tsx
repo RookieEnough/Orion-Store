@@ -32,7 +32,7 @@ export const AppGrid = memo(function AppGrid() {
   return (
     <div className="px-6 pb-28 space-y-2 animate-fade-in entrance-content">
       {config?.announcement && (
-        <div className="bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-300 p-4 rounded-2xl mb-6 flex items-start gap-3">
+        <div className="bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dusk:text-indigo-300 p-4 rounded-2xl mb-6 flex items-start gap-3">
           <i className="fas fa-bullhorn mt-1" />
           <div>
             <p className="font-bold text-sm">Announcement</p>

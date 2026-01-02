@@ -1,7 +1,7 @@
 import { memo, useState, useRef } from 'react';
 import { useStore, useSocialLinks, useDevProfile, useEasterEggUrl } from '@/store';
 import { storage } from '@/utils/storage';
-import { CURRENT_STORE_VERSION } from '@/constants';
+import { CURRENT_STORE_VERSION, EASTER_EGG_TAP_TARGET } from '@/constants';
 import { SectionDivider } from './SectionDivider';
 
 export const AboutView = memo(function AboutView() {
@@ -18,7 +18,7 @@ export const AboutView = memo(function AboutView() {
   const handleProfileClick = () => {
     const newCount = easterEggCount + 1;
     setEasterEggCount(newCount);
-    if (newCount >= 8) {
+    if (newCount >= EASTER_EGG_TAP_TARGET) {
       window.open(easterEggUrl, '_blank');
       setEasterEggCount(0);
       setIsLegend(true);
@@ -63,8 +63,8 @@ export const AboutView = memo(function AboutView() {
                 <i className="fab fa-github text-2xl text-theme-text" />
                 <span className="font-bold text-theme-text">GitHub</span>
               </a>
-              <a href={socialLinks.x} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 p-4 bg-black dark:bg-white rounded-2xl hover:scale-[1.02] transition-all shadow-lg">
-                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white dark:fill-black">
+              <a href={socialLinks.x} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 p-4 bg-black dusk:bg-white rounded-2xl hover:scale-[1.02] transition-all shadow-lg">
+                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white dusk:fill-black">
                   <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" />
                 </svg>
               </a>
@@ -80,22 +80,22 @@ export const AboutView = memo(function AboutView() {
 
           <div className="space-y-3">
             <SectionDivider label="Resources" />
-            <a href={socialLinks.coffee} target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-400 rounded-2xl hover:scale-[1.01] transition-all shadow-lg shadow-yellow-400/20">
+            <a href={socialLinks.coffee} target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 bg-yellow-50 dusk:bg-yellow-900/20 border-2 border-yellow-400 rounded-2xl hover:scale-[1.01] transition-all shadow-lg shadow-yellow-400/20">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-full bg-yellow-400 text-yellow-900 flex items-center justify-center text-xl"><i className="fas fa-coffee" /></div>
                 <div className="text-left">
-                  <span className="font-bold text-gray-900 dark:text-yellow-100 text-lg block">Buy me a coffee</span>
-                  <span className="text-xs text-yellow-600 dark:text-yellow-200 font-semibold">Support development</span>
+                  <span className="font-bold text-gray-900 dusk:text-yellow-100 text-lg block">Buy me a coffee</span>
+                  <span className="text-xs text-yellow-600 dusk:text-yellow-200 font-semibold">Support development</span>
                 </div>
               </div>
               <i className="fas fa-heart text-red-500 animate-bounce" />
             </a>
-            <button onClick={() => setShowFAQ(true)} className="flex items-center justify-between p-4 bg-purple-50 dark:bg-purple-900/20 border-2 border-dashed border-purple-300 dark:border-purple-700 rounded-2xl hover:scale-[1.01] transition-all w-full text-left">
+            <button onClick={() => setShowFAQ(true)} className="flex items-center justify-between p-4 bg-purple-50 dusk:bg-purple-900/20 border-2 border-dashed border-purple-300 dusk:border-purple-700 rounded-2xl hover:scale-[1.01] transition-all w-full text-left">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-full bg-purple-400 text-white flex items-center justify-center text-xl"><i className="fas fa-question" /></div>
                 <div>
-                  <span className="font-bold text-gray-900 dark:text-purple-100 text-lg block">FAQs</span>
-                  <span className="text-xs text-purple-600 dark:text-purple-300 font-semibold">Secrets & Safety</span>
+                  <span className="font-bold text-gray-900 dusk:text-purple-100 text-lg block">FAQs</span>
+                  <span className="text-xs text-purple-600 dusk:text-purple-300 font-semibold">Secrets & Safety</span>
                 </div>
               </div>
               <i className="fas fa-chevron-right text-purple-400" />
@@ -148,7 +148,7 @@ export const AboutView = memo(function AboutView() {
             <div className="flex items-center gap-3 text-sm font-medium text-theme-sub">
               <span className="opacity-60 font-mono">v{CURRENT_STORE_VERSION}</span>
               <span className="w-1 h-1 rounded-full bg-theme-border" />
-              <div className={`px-3 py-1 rounded-full border text-xs font-bold flex items-center gap-2 shadow-xs ${useRemoteJson ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'}`}>
+              <div className={`px-3 py-1 rounded-full border text-xs font-bold flex items-center gap-2 shadow-xs ${useRemoteJson ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dusk:text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-600 dusk:text-amber-400'}`}>
                 <span className="uppercase tracking-wider opacity-80">Source:</span>
                 <span>{useRemoteJson ? 'Remote' : 'Local'}</span>
               </div>

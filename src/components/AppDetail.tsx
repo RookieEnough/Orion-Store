@@ -57,8 +57,8 @@ export const AppDetail = memo(function AppDetail({ app, onClose }: AppDetailProp
               </div>
               {hasUpdate && (
                 <div className="flex justify-between items-center mt-2 pt-2 border-t border-theme-border">
-                  <span className="text-sm text-acid-dark dark:text-acid">Available</span>
-                  <span className="font-bold text-acid-dark dark:text-acid">{app.latestVersion}</span>
+                  <span className="text-sm text-acid-dark dusk:text-acid">Available</span>
+                  <span className="font-bold text-acid-dark dusk:text-acid">{app.latestVersion}</span>
                 </div>
               )}
             </div>
