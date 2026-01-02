@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore, useSupportEmail } from '@/store';
 import { AppIcon } from './AppIcon';
 import type { AppItem } from '@/types';
@@ -15,6 +15,11 @@ export function AppDetail({ app, onClose }: AppDetailProps) {
 
   const localVersion = installedVersions[app.id];
   const hasUpdate = checkHasUpdate(app);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
 
   const handleReport = () => {
     const subject = encodeURIComponent(`[OrionStore] Issue with ${app.name}`);
