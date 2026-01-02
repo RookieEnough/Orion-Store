@@ -6,7 +6,7 @@ import { CURRENT_STORE_VERSION } from '@/constants';
 export const Header = memo(function Header() {
   const theme = useTheme();
   const config = useConfig();
-  const { cycleTheme, handleDevTap } = useStore();
+  const { activeTab, setActiveTab, cycleTheme, handleDevTap } = useStore();
 
   const hasStoreUpdate = config?.latestStoreVersion !== undefined && compareVersions(config.latestStoreVersion, CURRENT_STORE_VERSION) > 0;
   const downloadUrl = config?.storeDownloadUrl;
@@ -22,19 +22,30 @@ export const Header = memo(function Header() {
         </h1>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {hasStoreUpdate && downloadUrl && (
           <button
             onClick={() => { window.location.href = downloadUrl; }}
-            className="px-3 py-2 rounded-xl bg-acid/20 text-acid-dark dark:text-acid border border-acid/30 font-bold text-xs flex items-center gap-2 animate-pulse"
+            className="px-3 py-2 rounded-xl bg-acid/20 text-acid-dark dusk:text-acid border border-acid/30 font-bold text-xs flex items-center gap-2 animate-pulse"
           >
             <i className="fas fa-arrow-circle-up" />
             <span className="hidden sm:inline">Update</span>
           </button>
         )}
         <button
+          onClick={() => setActiveTab('about')}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-95 ${
+            activeTab === 'about'
+              ? 'bg-primary text-white shadow-lg shadow-primary/25'
+              : 'bg-theme-element text-theme-sub hover:text-theme-text'
+          }`}
+          title="About"
+        >
+          <i className="fas fa-user" />
+        </button>
+        <button
           onClick={cycleTheme}
-          className="w-10 h-10 rounded-full bg-theme-element hover:bg-theme-hover flex items-center justify-center text-theme-sub hover:text-acid transition-all hover:scale-110 active:scale-95"
+          className="w-10 h-10 rounded-xl bg-theme-element hover:bg-theme-hover flex items-center justify-center text-theme-sub hover:text-primary transition-all active:scale-95"
           title={`Theme: ${theme}`}
         >
           <i className={`fas ${theme === 'light' ? 'fa-sun' : theme === 'dusk' ? 'fa-moon' : 'fa-circle-half-stroke'}`} />
