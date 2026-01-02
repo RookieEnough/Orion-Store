@@ -9,10 +9,12 @@ export const ScrollToTop = memo(function ScrollToTop() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  if (!visible) return null;
+
   return (
     <button
       onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-      className={`fixed bottom-24 right-6 z-40 w-12 h-12 rounded-full bg-card border border-theme-border shadow-lg flex items-center justify-center text-primary transition-all duration-300 ${visible ? 'opacity-100' : 'opacity-0 translate-y-10 pointer-events-none'}`}
+      className="fixed bottom-24 right-6 z-40 w-11 h-11 rounded-xl bg-card border border-theme-border shadow-lg flex items-center justify-center text-theme-sub hover:text-primary hover:border-primary/50 transition-all active:scale-95 animate-fade-in"
     >
       <i className="fas fa-arrow-up" />
     </button>
