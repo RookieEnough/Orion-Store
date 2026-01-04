@@ -1,5 +1,5 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import Header from "./Header";
 import { DEV_SOCIALS, DEFAULT_FAQS, DEFAULT_DEV_PROFILE, DEFAULT_SUPPORT_EMAIL, DEFAULT_EASTER_EGG, CACHE_VERSION, NETWORK_TIMEOUT_MS } from './constants';
 import { Platform, AppItem, Tab, AppVariant, StoreConfig } from './types';
 import AppCard from './components/AppCard';
@@ -1085,6 +1085,8 @@ const App: React.FC = () => {
   );
 
   return (
+    <>
+    <Header />
     <div className="min-h-screen bg-surface text-theme-text transition-colors duration-300 font-sans selection:bg-primary/30">
       {renderHeader()}
 
@@ -1215,6 +1217,7 @@ const App: React.FC = () => {
             <i className="fas fa-arrow-up"></i>
         </button>
     </div>
+    </>
   );
 };
 
