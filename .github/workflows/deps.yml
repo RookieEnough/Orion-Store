@@ -1,0 +1,55 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Every Monday 9am UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Update dependencies
+        run: |
+          npm update
+          npm audit fix || true
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet package-lock.json; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run checks
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run build
+
+      - name: Create PR
+        if: steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: 'chore(deps): update dependencies'
+          title: 'chore(deps): weekly dependency updates'
+          body: |
+            Automated dependency updates.
+            
+            - `npm update` 
+            - `npm audit fix`
+            - All checks passing ✅
+          branch: deps/weekly-update
+          delete-branch: true

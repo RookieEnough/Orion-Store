@@ -1,0 +1,72 @@
+{
+  "nav": {
+    "apps": "Apps",
+    "pc": "PC"
+  },
+  "header": {
+    "update": "Update",
+    "about": "About",
+    "theme": "Theme: {{theme}}"
+  },
+  "search": {
+    "placeholder": "Search apps...",
+    "placeholderPc": "Search PC apps...",
+    "refresh": "Refresh"
+  },
+  "grid": {
+    "loading": "Loading Store...",
+    "androidApps": "Android Apps",
+    "pcApps": "PC Apps",
+    "categoryApps": "{{category}} Apps",
+    "noApps": "No apps found",
+    "noAppsHint": "Try searching for something else",
+    "announcement": "Announcement"
+  },
+  "banner": {
+    "title": "Desktop Station",
+    "subtitle": "Professional grade open-source tools for your workstation."
+  },
+  "detail": {
+    "reportIssue": "Report Issue",
+    "installed": "Installed",
+    "available": "Available",
+    "screenshots": "Screenshots",
+    "download": "Download",
+    "update": "Update",
+    "variants": "{{count}} variants",
+    "viewSource": "View Source"
+  },
+  "about": {
+    "connect": "Connect",
+    "github": "GitHub",
+    "discord": "Join Discord Community",
+    "resources": "Resources",
+    "coffee": "Buy me a coffee",
+    "coffeeHint": "Support development",
+    "faq": "FAQs",
+    "faqHint": "Secrets & Safety",
+    "devOptions": "Developer Options",
+    "dataSource": "Data Source",
+    "remote": "Remote",
+    "local": "Local",
+    "remoteConfig": "Remote (Config)",
+    "localBundle": "Local Bundle",
+    "githubToken": "GitHub Token (PAT)",
+    "tokenHint": "Bypass rate limits (5000 req/hr vs 60 req/hr).",
+    "noToken": "No token set",
+    "save": "Save",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "wipeCache": "Wipe Cache & Reset",
+    "source": "Source:",
+    "madeWith": "Made with 💜 for Geeks",
+    "legend": "Legend"
+  },
+  "faqModal": {
+    "title": "FAQs"
+  },
+  "language": {
+    "en": "English",
+    "ar": "العربية"
+  }
+}

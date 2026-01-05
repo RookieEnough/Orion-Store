@@ -1,0 +1,149 @@
+@import "tailwindcss";
+
+@source "../**/*.{ts,tsx}";
+
+@theme {
+  /* Colors */
+  --color-primary: #6366f1;
+  --color-acid: #d4ff00;
+  --color-acid-dark: #a3c700;
+  --color-neon: #ff00ff;
+
+  /* Theme-aware colors (CSS variables) */
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-theme-text: var(--text);
+  --color-theme-sub: var(--text-sub);
+  --color-theme-border: var(--border);
+  --color-theme-element: var(--element);
+  --color-theme-hover: var(--hover);
+  --color-theme-input: var(--input);
+
+  /* Animations - orchestrated with stagger support */
+  --animate-fade-in: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-slide-up: slide-up 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-scale-in: scale-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-pulse-slow: pulse-glow 3s ease-in-out infinite;
+  --animate-shine: shine 2s ease-in-out infinite;
+  --animate-float: float 3s ease-in-out infinite;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(24px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      opacity: 1;
+      filter: brightness(1);
+    }
+    50% {
+      opacity: 0.85;
+      filter: brightness(1.1);
+    }
+  }
+
+  @keyframes shine {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.02);
+    }
+  }
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px);
+    }
+  }
+}
+
+/* Staggered animation delays for grid items */
+.stagger-item {
+  animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--stagger-index, 0) * 50ms);
+}
+
+/* Orchestrated entrance sequence */
+.entrance-header { animation-delay: 0ms; }
+.entrance-search { animation-delay: 80ms; }
+.entrance-filter { animation-delay: 120ms; }
+.entrance-content { animation-delay: 160ms; }
+
+/* Light theme (default) */
+:root {
+  --surface: #f8fafc;
+  --card: #ffffff;
+  --text: #1e293b;
+  --text-sub: #64748b;
+  --border: #e2e8f0;
+  --element: #f1f5f9;
+  --hover: #e2e8f0;
+  --input: #ffffff;
+}
+
+/* Dusk theme (dark mode) */
+.dusk {
+  --surface: #1e1f2e;
+  --card: #282a3a;
+  --text: #e2e8f0;
+  --text-sub: #94a3b8;
+  --border: #3f4156;
+  --element: #2d2f42;
+  --hover: #3f4156;
+  --input: #2d2f42;
+}
+
+/* Base styles */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  @apply bg-surface text-theme-text antialiased;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Utility classes */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
