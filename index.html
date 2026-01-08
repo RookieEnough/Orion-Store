@@ -1,0 +1,172 @@
+
+<!DOCTYPE html>
+<html lang="en" class="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover" />
+    <meta name="description" content="Orion Store is a serverless, open-source app marketplace powered entirely by GitHub." />
+    <meta name="theme-color" content="#6366f1" />
+    <title>Orion Store</title>
+    
+    <!-- App Icons (Updated to Relative Paths) -->
+    <link rel="icon" type="image/png" href="./icon.png" />
+    <link rel="apple-touch-icon" href="./icon.png" />
+    <link rel="manifest" href="./manifest.json" />
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Tailwind CSS for Runtime Preview -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Space Grotesk', 'sans-serif'],
+            },
+            colors: {
+              primary: {
+                DEFAULT: '#6366f1',
+                light: '#a5b4fc',
+              },
+              acid: '#bef264',
+              neon: '#d946ef',
+              surface: {
+                 DEFAULT: 'var(--bg-surface)',
+                 dark: '#0f0f11',
+                 light: '#f8fafc',
+              },
+              card: {
+                 DEFAULT: 'var(--bg-card)',
+                 dark: '#18181b',
+                 light: '#ffffff',
+              },
+              theme: {
+                text: 'var(--text-main)',
+                sub: 'var(--text-sub)',
+                border: 'var(--border-color)',
+                element: 'var(--element-bg)',
+                hover: 'var(--element-hover)',
+                input: 'var(--input-bg)'
+              }
+            },
+            animation: {
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'shine': 'shine 3s linear infinite',
+            },
+            keyframes: {
+              shine: {
+                '0%': { backgroundPosition: '200% center' },
+                '100%': { backgroundPosition: '-200% center' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+      body {
+        font-family: 'Space Grotesk', sans-serif;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* Hide scrollbar for clean UI */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      .safe-area-pb {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+
+      @keyframes slide-up {
+        from { transform: translateY(100%); opacity: 0; }
+        to { transform: translateY(0%); opacity: 1; }
+      }
+      .animate-slide-up {
+        animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      @keyframes fade-in {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.3s ease-out forwards;
+      }
+
+      /* Theming System with CSS Variables */
+      :root {
+        /* Light Mode (Default) */
+        --bg-surface: #f8fafc;
+        --bg-card: #ffffff;
+        --text-main: #111827;
+        --text-sub: #6b7280;
+        --border-color: #e5e7eb;
+        --element-bg: #f3f4f6;
+        --element-hover: #e5e7eb;
+        --input-bg: #ffffff;
+      }
+
+      html.dusk {
+        /* Dusk Mode - Twilight Blue/Gray */
+        --bg-surface: #20222f;
+        --bg-card: #2a2d3e;
+        --text-main: #e2e8f0;
+        --text-sub: #94a3b8;
+        --border-color: #374151;
+        --element-bg: #374151;
+        --element-hover: #4b5563;
+        --input-bg: #2a2d3e;
+      }
+
+      html.dark {
+        /* Dark Mode - Zinc/Black */
+        --bg-surface: #09090b;
+        --bg-card: #18181b;
+        --text-main: #ffffff;
+        --text-sub: #a1a1aa;
+        --border-color: #27272a;
+        --element-bg: #27272a;
+        --element-hover: #3f3f46;
+        --input-bg: #121214;
+      }
+    </style>
+
+<!-- Updated to relative path -->
+<link rel="stylesheet" href="./index.css">
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "path": "https://esm.sh/path@^0.12.7",
+    "@capacitor/core": "https://esm.sh/@capacitor/core@^8.0.0",
+    "fs": "https://esm.sh/fs@^0.0.1-security",
+    "@capacitor/haptics": "https://esm.sh/@capacitor/haptics@^8.0.0",
+    "@capacitor/local-notifications": "https://esm.sh/@capacitor/local-notifications@^8.0.0",
+    "child_process": "https://esm.sh/child_process@^1.0.2",
+    "@capacitor/cli": "https://esm.sh/@capacitor/cli@^8.0.0",
+    "capacitor-unity-ads": "https://esm.sh/capacitor-unity-ads@^1.0.0",
+    "@capacitor/app": "https://esm.sh/@capacitor/app@^8.0.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-surface text-theme-text transition-colors duration-300">
+    <div id="root"></div>
+    <!-- Updated to relative path -->
+    <script type="module" src="./index.tsx"></script>
+  </body>
+</html>

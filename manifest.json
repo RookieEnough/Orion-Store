@@ -1,0 +1,17 @@
+
+{
+  "name": "Orion Store",
+  "short_name": "Orion",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0f0f11",
+  "theme_color": "#6366f1",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    }
+  ]
+}
