@@ -37,9 +37,10 @@
   <a href="https://github.com/RookieEnough/Orion-Store/releases">
     <img src="https://img.shields.io/github/downloads/RookieEnough/Orion-Store/total?style=flat-square">
   </a>
-  <a href="https://github.com/RookieEnough/Orion-Store/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/RookieEnough/Orion-Store/ci.yml?style=flat-square">
-  </a>
+  <a href="https://github.com/RookieEnough/Orion-Store/releases">
+  <img src="https://img.shields.io/github/v/release/RookieEnough/Orion-Store?style=flat-square&color=blue" alt="Latest Version">
+</a>
+
 </p>
 
 ---
