@@ -80,14 +80,14 @@ Apps are fetched directly from their source repositories, updates are tracked au
   <h3>App Screenshots</h3>
   <table>
     <tr>
-      <td><img src="assets/home.PNG" height="350" alt="Home Screen" /></td>
-      <td><img src="assets/dark.PNG" height="350" alt="Dark Mode" /></td>
-      <td><img src="assets/detail.PNG" height="350" alt="App Details" /></td>
+      <td><img src="assets/home.PNG" height="450" alt="Home Screen" /></td>
+      <td><img src="assets/dark.PNG" height="450" alt="Dark Mode" /></td>
+      <td><img src="assets/detail.PNG" height="450" alt="App Details" /></td>
     </tr>
     <tr>
-      <td><img src="assets/Tv.png" height="350" alt="TV Tab" /></td>
-      <td><img src="assets/Settings.png" height="350" alt="Settings Tab" /></td>
-      <td><img src="assets/Backup.PNG" height="350" alt="Backup Progress" /></td>
+      <td><img src="assets/Tv.png" height="450" alt="TV Tab" /></td>
+      <td><img src="assets/Settings.png" height="450" alt="Settings Tab" /></td>
+      <td><img src="assets/Backup.png" height="450" alt="Backup Progress" /></td>
     </tr>
   </table>
 </div>
