@@ -85,9 +85,9 @@ Apps are fetched directly from their source repositories, updates are tracked au
       <td><img src="assets/detail.PNG" height="350" alt="App Details" /></td>
     </tr>
     <tr>
-      <td><img src="assets/4.PNG" height="350" alt="Screen 4" /></td>
-      <td><img src="assets/5.PNG" height="350" alt="Screen 5" /></td>
-      <td><img src="assets/6.PNG" height="350" alt="Screen 6" /></td>
+      <td><img src="assets/Tv.png" height="350" alt="TV Tab" /></td>
+      <td><img src="assets/Settings.png" height="350" alt="Settings Tab" /></td>
+      <td><img src="assets/Backup.PNG" height="350" alt="Backup Progress" /></td>
     </tr>
   </table>
 </div>
