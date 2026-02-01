@@ -25,6 +25,12 @@
 </p>
 
 <p align="center">
+  <a href="https://rookiezz.gumroad.com/l/hrpyb">
+    <img src="https://img.shields.io/badge/Support%20me%20on-Gumroad-%23FF90E8?style=flat&logo=gumroad&logoColor=white" alt="Support me on Gumroad">
+  </a>
+</p>
+
+<p align="center">
   <a href="https://github.com/RookieEnough/Orion-Store/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/RookieEnough/Orion-Store?style=flat-square">
   </a>
