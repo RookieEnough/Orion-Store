@@ -31,6 +31,12 @@
 </p>
 
 <p align="center">
+  <a href="https://www.buymeacoffee.com/rookiez" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="120" alt="Buy Me A Coffee">
+  </a>
+</p>
+
+<p align="center">
   <a href="https://github.com/RookieEnough/Orion-Store/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/RookieEnough/Orion-Store?style=flat-square">
   </a>
@@ -182,8 +188,9 @@ Orion does not force monetization.
 Users can support development in two optional ways:
 
 ### Buy Me a Coffee
-**[Click here](https://rookiezz.gumroad.com/l/hrpyb)☕**
-
+<a href="https://www.buymeacoffee.com/rookiez" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="120" alt="Buy Me A Coffee">
+</a>
 
 ### Fuel The Code
 A gamified system where users support the project by watching ads.
