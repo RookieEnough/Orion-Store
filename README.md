@@ -182,8 +182,8 @@ Orion does not force monetization.
 Users can support development in two optional ways:
 
 ### Buy Me a Coffee
-A direct way to show appreciation.
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H4TIXL3)
+**[Click here](https://rookiezz.gumroad.com/l/hrpyb)☕**
+
 
 ### Fuel The Code
 A gamified system where users support the project by watching ads.
