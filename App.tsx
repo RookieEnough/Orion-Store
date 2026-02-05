@@ -754,6 +754,42 @@ const App: React.FC = () => {
       Haptics.notification({ type: success ? NotificationType.Success : NotificationType.Error });
   }, []);
 
+
+const handleRedownload = (app: AppItem, specificUrl?: string) => {
+    const urlToUse = specificUrl || app.downloadUrl;
+    if (!urlToUse || urlToUse === '#' || urlToUse === '') {
+        setErrorMsg('Download link not found');
+        setShowErrorToast(true);
+        setTimeout(() => setShowErrorToast(false), 3000);
+        return;
+    }
+
+    try {
+        // Remove installed version 
+        const newReg = { ...installedVersions };
+        delete newReg[app.id];
+        setInstalledVersions(newReg);
+        safeStorage.setItem('installed_apps', JSON.stringify(newReg));
+
+        // Show redownload status
+        setErrorMsg('Removing old file, Redownloading now...');
+        setShowErrorToast(true);
+
+        // Trigger redownload 
+        setTimeout(() => {
+            setShowErrorToast(false);
+            handleDownloadAction(app, urlToUse);
+        }, 1000);
+    } catch (error) {
+        console.error('Redownload error:', error);
+        setErrorMsg('Failed to redownload. Try again.');
+        setShowErrorToast(true);
+        setTimeout(() => setShowErrorToast(false), 3000);
+    }
+  };
+
+
+
   const checkForUpdates = async () => {
       if (!autoUpdateEnabled || !Capacitor.isNativePlatform() || (wifiOnly && !isWifiConnected())) return;
       const updates = appsRef.current.filter(app => {
