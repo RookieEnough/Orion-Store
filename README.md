@@ -203,10 +203,10 @@ A gamified system where users support the project by watching ads.
 
 ## Related Project
 
-### [ReVanced Auto Builds](https://github.com/RookieEnough/Revanced-AutoBuilds)
+### [Morphe Auto Builds](https://github.com/RookieEnough/morphe-AutoBuilds)
 
 - Built automatically using GitHub Actions  
-- Uses the official ReVanced CLI patcher  
+- Uses the official Morphe CLI patcher  
 - No manual uploads  
 - Fully transparent and reproducible builds  
 
