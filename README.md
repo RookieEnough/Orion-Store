@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <em>A transparent, serverless app store powered entirely by GitHub</em><br>
-  <em>Built for automation, trust, and community driven distribution</em>
+  <em>A transparent, multi-source app store powered by Open Source Git platforms</em><br>
+  <em>Built for automation, trust, and community-driven distribution</em>
 </p>
 
 <p align="center">
@@ -31,115 +31,63 @@
 </p>
 
 <p align="center">
-  <a href="https://www.buymeacoffee.com/rookiez" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="120" alt="Buy Me A Coffee">
-  </a>
-</p>
-
-<p align="center">
   <a href="https://github.com/RookieEnough/Orion-Store/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/RookieEnough/Orion-Store?style=flat-square">
   </a>
   <a href="https://github.com/RookieEnough/Orion-Store/commits/main">
     <img src="https://img.shields.io/github/last-commit/RookieEnough/Orion-Store?style=flat-square">
   </a>
-  <a href="https://github.com/RookieEnough/Orion-Store/pulls">
-    <img src="https://img.shields.io/github/issues-pr/RookieEnough/Orion-Store?style=flat-square">
-  </a>
   <a href="https://github.com/RookieEnough/Orion-Store/releases">
     <img src="https://img.shields.io/github/downloads/RookieEnough/Orion-Store/total?style=flat-square">
   </a>
-  <a href="https://github.com/RookieEnough/Orion-Store/releases">
-  <img src="https://img.shields.io/github/v/release/RookieEnough/Orion-Store?style=flat-square&color=blue" alt="Latest Version">
-</a>
-
 </p>
 
 ---
 
 ## Overview 🌌
 
-**Orion Store** is a modern, serverless app store that relies completely on GitHub repositories and GitHub Actions.
+**Orion Store** is a modern, serverless app store that decentralizes app distribution. By leveraging public Git infrastructures, Orion ensures that every app you download is fetched directly from its source with no middleman.
 
-There is no centralized backend, no opaque process, and no hidden uploads.  
-Apps are fetched directly from their source repositories, updates are tracked automatically, and everything remains publicly auditable.
+### Multi-Source Support 🌐
+Orion isn't just limited to one platform. It intelligently fetches and tracks apps across:
+1. **GitHub** - The primary hub for open-source innovation.
+2. **GitLab** - Robust support for diverse repository structures.
+3. **Codeberg** - Embracing the independent and privacy-focused community.
 
 ---
 
 ## Key Highlights ⚡
 
-- Fully serverless architecture  
-- One click app downloads  
-- Automatic update detection and notifications  
-- No ads inside the app  
-- Automatic APK cleanup after installation  
-- Extremely lightweight, around 5 to 6 MB  
-- Web wrapped but feels close to native  
-- Built with transparency and community trust in mind  
-
----
-<div align="center">
-  <a href="https://www.youtube.com/watch?v=dIzAipwgj6A" target="_blank">
-    <img src="https://img.youtube.com/vi/dIzAipwgj6A/maxresdefault.jpg" alt="Watch the Demo" width="100%" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);" />
-  </a>
-  <p><i>Click the image above to watch the demo video</i></p>
-</div>
+- **Malware Scanner** – Integrated checks to ensure package integrity.
+- **System Debloater** – Deep clean your device by removing unwanted system apps.
+- **Package Extractor** – Easily extract and backup installed APKs.
+- **Auto Updates** – Smart background detection for app updates.
+- **Gamified Ad Support** – Support development through a rewarding, non-intrusive system.
+- **Fully Serverless** – No centralized backend to fail or track you.
+- **Extremely Lightweight** – High performance within a 5-6 MB footprint.
 
 ---
 
 ## Screenshots 📸
 
 <div align="center">
-  <h3>App Screenshots</h3>
   <table>
     <tr>
-      <td><img src="assets/home.PNG" height="450" alt="Home Screen" /></td>
-      <td><img src="assets/dark.PNG" height="450" alt="Dark Mode" /></td>
-      <td><img src="assets/detail.PNG" height="450" alt="App Details" /></td>
+      <td><img src="assets/screenshot 1.jpg" width="200" alt="Screen 1" /></td>
+      <td><img src="assets/screenshot 2.jpg" width="200" alt="Screen 2" /></td>
+      <td><img src="assets/screenshot 3.jpg" width="200" alt="Screen 3" /></td>
+      <td><img src="assets/screenshot 4.jpg" width="200" alt="Screen 4" /></td>
+      <td><img src="assets/screenshot 5.jpg" width="200" alt="Screen 5" /></td>
     </tr>
     <tr>
-      <td><img src="assets/Tv.png" height="450" alt="TV Tab" /></td>
-      <td><img src="assets/Settings.png" height="450" alt="Settings Tab" /></td>
-      <td><img src="assets/Backup.png" height="450" alt="Backup Progress" /></td>
+      <td><img src="assets/screenshot 6.jpg" width="200" alt="Screen 6" /></td>
+      <td><img src="assets/screenshot 7.jpg" width="200" alt="Screen 7" /></td>
+      <td><img src="assets/screenshot 8.jpg" width="200" alt="Screen 8" /></td>
+      <td><img src="assets/screenshot 9.jpg" width="200" alt="Screen 9" /></td>
+      <td><img src="assets/screenshot 10.jpg" width="200" alt="Screen 10" /></td>
     </tr>
   </table>
 </div>
-
-<p align="center">
-  <sub>Tap any image to view full size</sub>
-</p>
-
----
-
-## Architecture and Transparency 🔍
-
-Orion is built around openness.
-
-### App Warehouse
-
-All apps live in the **[Orion Data](https://github.com/RookieEnough/Orion-data)** repository.
-
-- `app.json` contains the full app catalog  
-- Apps are added through community pull requests  
-- No manual uploads or private binaries  
-
-### Smart API Handling
-
-- `mirror.json` intelligently bypasses GitHub API rate limits  
-- Ensures stability even under heavy usage  
-
-Every step is visible, reviewable, and reproducible.
-
----
-
-## Themes 🎨
-
-Orion supports multiple themes:
-
-- Light  
-- Dark  
-- Dusk  
-  A custom theme introduced with its own identity  
 
 ---
 
@@ -148,89 +96,33 @@ Orion supports multiple themes:
 Orion includes a hidden **Developer Mode** designed for power users.
 
 ### Unlock Method
+- Tap the **Orion Store** header **8 times** to reveal advanced settings.
 
-- Tap the **Orion Store** header 8 times  
-
-### Developer Features
-
-- Advanced debugging options  
-- App metadata inspection  
-- Manual refresh and diagnostics  
-- GitHub API configuration  
-
-### Personal Access Token Support
-
-Users can add their own GitHub **Personal Access Token** inside Developer Mode.
-
-- Default API limit: 60 requests per hour  
-- With PAT: up to 5000 requests per hour  
-
-This improves performance without compromising transparency.
+### Features
+- **Personal Access Token (PAT):** Boost your GitHub API limit from 60 to 5000 requests/hour.
+- **App Metadata Inspection:** View raw JSON data for any listed application.
+- **Manual Diagnostics:** Force cache clears and API refreshes.
 
 ---
 
 ## Gamification and Badges 🏆
 
-Orion includes **8 cosmetic badges**.
-
-- Each badge has a unique hidden unlock condition  
-- No public hints or documentation  
-- Encourages exploration and curiosity  
-
-Badges are purely cosmetic and do not affect app functionality.
+Orion features **8 unique cosmetic badges**. These are earned through exploration and interaction within the app. No hints are provided—curiosity is your only guide!
 
 ---
 
 ## Supporting Development ❤️
 
-Orion does not force monetization.
-
-Users can support development in two optional ways:
-
-### Buy Me a Coffee
-<a href="https://www.buymeacoffee.com/rookiez" target="_blank">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="120" alt="Buy Me A Coffee">
-</a>
-
 ### Fuel The Code
-A gamified system where users support the project by watching ads.
-
-- Completely optional  
-- No forced ads  
-- Designed to be respectful and fun  
-
----
-
-## Related Project
-
-### [Morphe Auto Builds](https://github.com/RookieEnough/morphe-AutoBuilds)
-
-- Built automatically using GitHub Actions  
-- Uses the official Morphe CLI patcher  
-- No manual uploads  
-- Fully transparent and reproducible builds  
-
-This project integrates cleanly with Orion Store.
-
----
-
-## Contribution 🤝
-
-Contributions are welcome.
-
-- Submit new apps via Orion Data  
-- Improve metadata or structure  
-- Open pull requests for enhancements  
-
-Help grow a clean, community driven app ecosystem.
+Our **Gamified Ad Support** system allows you to support the project voluntarily. 
+* **Completely Optional:** No forced pop-ups or interruptions.
+* **Rewarding:** Watch ads on your terms to "fuel" the project's growth.
 
 ---
 
 ## License 📄
 
 Orion Store is licensed under the **MIT License**.
-
----
 
 <p align="center">
   Made with 💜 by <strong>RookieZ</strong>
