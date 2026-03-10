@@ -31,15 +31,28 @@
 </p>
 
 <p align="center">
+  <a href="https://www.buymeacoffee.com/rookiez" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="120" alt="Buy Me A Coffee">
+  </a>
+</p>
+
+<p align="center">
   <a href="https://github.com/RookieEnough/Orion-Store/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/RookieEnough/Orion-Store?style=flat-square">
   </a>
   <a href="https://github.com/RookieEnough/Orion-Store/commits/main">
     <img src="https://img.shields.io/github/last-commit/RookieEnough/Orion-Store?style=flat-square">
   </a>
+  <a href="https://github.com/RookieEnough/Orion-Store/pulls">
+    <img src="https://img.shields.io/github/issues-pr/RookieEnough/Orion-Store?style=flat-square">
+  </a>
   <a href="https://github.com/RookieEnough/Orion-Store/releases">
     <img src="https://img.shields.io/github/downloads/RookieEnough/Orion-Store/total?style=flat-square">
   </a>
+  <a href="https://github.com/RookieEnough/Orion-Store/releases">
+  <img src="https://img.shields.io/github/v/release/RookieEnough/Orion-Store?style=flat-square&color=blue" alt="Latest Version">
+</a>
+
 </p>
 
 ---
