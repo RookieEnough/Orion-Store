@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/orion_logo_512.png" width="170" alt="Orion Store Logo">
+  <img src="assets/orion_logo_512.png" width="240" alt="Orion Store Logo">
 </p>
 
-<h2 align="center">Orion Store</h2>
+<h1 align="center">Orion Store</h1>
 
 <p align="center">
   <a href="https://reactjs.org/"><img src="https://img.shields.io/badge/react-%2320232a.svg?style=flat&logo=react&logoColor=%2361DAFB" alt="React"></a>
@@ -91,38 +91,126 @@ Orion isn't just limited to one platform. It intelligently fetches and tracks ap
 
 ---
 
+## Architecture and Transparency 🔍
+
+Orion is built around openness.
+
+### App Warehouse
+
+All apps live in the **[Orion Data](https://github.com/RookieEnough/Orion-data)** repository.
+
+- `app.json` contains the full app catalog  
+- Apps are added through community pull requests  
+- No manual uploads or private binaries  
+
+### Smart API Handling
+
+- `mirror.json` intelligently bypasses GitHub API rate limits  
+- Ensures stability even under heavy usage  
+
+Every step is visible, reviewable, and reproducible.
+
+---
+
+## Themes 🎨
+
+Orion supports multiple themes:
+
+- Light  
+- Dark  
+- Dusk  
+  A custom theme introduced with its own identity  
+
+---
+
 ## Developer Mode 🛠️
 
 Orion includes a hidden **Developer Mode** designed for power users.
 
 ### Unlock Method
-- Tap the **Orion Store** header **8 times** to reveal advanced settings.
 
-### Features
-- **Personal Access Token (PAT):** Boost your GitHub API limit from 60 to 5000 requests/hour.
-- **App Metadata Inspection:** View raw JSON data for any listed application.
-- **Manual Diagnostics:** Force cache clears and API refreshes.
+- Tap the **Orion Store** header 8 times  
+
+### Developer Features
+
+- Advanced debugging options  
+- App metadata inspection  
+- Manual refresh and diagnostics  
+- GitHub API configuration  
+
+### Personal Access Token Support
+
+Users can add their own GitHub **Personal Access Token** inside Developer Mode.
+
+- Default API limit: 60 requests per hour  
+- With PAT: up to 5000 requests per hour  
+
+This improves performance without compromising transparency.
 
 ---
 
 ## Gamification and Badges 🏆
 
-Orion features **8 unique cosmetic badges**. These are earned through exploration and interaction within the app. No hints are provided—curiosity is your only guide!
+Orion includes **8 cosmetic badges**.
+
+- Each badge has a unique hidden unlock condition  
+- No public hints or documentation  
+- Encourages exploration and curiosity  
+
+Badges are purely cosmetic and do not affect app functionality.
 
 ---
 
 ## Supporting Development ❤️
 
+Orion does not force monetization.
+
+Users can support development in two optional ways:
+
+### Buy Me a Coffee
+<a href="https://www.buymeacoffee.com/rookiez" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="120" alt="Buy Me A Coffee">
+</a>
+
 ### Fuel The Code
-Our **Gamified Ad Support** system allows you to support the project voluntarily. 
-* **Completely Optional:** No forced pop-ups or interruptions.
-* **Rewarding:** Watch ads on your terms to "fuel" the project's growth.
+A gamified system where users support the project by watching ads.
+
+- Completely optional  
+- No forced ads  
+- Designed to be respectful and fun  
+
+---
+
+## Related Project
+
+### [Morphe Auto Builds](https://github.com/RookieEnough/morphe-AutoBuilds)
+
+- Built automatically using GitHub Actions  
+- Uses the official Morphe CLI patcher  
+- No manual uploads  
+- Fully transparent and reproducible builds  
+
+This project integrates cleanly with Orion Store.
+
+---
+
+## Contribution 🤝
+
+Contributions are welcome.
+
+- Submit new apps via Orion Data  
+- Improve metadata or structure  
+- Open pull requests for enhancements  
+
+Help grow a clean, community driven app ecosystem.
 
 ---
 
 ## License 📄
 
 Orion Store is licensed under the **MIT License**.
+
+---
 
 <p align="center">
   Made with 💜 by <strong>RookieZ</strong>
