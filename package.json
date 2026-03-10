@@ -1,0 +1,41 @@
+{
+  "name": "orion-store",
+  "version": "1.2.3",
+  "description": "OrionStore - Serverless App Store",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "mirror": "node .github/scripts/apk_hunter.js",
+    "resources": "node scripts/generate_assets.js",
+    "knip": "knip"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/local-notifications": "^7.0.0",
+    "@capacitor/haptics": "^7.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "capacitor-unity-ads": "latest",
+    "zustand": "^4.5.0",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.2.0",
+    "idb-keyval": "^6.2.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/assets": "latest",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "autoprefixer": "^10.4.14",
+    "postcss": "^8.4.24",
+    "tailwindcss": "^3.3.2",
+    "typescript": "^5.0.2",
+    "vite": "^5.4.11",
+    "knip": "^5.0.0"
+  }
+}

@@ -1,0 +1,1 @@
+import{r as s}from"./vendor-CNVlL5F-.js";const n=t=>{s.useEffect(()=>{const o=document.getElementById("root"),e=document.body,r=e.style.overflow,l=o?o.style.overflow:"";return e.style.overflow="hidden",o&&(o.style.overflow="hidden"),()=>{e.style.overflow=r,o&&(o.style.overflow=l)}},[t])};export{n as u};

@@ -1,0 +1,52 @@
+[
+  {
+    "version": "v1.2.3",
+    "date": "2026-03-10",
+    "title": "The \"Multi-Forge\" Update",
+    "changes": [
+      "NEW: Added option to ignore app updates for 1 week, until next version, or never.",
+      "NEW: Added a button in Developer Options to close it without any resetting.",
+      "NEW: Full support for Codeberg and GitLab repositories with dynamic 'View on' buttons.",
+      "IMP: Implemented remote size fetching for GitLab assets using streamed GET requests.",
+      "IMP: Enhanced GitLab asset discovery to support custom attachment names (e.g. 'APK').",
+      "IMP: App detection engine now merges scan results instead of replacing the full map, preventing apps from flickering to 'not installed' during transient scan failures.",
+      "IMP: Download polling interval changed from 800ms to 1500ms for better CPU and battery efficiency.",
+      "IMP: Download completion handler now reads fresh store state, eliminating stale closure issues on rapid sequential downloads.",
+      "IMP: Bumped store version to v1.2.3.",
+      "FIX: Fixed critical bug where Orion showed apps as 'Installed' even when the user cancelled the native installer. Optimistic install marking removed for standard installs; verification loop now handles real detection.",
+      "FIX: Fixed wrong Codeberg logo on App Detail 'View on' button — replaced incorrect inline SVG with the official Codeberg logo.",
+      "FIX: Fixed 'Ignore Update' preferences not surviving app restarts (ignoredUpdates was missing from persistent storage config).",
+      "FIX: Fixed notification tap failing to open the correct app due to stale data closure capturing the initial empty app list.",
+      "FIX: Fixed tab hiding guard allowing all platform tabs to be hidden, leaving the user with no browsable content.",
+      "FIX: Fixed batch cleanup clearing all pending entries even when individual file deletions failed, preventing data loss on partial cleanup failures.",
+      "FIX: Fixed isMounted ref not being cleared on native platform unmount, causing potential state updates on unmounted components.",
+      "FIX: Fixed version parser incorrectly splitting plain build codes (e.g. '123' becoming '1.2.3'), now falls through to date-based fallback.",
+      "FIX: Removed legacy String.prototype.hashCode polyfill from AppDetail that was modifying the global prototype unnecessarily."
+    ]
+  },
+  {
+    "version": "v1.2.2",
+    "date": "2026-03-01",
+    "title": "Performance & Infrastructure Update",
+    "changes": [
+      "NEW: Added Release Notes history button in Developer Menu.",
+      "IMP: Upgraded build environment to Gradle 8.2.1 and Java 17.",
+      "IMP: Enhanced VPN/AdBlock detection feedback in Donation Hub.",
+      "IMP: Implemented debounced worker filtering for smoother search typing.",
+      "IMP: Throttled download polling interval to 1500ms for better CPU/Battery efficiency.",
+      "IMP: Added manual Vite chunking for vendor and capacitor libraries to speed up initial load.",
+      "IMP: Memoized global modal state and stabilized key hook references in App.tsx.",
+      "FIX: Resolved Unity Ads plugin SDK version warnings.",
+      "FIX: Notification tap now opens the correct app (stale closure fix).",
+      "FIX: Version comparison now correctly handles prerelease tags (e.g. beta.1).",
+      "FIX: File cleanup only forgets successfully deleted files, preventing data loss on failure.",
+      "FIX: Download polling no longer uses stale callback references.",
+      "FIX: Auto-update no longer re-triggers downloads for already-queued apps.",
+      "FIX: isMounted ref is now properly cleared on native platform unmount.",
+      "FIX: Removed redundant condition in verification loop.",
+      "FIX: Platform tab visibility guard now correctly prevents hiding all tabs.",
+      "FIX: Build code versions no longer incorrectly split into dotted format.",
+      "FIX: Haptic feedback only triggers on native platforms, preventing web errors."
+    ]
+  }
+]

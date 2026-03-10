@@ -1,0 +1,299 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  touch-action: manipulation;
+  overscroll-behavior-y: none;
+  height: 100%;
+  scroll-behavior: auto !important;
+}
+
+body {
+  font-family: 'Space Grotesk', sans-serif;
+  @apply bg-surface text-theme-text;
+  overscroll-behavior: none;
+  height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* --- 3D UTILITIES FOR FLIP CARD --- */
+.perspective-1000 {
+    perspective: 1000px;
+    -webkit-perspective: 1000px;
+}
+.preserve-3d {
+    transform-style: preserve-3d;
+    -webkit-transform-style: preserve-3d;
+}
+.backface-hidden {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+.rotate-y-180 {
+    transform: rotateY(180deg);
+}
+
+/* --- PERFORMANCE MODE ENGINE --- */
+body.perf-mode * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.perf-mode .app-card-optimized,
+body.perf-mode .app-card,
+body.perf-mode button,
+body.perf-mode img {
+  transform: translateZ(0); 
+  will-change: transform, opacity; 
+  backface-visibility: hidden; 
+}
+
+body.perf-mode .backdrop-blur-xl,
+body.perf-mode .backdrop-blur-lg,
+body.perf-mode .backdrop-blur-md {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background-color: var(--bg-card); 
+  opacity: 0.98;
+}
+
+/* --- NO GLASS MODE --- */
+body.no-glass .backdrop-blur-xl,
+body.no-glass .backdrop-blur-lg,
+body.no-glass .backdrop-blur-md,
+body.no-glass .backdrop-blur-sm,
+body.no-glass .bg-surface\/95,
+body.no-glass .bg-surface\/90 {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background-color: var(--bg-card) !important;
+    opacity: 1 !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+    border-color: var(--border-color) !important;
+}
+
+body.no-glass nav {
+    background-color: var(--bg-card) !important;
+    border: 1px solid var(--border-color);
+}
+
+.app-card-optimized {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 120px;
+}
+
+header, nav, .modal-content {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@keyframes slide-up {
+  from { transform: translateY(10%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up {
+  animation: slide-up 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes tab-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-tab-enter {
+  animation: tab-enter 0.15s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out forwards;
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* --- SPLASH PREVIEW ANIMATIONS --- */
+@keyframes splash-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.animate-splash-fade-out {
+  animation: splash-fade-out 0.4s ease-out forwards;
+}
+
+@keyframes splash-triangle-anim {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes splash-shape-anim {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.splash-triangle {
+  animation: splash-triangle-anim 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.splash-circle {
+  opacity: 0;
+  animation: splash-shape-anim 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.3s forwards;
+}
+
+.splash-square {
+  opacity: 0;
+  animation: splash-shape-anim 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.45s forwards;
+}
+/* --- END SPLASH PREVIEW --- */
+
+
+:root {
+  --bg-surface: #f8fafc;
+  --bg-card: #ffffff;
+  --text-main: #111827;
+  --text-sub: #6b7280;
+  --border-color: #e5e7eb;
+  --element-bg: #f3f4f6;
+  --element-hover: #e5e7eb;
+  --input-bg: #ffffff;
+}
+
+html.dusk {
+  --bg-surface: #20222f;
+  --bg-card: #2a2d3e;
+  --text-main: #e2e8f0;
+  --text-sub: #94a3b8;
+  --border-color: #374151;
+  --element-bg: #374151;
+  --element-hover: #4b5563;
+  --input-bg: #2a2d3e;
+}
+
+html.dark {
+  --bg-surface: #09090b;
+  --bg-card: #18181b;
+  --text-main: #ffffff;
+  --text-sub: #a1a1aa;
+  --border-color: #27272a;
+  --element-bg: #27272a;
+  --element-hover: #3f3f46;
+  --input-bg: #121214;
+}
+
+html.oled {
+  --bg-surface: #000000;
+  --bg-card: #000000;
+  --text-main: #ffffff;
+  --text-sub: #a3a3a3;
+  --border-color: rgba(255, 255, 255, 0.25); 
+  --element-bg: #1a1a1a;
+  --element-hover: #333333;
+  --input-bg: #121212;
+}
+
+body.no-anim *, body.no-anim *::before, body.no-anim *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+body.compact-mode .app-card-optimized {
+  padding: 0.75rem !important;
+}
+body.compact-mode h3 {
+  font-size: 0.95rem !important;
+}
+
+html.oled .app-card-optimized {
+  border: 1px solid #333;
+}
+
+.will-change-transform {
+    will-change: transform;
+}
+
+/* --- Sentinel Water Fill Animation --- */
+.water-container {
+    position: relative;
+    width: 144px; /* 9rem */
+    height: 144px; /* 9rem */
+    border-radius: 9999px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--element-bg);
+    border: 4px solid var(--border-color);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+}
+
+.water-wave {
+    position: absolute;
+    left: 0;
+    width: 200%;
+    height: 200%;
+    background-color: #6366f1; /* primary color */
+    opacity: 0.6;
+    border-radius: 40%;
+    transition: top 0.5s ease-out;
+    animation: wave 5s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
+}
+
+.water-wave::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    background-color: #a5b4fc; /* primary-light color */
+    opacity: 0.4;
+    border-radius: 45%;
+    transform: translate(-50%, 0) rotate(0);
+    animation: wave 7s cubic-bezier(0.36, 0.45, 0.63, 0.53) -.125s infinite reverse;
+}
+
+@keyframes wave {
+    0% { transform: translate(-50%, 0) rotate(0deg); }
+    100% { transform: translate(-50%, 0) rotate(360deg); }
+}
