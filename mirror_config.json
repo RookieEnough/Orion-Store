@@ -1,0 +1,26 @@
+
+[
+  {
+    "id": "capcut-premium",
+    "name": "CapCut Pro",
+    "downloadUrl": "https://an1.com/7029-capcut-video-editor-apk.html",
+    "mode": "scrape",
+    "wait": 30000,
+    "note": "Scraping from AN1 (ID: 7029)"
+  },
+  {
+    "id": "instafel",
+    "name": "Instagram Mod",
+    "downloadUrl": "https://an1.com/1029-instagram-apk.html",
+    "mode": "scrape",
+    "wait": 30000,
+    "note": "Scraping from AN1 (ID: 1029)"
+  },
+  {
+    "id": "telegram-example",
+    "name": "Telegram (Direct Example)",
+    "downloadUrl": "https://telegram.org/dl/android/apk",
+    "mode": "direct",
+    "note": "Direct Link fallback"
+  }
+]

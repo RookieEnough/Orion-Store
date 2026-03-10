@@ -1,0 +1,196 @@
+<div align="center">
+  <img src="https://raw.githubusercontent.com/RookieEnough/Orion-Data/main/assets/orion_logo_512.png" width="120" height="120" alt="OrionStore Logo" />
+  
+  # OrionStore
+  
+  **The Modern, Serverless App Store for the Open Web.**
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![React](https://img.shields.io/badge/react-%2320232a.svg?style=flat&logo=react&logoColor=%2361DAFB)](https://reactjs.org/)
+  [![TailwindCSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=flat&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+  [![Capacitor](https://img.shields.io/badge/capacitor-%231199EE.svg?style=flat&logo=capacitor&logoColor=white)](https://capacitorjs.com/)
+  [![GitHub Actions](https://img.shields.io/badge/github%20actions-%232671E5.svg?style=flat&logo=githubactions&logoColor=white)](https://github.com/features/actions)
+
+  <p align="center">
+    <a href="#-features">Features</a> •
+    <a href="#-how-it-works">Architecture</a> •
+    <a href="#-native-android-build">Native Build</a> •
+    <a href="#-developer-mode">Dev Mode</a> •
+    <a href="#-auto-mirror-system">Auto-Mirror</a>
+  </p>
+</div>
+
+---
+
+## 📱 Preview
+
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=dIzAipwgj6A" target="_blank">
+    <img src="https://img.youtube.com/vi/dIzAipwgj6A/maxresdefault.jpg" alt="Watch the Demo" width="100%" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);" />
+  </a>
+  <p><i>Click the image above to watch the demo video</i></p>
+</div>
+
+<br />
+
+<div align="center">
+  <!-- Upload these images to an 'assets' folder in your repo -->
+  <img src="assets/home.png" height="350" alt="Home Screen" style="border-radius: 15px; margin: 5px;" />
+  <img src="assets/dark.png" height="350" alt="Dark Mode" style="border-radius: 15px; margin: 5px;" />
+  <img src="assets/detail.png" height="350" alt="App Details" style="border-radius: 15px; margin: 5px;" />
+</div>
+
+---
+
+## 🚀 Features
+
+OrionStore is a **Progressive Web App (PWA)** that acts as a fully functional App Store without requiring a dedicated backend server. It runs entirely on GitHub and can be compiled to a native APK using **Capacitor**.
+
+*   **🎨 Material You 3 Design:** A vibrant, Gen Z aesthetic featuring "Acid" and "Neon" accents with smooth animations.
+*   **🤖 Native Android Support:** Built with Capacitor to run directly on Android devices with native performance.
+*   **🌗 Adaptive Theming:** Seamless Light, Dusk, and Dark modes.
+*   **☁️ Serverless Architecture:** Powered 100% by GitHub JSON & Releases. No database required.
+*   **🤖 Auto-Mirroring Engine:** Built-in scraper (Puppeteer) that finds updates for apps like Spotify, Instagram, etc., and re-uploads them to your repo automatically.
+*   **⚡ Smart Caching:** LocalStorage caching strategy for instant loads and offline capability.
+*   **📱 Responsive:** Native-like experience on Android, fully functional on Desktop/PC.
+
+---
+
+## 🛠 How It Works
+
+OrionStore uses a unique **"Repo-as-a-Backend"** approach:
+
+1.  **Frontend (`App.tsx`):** Fetches `config.json` and `apps.json` from the repository.
+2.  **Database (`apps.json`):** Contains metadata (Name, Icon, Description) and links to GitHub Repositories.
+3.  **The Engine:**
+    *   The app checks the `mirror.json` file for the absolute latest releases.
+    *   If `releaseKeyword` is set, it scans the **last 10 releases** of a repo to find the specific app variant you need (supporting multi-app monorepos).
+    *   It compares the remote version with the local version stored in the browser/app.
+
+---
+
+## 📱 Native Android Build
+
+This project is configured with **Capacitor**, allowing you to convert the web app into a native `.apk` file easily.
+
+### Prerequisites
+1.  Install Android Studio.
+2.  Install dependencies:
+    ```bash
+    npm install @capacitor/core @capacitor/cli @capacitor/android
+    npx cap add android
+    ```
+
+### Building the APK
+```bash
+# 1. Build the React web project
+npm run build
+
+# 2. Sync the web assets to the native Android project
+npx cap sync
+
+# 3. Open Android Studio to build the Signed APK
+npx cap open android
+```
+
+---
+
+## 👨‍💻 Developer Mode
+
+OrionStore includes a hidden debug menu for power users and contributors to manage API limits and data sources.
+
+### 🔓 How to Unlock
+1.  Navigate to the **About** tab (or stay on Home).
+2.  Tap the **"OrionStore"** logo in the top-left header **9 times** rapidly.
+3.  A toast notification will appear confirming you are now a developer.
+4.  Scroll down to the bottom of the **About** tab to see the new options.
+
+### 🛠️ Capabilities
+*   **🔑 API Key Management:** Input your own **GitHub Personal Access Token (PAT)** to increase API rate limits from **60/hr** to **5000/hr**. This is essential if you are browsing the store frequently or developing.
+*   **🔀 Data Source Toggle:** Switch between **Remote** (Live JSON from GitHub) and **Local** (Hardcoded `localData.ts`) modes. Useful for testing new apps without committing to the repo.
+*   **🔥 Nuke Cache:** A "Wipe Cache & Reset" button to clear all `localStorage` data and reset the app state if things get stuck.
+
+---
+
+## 🤖 Auto-Mirror System
+
+This is the heart of the automation. You don't need to manually upload APKs.
+
+### 1. Configuration
+Edit `mirror_config.json` to tell the bot which apps to track.
+
+```json
+[
+  {
+    "id": "instagram-mod",
+    "name": "Instagram",
+    "downloadUrl": "https://an1.com/1029-instagram-apk.html",
+    "mode": "scrape",
+    "wait": 30000
+  }
+]
+```
+
+### 2. The Workflow (`.github/workflows/auto_mirror.yml`)
+*   Runs daily at **00:00 UTC**.
+*   **Direct Mode:** Wget/Curl direct links.
+*   **Scrape Mode:** Uses **Puppeteer** with stealth plugins to bypass Cloudflare, navigate download pages (like AN1 or APKDone), and extract the APK.
+*   **Publishing:** It parses the APK via `aapt` to get the *real* internal version number, tags it, and uploads it to GitHub Releases.
+
+### 3. The Generator (`mirror_generator.py`)
+*   Runs after every release.
+*   Scans your Releases page.
+*   Updates `mirror.json` with direct download links so the Frontend doesn't hit GitHub API rate limits.
+
+---
+
+## 📦 Deployment (Self-Hosting)
+
+You can host your own version of OrionStore in less than 5 minutes.
+
+1.  **Fork** this repository.
+2.  Navigate to **Settings > Pages**.
+3.  Select `Source: Deploy from a branch` -> `main` -> `/ (root)`.
+4.  Click **Save**.
+5.  Edit `constants.ts` and `apps.json` to point to your new repository URLs.
+
+### Local Development
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/yourname/OrionStore.git
+
+# 2. Install dependencies
+npm install
+
+# 3. Start development server
+npm start
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+
+1.  Fork the Project
+2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4.  Push to the Branch (`git push origin feature/AmazingFeature`)
+5.  Open a Pull Request
+
+---
+
+## 💖 Support
+
+This project is open-source and free. If you enjoy using it, consider buying me a coffee!
+
+<a href="https://ko-fi.com/rookie_z">
+  <img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Buy Me A Coffee" height="40" />
+</a>
+
+---
+
+<div align="center">
+  <p>Made with 💜 for Geeks by <a href="https://github.com/RookieEnough">RookieZ</a></p>
+</div>

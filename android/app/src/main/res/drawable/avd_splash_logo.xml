@@ -1,0 +1,16 @@
+<animated-vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_splash_logo">
+
+    <target
+        android:name="triangle"
+        android:animation="@animator/splash_triangle_anim" />
+    
+    <target
+        android:name="circle"
+        android:animation="@animator/splash_circle_anim" />
+
+    <target
+        android:name="square"
+        android:animation="@animator/splash_square_anim" />
+</animated-vector>

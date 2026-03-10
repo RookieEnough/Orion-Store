@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Production Build
+dist/
+build/
+
+# Local Environment
+.env
+.env.local
+.DS_Store
+Thumbs.db
+
+# Android / Capacitor
+android/app/build/
+android/.gradle/
+android/local.properties
+android/*/build/
+android/.idea/
+android/*.iml
+android/app/*.iml
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# AI / Guide Files / Code Dumps (Exclude these from repo)
+*.txt
+*.yml
+metadata.json
+/orion logo.svg
+/.github/

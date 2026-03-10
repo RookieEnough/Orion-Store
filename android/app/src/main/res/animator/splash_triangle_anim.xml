@@ -1,0 +1,15 @@
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+     android:ordering="together">
+    <objectAnimator
+        android:propertyName="translateY"
+        android:valueFrom="-20"
+        android:valueTo="0"
+        android:duration="800"
+        android:interpolator="@android:interpolator/decelerate_cubic" />
+    <objectAnimator
+        android:propertyName="alpha"
+        android:valueFrom="0"
+        android:valueTo="1"
+        android:duration="600"
+        android:interpolator="@android:interpolator/linear" />
+</set>
