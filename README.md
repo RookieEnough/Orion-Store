@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <em>A transparent, multi-source app store powered by Open Source Git platforms</em><br>
-  <em>Built for automation, trust, and community-driven distribution</em>
+  <em>A transparent, multi-source app store powered by Open Source Git platforms.</em><br>
+  <em>Built for automation, trust, and community-driven distribution.</em>
 </p>
 
 <p align="center">
@@ -65,6 +65,15 @@ Orion isn't just limited to one platform. It intelligently fetches and tracks ap
 - **Gamified Ad Support** – Support development through a rewarding, non-intrusive system.
 - **Fully Serverless** – No centralized backend to fail or track you.
 - **Extremely Lightweight** – High performance within a 5-6 MB footprint.
+
+---
+
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=dIzAipwgj6A" target="_blank">
+    <img src="https://img.youtube.com/vi/dIzAipwgj6A/maxresdefault.jpg" alt="Watch the Demo" width="100%" style="border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);" />
+  </a>
+  <p><i>Click the image above to watch the demo video</i></p>
+</div>
 
 ---
 
