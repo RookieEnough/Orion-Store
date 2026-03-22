@@ -34,24 +34,43 @@ const LabelWithTooltip: React.FC<{
 
 const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, currentStoreVersion, onSuccess, submissionCount = 0, activeTab }) => {
   useScrollLock(true);
+
+  // --- DRAFT PERSISTENCE KEY ---
+  const DRAFT_KEY = 'orion_submission_draft';
+
+  // Restore draft from sessionStorage on mount
+  const loadDraft = () => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return null;
+  };
+  const savedDraft = loadDraft();
+
   // Default mode depends on context. Android -> Obtainium by default. PC/TV -> Manual.
-  const [mode, setMode] = useState<'obtainium' | 'manual'>(activeTab === 'android' ? 'obtainium' : 'manual');
-  const [jsonInput, setJsonInput] = useState('');
+  const [mode, setMode] = useState<'obtainium' | 'manual'>(savedDraft?.mode || (activeTab === 'android' ? 'obtainium' : 'manual'));
+  const [jsonInput, setJsonInput] = useState(savedDraft?.jsonInput || '');
   const [error, setError] = useState('');
   const [activeHelpText, setActiveHelpText] = useState<string | null>(null);
 
   // Screenshot Management
   const [screenshotInput, setScreenshotInput] = useState('');
-  const [addedScreenshots, setAddedScreenshots] = useState<string[]>([]);
+  const [addedScreenshots, setAddedScreenshots] = useState<string[]>(savedDraft?.addedScreenshots || []);
 
   // Obtainium Mode Overrides
-  const [obtainiumIcon, setObtainiumIcon] = useState('');
-  const [obtainiumKeyword, setObtainiumKeyword] = useState('');
-  const [obtainiumDescription, setObtainiumDescription] = useState('');
+  const [obtainiumIcon, setObtainiumIcon] = useState(savedDraft?.obtainiumIcon || '');
+  const [obtainiumKeyword, setObtainiumKeyword] = useState(savedDraft?.obtainiumKeyword || '');
+  const [obtainiumDescription, setObtainiumDescription] = useState(savedDraft?.obtainiumDescription || '');
 
   // Manual Form State
-  const [isManualKeyword, setIsManualKeyword] = useState(false);
-  const [formData, setFormData] = useState({
+  type FormDataType = {
+    name: string; id: string; description: string; icon: string; repoUrl: string;
+    githubRepo: string; gitlabRepo: string; gitlabDomain: string; codebergRepo: string;
+    releaseKeyword: string; packageName: string; category: string; author: string; officialSite: string;
+  };
+  const [isManualKeyword, setIsManualKeyword] = useState(savedDraft?.isManualKeyword || false);
+  const [formData, setFormData] = useState<FormDataType>(savedDraft?.formData || {
     name: '',
     id: '', 
     description: '',
@@ -67,6 +86,18 @@ const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, currentStore
     author: '',
     officialSite: '', 
   });
+
+  // Save draft to sessionStorage on key state changes
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+        mode, jsonInput, addedScreenshots, obtainiumIcon, obtainiumKeyword,
+        obtainiumDescription, isManualKeyword, formData
+      }));
+    } catch (e) {}
+  }, [mode, jsonInput, addedScreenshots, obtainiumIcon, obtainiumKeyword, obtainiumDescription, isManualKeyword, formData]);
+
+  const clearDraft = () => { try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) {} };
 
   // Calculate Trust Stats
   const baseCooldown = 180; // 3 hours
@@ -401,6 +432,7 @@ ${jsonPayload}
           const url = generateIssueUrl(appsToSubmit);
           window.open(url, '_blank');
           
+          clearDraft();
           onClose();
 
       } catch (e) {
@@ -438,7 +470,7 @@ ${jsonPayload}
               <div className="flex flex-wrap gap-2">
                   {addedScreenshots.map((url, idx) => (
                       <div key={idx} className="flex items-center gap-2 bg-card border border-theme-border px-2 py-1.5 rounded-md animate-fade-in">
-                          <i className="fas fa-image text-theme-sub text-[10px]"></i>
+                          <img src={url} alt={`Screenshot ${idx + 1}`} className="w-8 h-8 rounded object-cover bg-theme-element" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                           <span className="text-[10px] font-bold text-theme-text">Screenshot {idx + 1}</span>
                           <button 
                               onClick={() => handleRemoveScreenshot(idx)}
@@ -462,6 +494,7 @@ ${jsonPayload}
       setObtainiumIcon('');
       setObtainiumKeyword('');
       setJsonInput('');
+      clearDraft();
   };
 
   const isAndroid = activeTab === 'android';

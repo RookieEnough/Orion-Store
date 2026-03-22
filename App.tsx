@@ -28,7 +28,7 @@ const NoticeModal = lazy(() => import('./components/NoticeModal'));
 const SplashScreenPreview = lazy(() => import('./components/SplashScreenPreview'));
 const ReleaseNotesModal = lazy(() => import('./components/ReleaseNotesModal'));
 
-const CURRENT_STORE_VERSION = '1.2.3';
+const CURRENT_STORE_VERSION = '1.2.4';
 const UNITY_GAME_ID = '5996387';
 const ADS_TEST_MODE = false;
 
@@ -603,15 +603,22 @@ const App: React.FC = () => {
     useEffect(() => {
         const root = document.getElementById('root');
         if (!root) return;
-        const handleScroll = () => setShowScrollTop(root.scrollTop > 300);
+        let rafId = 0;
+        const handleScroll = () => {
+            if (rafId) return;
+            rafId = requestAnimationFrame(() => {
+                setShowScrollTop(root.scrollTop > 300);
+                rafId = 0;
+            });
+        };
         root.addEventListener('scroll', handleScroll, { passive: true });
-        return () => root.removeEventListener('scroll', handleScroll);
+        return () => { root.removeEventListener('scroll', handleScroll); if (rafId) cancelAnimationFrame(rafId); };
     }, []);
 
     const scrollToTop = () => {
         const root = document.getElementById('root');
         if (root) {
-            root.scrollTo({ top: 0, behavior: 'smooth' });
+            root.scrollTop = 0;
             triggerHaptic('selection');
         }
     };
@@ -1077,9 +1084,16 @@ const App: React.FC = () => {
     }, [settings.useRemoteJson, settings.githubToken, triggerHaptic]);
 
     useEffect(() => {
-        const timer = setTimeout(() => loadApps(false), 500);
-        return () => clearTimeout(timer);
+        loadApps(false);
     }, [loadApps]);
+
+    // Preload SettingsModal chunk after initial render so it opens instantly on Android
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            import('./components/SettingsModal').catch(() => {});
+        }, 2000);
+        return () => clearTimeout(timer);
+    }, []);
 
     const targetPlatform = useMemo(() => {
         if (activeTab === 'pc') return Platform.PC;
@@ -1352,7 +1366,7 @@ const App: React.FC = () => {
                         </div>
                     </main>
 
-                    <button onClick={scrollToTop} className={`fixed bottom-24 right-6 z-30 w-12 h-12 rounded-2xl bg-primary text-white shadow-xl shadow-primary/30 flex items-center justify-center transition-all duration-500 transform hover:scale-110 active:scale-90 ${showScrollTop ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-10 opacity-0 scale-75 pointer-events-none'}`}><i className="fas fa-arrow-up"></i></button>
+                    <button onClick={scrollToTop} className={`fixed bottom-32 right-6 z-30 w-12 h-12 rounded-2xl bg-primary text-white shadow-xl shadow-primary/30 flex items-center justify-center transition-all duration-500 transform hover:scale-110 active:scale-90 pb-[env(safe-area-inset-bottom)] ${showScrollTop ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-10 opacity-0 scale-75 pointer-events-none'}`}><i className="fas fa-arrow-up"></i></button>
 
                     <BottomNav activeTab={activeTab} onTabChange={(t) => { if (t !== 'about' && settings.hiddenTabs.includes(t)) return; triggerHaptic('impact', ImpactStyle.Light); setActiveTab(t); scrollToTop(); }} hiddenTabs={settings.hiddenTabs} />
 

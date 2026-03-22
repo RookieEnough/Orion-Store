@@ -208,7 +208,9 @@ const AppDetail: React.FC<AppDetailProps> = ({
     }, [lightboxIndex]);
 
     // Handle the end of the CSS transition (The "Swap" Trick)
+    const transitionFallback = useRef<any>(null);
     const onTransitionEnd = () => {
+        if (transitionFallback.current) { clearTimeout(transitionFallback.current); transitionFallback.current = null; }
         if (lightboxIndex === null) return;
 
         const width = window.innerWidth;
@@ -228,6 +230,14 @@ const AppDetail: React.FC<AppDetailProps> = ({
             setEnableTransition(false);
         }
     };
+
+    // Safety net: if CSS transitionend doesn't fire within 400ms, run the logic manually
+    useEffect(() => {
+        if (enableTransition && Math.abs(swipeOffset) > 0) {
+            transitionFallback.current = setTimeout(onTransitionEnd, 400);
+            return () => { if (transitionFallback.current) clearTimeout(transitionFallback.current); };
+        }
+    }, [enableTransition, swipeOffset]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -779,7 +789,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
                 <div className="absolute inset-0 z-[110] flex items-end sm:items-center justify-center sm:p-4 bg-black/60 animate-fade-in" onClick={() => setShowVariants(false)}>
                     <div className="bg-surface w-full max-w-sm rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 pb-8 shadow-2xl animate-slide-up flex flex-col gap-5 relative border-t sm:border border-theme-border" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center"><div><h3 className="text-xl font-black text-theme-text tracking-tight">Select Architecture</h3><div className="flex items-center gap-2 mt-1"><p className="text-xs text-theme-sub font-bold uppercase tracking-wider">Target:</p><span className="text-[10px] font-mono bg-theme-element px-1.5 rounded text-theme-text">{targetVersion ? targetVersion.version : app.latestVersion}</span><span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${getStreamColor(targetVersion?.type || 'Stable')}`}>{targetVersion?.type || 'Stable'}</span></div></div><button onClick={() => setShowVariants(false)} className="w-9 h-9 rounded-full bg-theme-element flex items-center justify-center text-theme-sub hover:text-theme-text transition-colors"><i className="fas fa-times"></i></button></div>
-                        <div className="space-y-3">{(targetVersion?.variants || app.variants)?.map((v: any) => (<button key={v.url} onClick={() => { setShowVariants(false); handleAction(v.url); }} className="w-full p-3 rounded-2xl bg-card border border-theme-border flex items-center justify-between hover:bg-theme-element active:scale-[0.98] transition-all group"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl"><i className="fas fa-microchip"></i></div><div className="flex flex-col items-start"><span className="font-bold text-theme-text text-base">{v.arch}</span><span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">APK</span></div></div><i className="fas fa-download text-theme-sub group-hover:text-primary transition-colors mr-2"></i></button>))}</div>
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar pb-2">{(() => { const rawVariants = targetVersion?.variants || app.variants || []; const seen = new Set<string>(); const deduped = rawVariants.filter((v: any) => { if (seen.has(v.arch)) return false; seen.add(v.arch); return true; }); return deduped.map((v: any) => (<button key={v.url} onClick={() => { setShowVariants(false); handleAction(v.url); }} className="w-full p-3 rounded-2xl bg-card border border-theme-border flex items-center justify-between hover:bg-theme-element active:scale-[0.98] transition-all group"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl"><i className="fas fa-microchip"></i></div><div className="flex flex-col items-start"><span className="font-bold text-theme-text text-base">{v.arch}</span><span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">APK</span></div></div><i className="fas fa-download text-theme-sub group-hover:text-primary transition-colors mr-2"></i></button>)); })()}</div>
                     </div>
                 </div>
             )}
@@ -820,10 +830,18 @@ const AppDetail: React.FC<AppDetailProps> = ({
                                         <button onClick={(e) => { e.stopPropagation(); handleNextImage(); }} className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/50 hover:bg-black/70 border border-white/10 rounded-full items-center justify-center text-white transition-all active:scale-90 z-20"><i className="fas fa-chevron-right text-xl"></i></button>
                                     </>
                                 )}
-                                <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-2 z-20 pointer-events-none">
-                                    {app.screenshots.map((_, idx) => (
-                                        <div key={idx} className={`w-2 h-2 rounded-full transition-all ${idx === lightboxIndex ? 'bg-white w-4' : 'bg-white/30'}`} />
-                                    ))}
+                                <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-3 z-20">
+                                    <div className="flex justify-center gap-2 pointer-events-none">
+                                        {app.screenshots.map((_, idx) => (
+                                            <div key={idx} className={`w-2 h-2 rounded-full transition-all ${idx === lightboxIndex ? 'bg-white w-4' : 'bg-white/30'}`} />
+                                        ))}
+                                    </div>
+                                    {app.screenshots.length > 1 && (
+                                        <div className="flex md:hidden gap-6 pointer-events-auto">
+                                            <button onClick={(e) => { e.stopPropagation(); handlePrevImage(); }} className="w-10 h-10 bg-white/15 hover:bg-white/25 border border-white/20 rounded-full flex items-center justify-center text-white transition-all active:scale-90 backdrop-blur-sm"><i className="fas fa-chevron-left"></i></button>
+                                            <button onClick={(e) => { e.stopPropagation(); handleNextImage(); }} className="w-10 h-10 bg-white/15 hover:bg-white/25 border border-white/20 rounded-full flex items-center justify-center text-white transition-all active:scale-90 backdrop-blur-sm"><i className="fas fa-chevron-right"></i></button>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         )}

@@ -1,5 +1,25 @@
 [
   {
+    "version": "v1.2.4",
+    "date": "2026-03-22",
+    "title": "The \"Polish & Performance\" Update",
+    "changes": [
+      "NEW: Added visible prev/next navigation arrows in the screenshot lightbox for mobile devices.",
+      "NEW: Screenshot thumbnails now preview in the submission form so you can verify images before submitting.",
+      "NEW: Submission form drafts are now auto-saved — switching apps or closing won't lose your progress.",
+      "IMP: Scroll-to-top button now responds instantly instead of using slow smooth scroll animation.",
+      "IMP: Scroll event listener is now debounced via requestAnimationFrame, reducing unnecessary re-renders.",
+      "IMP: Settings modal chunk is preloaded after initial render, eliminating the delay when opening Settings on Android.",
+      "IMP: App data loading starts immediately on launch instead of waiting 500ms, reducing post-splash blank screen time.",
+      "IMP: Scroll-to-top button repositioned higher to avoid overlap with 3-button navigation bars.",
+      "IMP: Variant picker is now scrollable when many architecture options are available.",
+      "FIX: Fixed screenshot lightbox swipe transitions failing on some devices by adding a timeout fallback for CSS transitionend events.",
+      "FIX: Fixed duplicate category filter tabs (e.g. 'utility' vs 'Utility') by normalizing categories to title-case in the data worker.",
+      "FIX: Fixed duplicate architecture entries (e.g. multiple 'Universal') in the variant picker by deduplicating by arch name.",
+      "FIX: Bumped Android versionCode to 5 and versionName to 1.2.4 for correct app info display after installation."
+    ]
+  },
+  {
     "version": "v1.2.3",
     "date": "2026-03-10",
     "title": "The \"Multi-Forge\" Update",

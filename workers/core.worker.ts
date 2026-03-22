@@ -71,20 +71,25 @@ const parseSizeToNumber = (sizeStr: string): number => {
 };
 
 // --- CORE LOGIC ---
-const sanitizeApp = (app: any): AppItem => ({
-    ...app,
-    name: String(app.name || 'Unknown App'),
-    description: String(app.description || ''),
-    author: String(app.author || 'Unknown'),
-    category: app.category || 'Utility',
-    platform: app.platform || 'Android',
-    icon: sanitizeUrl(String(app.icon || '')),
-    version: String(app.version || 'Latest'),
-    latestVersion: String(app.latestVersion || 'Latest'),
-    downloadUrl: sanitizeUrl(String(app.downloadUrl || '#')),
-    screenshots: Array.isArray(app.screenshots) ? app.screenshots.map((s: string) => sanitizeUrl(s)) : [],
-    availableVersions: []
-});
+const sanitizeApp = (app: any): AppItem => {
+    const rawCategory = String(app.category || 'Utility').trim();
+    // Normalize to title-case to prevent duplicate filter tabs (e.g. "utility" → "Utility")
+    const normalizedCategory = rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1).toLowerCase();
+    return {
+        ...app,
+        name: String(app.name || 'Unknown App'),
+        description: String(app.description || ''),
+        author: String(app.author || 'Unknown'),
+        category: normalizedCategory,
+        platform: app.platform || 'Android',
+        icon: sanitizeUrl(String(app.icon || '')),
+        version: String(app.version || 'Latest'),
+        latestVersion: String(app.latestVersion || 'Latest'),
+        downloadUrl: sanitizeUrl(String(app.downloadUrl || '#')),
+        screenshots: Array.isArray(app.screenshots) ? app.screenshots.map((s: string) => sanitizeUrl(s)) : [],
+        availableVersions: []
+    };
+};
 
 const processItem = (app: AppItem): AppItem => {
     const isGitHub = !!(app.githubRepo || (app.repoUrl && app.repoUrl.includes('github.com')));

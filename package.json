@@ -1,6 +1,6 @@
 {
   "name": "orion-store",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "OrionStore - Serverless App Store",
   "type": "module",
   "scripts": {
