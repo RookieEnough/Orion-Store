@@ -230,7 +230,7 @@ Help grow a clean, community driven app ecosystem.
 
 ## License 📄
 
-Orion Store is licensed under the **MIT License**.
+Orion Store is licensed under the **GNU General Public License v3.0**.
 
 ---
 
