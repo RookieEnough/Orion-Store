@@ -58,9 +58,9 @@ This repository is the client application itself. The live catalog, configuratio
 
 At a glance:
 
-- Public catalog and remote configuration live in inspectable JSON.
-- Release resolution works across GitHub, GitLab, and Codeberg.
-- Android-native tooling covers installs, updates, package inspection, and security flows.
+- Public JSON catalog with inspectable configuration  
+- Multi-source releases (GitHub, GitLab, Codeberg)
+- Android-native install, update, and security tooling
 
 ## What makes Orion different :sparkles:
 
@@ -73,53 +73,48 @@ That design carries through the app. Orion tracks installed packages, surfaces u
 Rather than treating Orion like a download button with a search bar, the app is built as a complete release-aware client. The best way to explain it is to show the major capabilities as systems, not as a long checklist.
 
 <p align="center">
-  <img src="assets/feature-release.svg" width="44" alt="Release mascot">
-  <img src="assets/feature-update.svg" width="44" alt="Update mascot">
-  <img src="assets/feature-install.svg" width="44" alt="Install mascot">
-  <img src="assets/feature-sentinel.svg" width="44" alt="Sentinel mascot">
-  <img src="assets/feature-tools.svg" width="44" alt="Tools mascot">
-  <img src="assets/feature-dev.svg" width="44" alt="Developer mascot">
+  <img src="assets/features-pill.svg" width="520" alt="Orion Store features">
 </p>
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="assets/feature-release.svg" width="28" alt="Release intelligence icon"><br>
-      <strong>:satellite: Release intelligence</strong><br>
+      <img src="assets/feature-release.svg" width="55" alt="Release intelligence icon"><br>
+      <strong>Release intelligence</strong><br>
       Orion reads public metadata, resolves upstream releases, and keeps source provenance visible instead of burying it behind a store-owned backend.<br><br>
       <code>Public JSON</code> <code>Mirrors</code> <code>Multi-source parsing</code>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/feature-update.svg" width="28" alt="Update center icon"><br>
-      <strong>:package: Update center</strong><br>
+      <img src="assets/feature-update.svg" width="55" alt="Update center icon"><br>
+      <strong>Update center</strong><br>
       Installed packages are tracked locally, update availability is surfaced clearly, and queued downloads stay organized instead of disappearing into the background.<br><br>
       <code>Installed version checks</code> <code>Queue state</code> <code>Ready-to-install</code>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="assets/feature-install.svg" width="28" alt="Native install flow icon"><br>
-      <strong>:zap: Native install flow</strong><br>
+      <img src="assets/feature-install.svg" width="55" alt="Native install flow icon"><br>
+      <strong>Native install flow</strong><br>
       Orion is not limited to web-only behavior. On Android it can hand off installs natively and support faster one-tap workflows through Shizuku for users who want that path.<br><br>
       <code>Capacitor bridge</code> <code>Install handoff</code> <code>Shizuku option</code>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/feature-sentinel.svg" width="28" alt="Sentinel security icon"><br>
-      <strong>:shield: Sentinel security</strong><br>
+      <img src="assets/feature-sentinel.svg" width="55" alt="Sentinel security icon"><br>
+      <strong>Sentinel security</strong><br>
       Security tooling is built into the product rather than stapled on as an afterthought, with rapid scans, deeper file analysis, and signature-driven checks for risky packages and APKs.<br><br>
       <code>Rapid scan</code> <code>Deep scan</code> <code>Threat shards</code>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="assets/feature-tools.svg" width="28" alt="Power tools icon"><br>
-      <strong>:toolbox: Power tools</strong><br>
+      <img src="assets/feature-tools.svg" width="55" alt="Power tools icon"><br>
+      <strong>Power tools</strong><br>
       Beyond installation, Orion includes utility workflows for APK extraction, package inspection, and system app controls for users who need more than a simple storefront.<br><br>
       <code>APK extraction</code> <code>Package detective</code> <code>System app tools</code>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/feature-dev.svg" width="28" alt="Developer visibility icon"><br>
-      <strong>:test_tube: Developer visibility</strong><br>
+      <img src="assets/feature-dev.svg" width="55" alt="Developer visibility icon"><br>
+      <strong>Developer visibility</strong><br>
       Orion exposes the guts of the system when needed: mirror source, cache state, GitHub API quota, source switching, and debugging surfaces that make failures easier to understand.<br><br>
       <code>Developer mode</code> <code>Diagnostics</code> <code>Metadata inspection</code>
     </td>
