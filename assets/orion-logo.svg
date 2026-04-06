@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradient for the background (purple-blue) -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7B7FE8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#5B5FDE;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background rounded square -->
+  <rect x="0" y="0" width="1024" height="1024" rx="226" ry="226" fill="url(#bgGradient)"/>
+  
+  <!-- White triangle (top) - UNCHANGED -->
+  <polygon points="512,240 720,520 304,520" fill="#FFFFFF"/>
+  
+  <!-- White circle (bottom left) - BIGGER & REPOSITIONED -->
+  <circle cx="377" cy="685" r="125" fill="#FFFFFF"/>
+  
+  <!-- White rounded square (bottom right) - BIGGER & REPOSITIONED -->
+  <rect x="522" y="560" width="250" height="250" rx="40" ry="40" fill="#FFFFFF"/>
+</svg>
