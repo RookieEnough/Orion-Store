@@ -60,7 +60,7 @@ const SecurityCard: React.FC<SecurityCardProps> = ({ title, desc, status, color,
     const classes = colorClasses[color] || colorClasses.gray;
 
     return (
-        <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+        <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center gap-4 relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg shrink-0 ${classes.icon}`}>
                 <i className={`fas ${icon}`}></i>
             </div>
@@ -614,14 +614,14 @@ const SentinelModal: React.FC<SentinelModalProps> = ({ onClose }) => {
 
   return createPortal(
     <div className="fixed inset-0 z-[200] bg-surface flex flex-col animate-fade-in">
-        <div className="pt-6 px-6 flex justify-between items-center z-20">
+        <div className="pt-6 px-3 flex justify-between items-center z-20">
             <div className={`px-3 py-1 rounded-full border flex items-center gap-2 ${permissions.storage ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-red-500/10 text-red-500 border-red-500/30'}`}>
                 <i className={`fas ${permissions.storage ? 'fa-shield-check' : 'fa-lock'} text-[10px]`}></i>
                 <span className="text-[9px] font-black uppercase tracking-widest">{permissions.storage ? 'Sensors Online' : 'Sensors Locked'}</span>
             </div>
             <button onClick={onClose} className="w-10 h-10 rounded-full bg-theme-element flex items-center justify-center text-theme-text active:scale-95 transition-transform"><i className="fas fa-times"></i></button>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center px-6 pb-6 min-h-0">
+        <div className="flex-1 flex flex-col items-center justify-center px-3 pb-6 min-h-0">
             {view === 'permissions' && renderPermissionsView()}
             {view === 'database' && renderDatabaseView()}
             {view === 'main' && renderMainView()}
@@ -629,7 +629,7 @@ const SentinelModal: React.FC<SentinelModalProps> = ({ onClose }) => {
             {view === 'results' && renderResultsView()}
             {view === 'network' && renderNetworkSentryView()}
         </div>
-        <div className="pb-6 px-6 z-20">
+        <div className="pb-6 px-3 z-20">
             <div className="bg-theme-element border border-theme-border rounded-xl p-2 flex items-center justify-center text-center">
                 <p className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">
                     {signatureCount ? `${signatureCount.toLocaleString()} Signatures Live` : `...`}

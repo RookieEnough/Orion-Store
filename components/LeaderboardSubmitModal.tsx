@@ -240,7 +240,7 @@ const LeaderboardSubmitModal: React.FC<LeaderboardSubmitModalProps> = ({ onClose
   return createPortal(
     <div className="fixed inset-0 z-[10000] flex items-center justify-center touch-none">
         <div 
-            className="absolute inset-0 bg-black/80 backdrop-blur-md transition-all duration-300" 
+            className="backdrop-scrim absolute inset-0 bg-black/80 backdrop-blur-md transition-all duration-300" 
             onClick={onClose}
         ></div>
         

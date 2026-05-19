@@ -1,0 +1,152 @@
+
+name: Process App Submission
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  process-submission:
+    # Only run if the issue title implies a submission AND the label is 'approved'
+    if: startsWith(github.event.issue.title, 'App Submission') && github.event.label.name == 'approved'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Process Issue Body
+        id: process
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          # Create a script to parse the JSON
+          cat << 'EOF' > process.js
+          const fs = require('fs');
+          const issueBody = process.env.ISSUE_BODY;
+          
+          try {
+            // Extract JSON content between ```json and ```
+            const match = issueBody.match(/```json([\s\S]*?)```/);
+            if (!match) throw new Error("No JSON code block found in issue.");
+            
+            const newApps = JSON.parse(match[1].trim());
+            if (!Array.isArray(newApps)) throw new Error("JSON is not an array.");
+            
+            console.log(`Found ${newApps.length} new apps.`);
+            
+            // Read existing apps.json
+            const currentApps = JSON.parse(fs.readFileSync('apps.json', 'utf8'));
+            let addedCount = 0;
+            let addedNames = [];
+            
+            newApps.forEach(app => {
+               // IMPROVED DUPLICATE CHECK: Ignore empty strings
+               const exists = currentApps.some(a => {
+                   const idMatch = a.id === app.id;
+                   const repoMatch = (app.githubRepo && app.githubRepo.trim() !== "" && a.githubRepo && a.githubRepo.toLowerCase() === app.githubRepo.toLowerCase());
+                   const urlMatch = (app.repoUrl && app.repoUrl.trim() !== "" && a.repoUrl && a.repoUrl.toLowerCase() === app.repoUrl.toLowerCase());
+                   return idMatch || repoMatch || urlMatch;
+               });
+               
+               if (!exists) {
+                   // Ensure critical fields match the store schema
+                   const cleanApp = {
+                       id: app.id,
+                       name: app.name,
+                       description: app.description || "No description provided",
+                       icon: app.icon || "default",
+                       version: "Latest",
+                       latestVersion: "Latest",
+                       downloadUrl: app.downloadUrl || "#", 
+                       repoUrl: app.repoUrl || "",
+                       githubRepo: app.githubRepo || "",
+                       gitlabRepo: app.gitlabRepo || "",
+                       gitlabDomain: app.gitlabDomain || "",
+                       packageName: app.packageName || "",
+                       category: app.category || 'Utility',
+                       platform: app.platform || 'Android',
+                       size: app.size || "Varies",
+                       author: app.author || "Unknown",
+                       officialSite: app.officialSite || "",
+                       screenshots: Array.isArray(app.screenshots) ? app.screenshots : []
+                   };
+                   
+                   if(app.releaseKeyword) cleanApp.releaseKeyword = app.releaseKeyword;
+                   
+                   currentApps.push(cleanApp);
+                   addedCount++;
+                   addedNames.push(app.name);
+               }
+            });
+            
+            if (addedCount > 0) {
+               fs.writeFileSync('apps.json', JSON.stringify(currentApps, null, 2));
+               console.log(`Successfully added ${addedCount} unique apps.`);
+               fs.writeFileSync('added_apps.txt', addedNames.join(', '));
+            } else {
+               console.log("No new unique apps found.");
+               fs.writeFileSync('added_apps.txt', '');
+            }
+            
+          } catch (e) {
+            console.error("Error processing:", e.message);
+            process.exit(1);
+          }
+          EOF
+          
+          node process.js
+
+      - name: Commit & Push Changes
+        run: |
+          git config --global user.name "Orion Bot"
+          git config --global user.email "bot@orion.store"
+          
+          if git diff --quiet apps.json; then
+            echo "No changes to commit."
+          else
+            git add apps.json
+            git commit -m "feat: Add approved apps from Issue #${{ github.event.issue.number }}"
+            git push
+          fi
+
+      - name: Close Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue close ${{ github.event.issue.number }} --comment "✅ Submission Approved! The apps have been added to the store."
+
+      - name: Notify Discord of Success
+        uses: actions/github-script@v7
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        with:
+          script: |
+            const fs = require('fs');
+            const webhookUrl = process.env.DISCORD_WEBHOOK;
+            if (!webhookUrl) return;
+            let addedApps = "";
+            try { addedApps = fs.readFileSync('added_apps.txt', 'utf8'); } catch(e) {}
+            if (!addedApps) return;
+            const payload = {
+              username: "Orion Store Bot",
+              avatar_url: "https://raw.githubusercontent.com/RookieEnough/Orion-Data/main/assets/orion_logo_512.png",
+              embeds: [{
+                  title: `✅ Apps Successfully Added`,
+                  description: `The following apps are now live in the store:\n**${addedApps}**`,
+                  color: 5763719,
+                  url: process.env.ISSUE_URL,
+                  footer: { text: "Orion Store Automation" },
+                  timestamp: new Date().toISOString()
+              }]
+            };
+            await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });

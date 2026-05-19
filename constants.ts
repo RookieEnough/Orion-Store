@@ -1,5 +1,5 @@
 
-import { AppCategory, AppItem, Platform, FAQItem, DevProfile } from './types';
+import { AppCategory, AppFontKey, AppItem, Platform, FAQItem, DevProfile } from './types';
 
 // System Constants
 export const CACHE_VERSION = 'v1_6'; // Increment this to force-clear client cache in future updates
@@ -52,6 +52,29 @@ export const DEFAULT_DEV_PROFILE: DevProfile = {
 
 export const DEFAULT_SUPPORT_EMAIL = 'orionstoredev@gmail.com';
 export const DEFAULT_EASTER_EGG = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+export const DEFAULT_APP_FONT: AppFontKey = 'spaceGrotesk';
+
+export const APP_FONT_OPTIONS: ReadonlyArray<{
+  key: AppFontKey;
+  label: string;
+  family: string;
+}> = [
+  { key: 'spaceGrotesk', label: 'Space Grotesk', family: "'Space Grotesk', sans-serif" },
+  { key: 'inter', label: 'Inter', family: "'Inter', sans-serif" },
+  { key: 'poppins', label: 'Poppins', family: "'Poppins', sans-serif" },
+  { key: 'manrope', label: 'Manrope', family: "'Manrope', sans-serif" },
+  { key: 'outfit', label: 'Outfit', family: "'Outfit', sans-serif" },
+  { key: 'dmSans', label: 'DM Sans', family: "'DM Sans', sans-serif" },
+  { key: 'plusJakartaSans', label: 'Plus Jakarta Sans', family: "'Plus Jakarta Sans', sans-serif" },
+  { key: 'rubik', label: 'Rubik', family: "'Rubik', sans-serif" },
+  { key: 'nunitoSans', label: 'Nunito Sans', family: "'Nunito Sans', sans-serif" },
+  { key: 'publicSans', label: 'Public Sans', family: "'Public Sans', sans-serif" },
+  { key: 'systemDefault', label: 'System Default', family: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" }
+];
+
+export const getAppFontDefinition = (fontKey: AppFontKey): (typeof APP_FONT_OPTIONS)[number] =>
+  APP_FONT_OPTIONS.find((option) => option.key === fontKey) || APP_FONT_OPTIONS[0]!;
 
 export const DEFAULT_FAQS: FAQItem[] = [
   {

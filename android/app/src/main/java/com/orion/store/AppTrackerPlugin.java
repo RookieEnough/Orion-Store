@@ -22,6 +22,9 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.view.Display;
+import android.view.Window;
+import android.view.WindowManager;
 import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.FileProvider;
@@ -902,7 +905,57 @@ public class AppTrackerPlugin extends Plugin {
         } else { call.reject("Cancelled"); }
     }
     
-    @PluginMethod public void setHighRefreshRate(PluginCall call) { call.resolve(); }
+    @PluginMethod
+    public void setHighRefreshRate(PluginCall call) {
+        Activity activity = getActivity();
+        boolean enable = call.getBoolean("enable", false);
+
+        if (activity == null) {
+            call.resolve();
+            return;
+        }
+
+        activity.runOnUiThread(() -> {
+            try {
+                Window window = activity.getWindow();
+                WindowManager.LayoutParams params = window.getAttributes();
+
+                if (enable) {
+                    float preferredRefreshRate = 0f;
+                    Display display = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                        ? activity.getDisplay()
+                        : activity.getWindowManager().getDefaultDisplay();
+
+                    if (display == null) {
+                        display = activity.getWindowManager().getDefaultDisplay();
+                    }
+
+                    if (display != null) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            for (Display.Mode mode : display.getSupportedModes()) {
+                                preferredRefreshRate = Math.max(preferredRefreshRate, mode.getRefreshRate());
+                            }
+                        }
+
+                        if (preferredRefreshRate <= 0f) {
+                            preferredRefreshRate = display.getRefreshRate();
+                        }
+                    }
+
+                    if (preferredRefreshRate > 0f) {
+                        params.preferredRefreshRate = preferredRefreshRate;
+                    }
+                } else {
+                    params.preferredRefreshRate = 0f;
+                }
+
+                window.setAttributes(params);
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Failed to update refresh rate: " + e.getMessage());
+            }
+        });
+    }
     @PluginMethod public void shareApp(PluginCall call) {
         try {
             Intent sendIntent = new Intent();

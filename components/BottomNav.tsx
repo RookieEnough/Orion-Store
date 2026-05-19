@@ -10,8 +10,7 @@ interface BottomNavProps {
 
 const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, hiddenTabs = [] }) => {
   return (
-    <div className="fixed bottom-6 left-0 right-0 z-40 flex justify-center pointer-events-none safe-area-pb">
-       {/* Optimized: Reduced blur to lg (16px) or less, used darker bg opacity to compensate */}
+    <div className="fixed bottom-4 left-0 right-0 z-40 flex justify-center pointer-events-none safe-area-pb">
        <nav className="bg-surface/95 backdrop-blur-lg border border-theme-border p-1.5 rounded-[2rem] shadow-2xl flex items-center gap-1 animate-slide-up pointer-events-auto transform translate-z-0">
          
          {!hiddenTabs.includes('android') && (
@@ -56,4 +55,4 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, hiddenTab
   );
 };
 
-export default BottomNav;
+export default React.memo(BottomNav);

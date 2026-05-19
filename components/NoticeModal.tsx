@@ -13,9 +13,9 @@ const NoticeModal: React.FC<NoticeModalProps> = ({ title, message, onClose }) =>
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 animate-fade-in">
-      <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={onClose}></div>
+      <div className="backdrop-scrim absolute inset-0 bg-black/90 backdrop-blur-md" onClick={onClose}></div>
       
-      <div className="relative w-full max-w-sm bg-surface border border-theme-border rounded-[2.5rem] shadow-2xl overflow-hidden animate-slide-up flex flex-col items-center text-center p-8">
+      <div className="relative w-full max-w-sm bg-surface border border-theme-border rounded-[2.5rem] shadow-2xl animate-slide-up flex flex-col items-center text-center p-8 relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
         
         {/* Decorative Background */}
         <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none"></div>
@@ -26,7 +26,7 @@ const NoticeModal: React.FC<NoticeModalProps> = ({ title, message, onClose }) =>
             <div className="w-20 h-20 bg-theme-text text-surface rounded-3xl flex items-center justify-center text-4xl shadow-xl transform rotate-3 select-none">
                 <i className="fab fa-github"></i>
             </div>
-            <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center border-4 border-surface text-sm animate-bounce">
+            <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center border-4 border-surface text-sm shadow-lg shadow-primary/30">
                 <i className="fas fa-bell"></i>
             </div>
         </div>
@@ -45,7 +45,7 @@ const NoticeModal: React.FC<NoticeModalProps> = ({ title, message, onClose }) =>
         {/* Button */}
         <button 
             onClick={onClose}
-            className="w-full py-4 rounded-2xl bg-theme-text text-surface font-bold text-sm shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 relative z-10 group"
+            className="w-full py-4 rounded-2xl bg-theme-text text-surface font-bold text-sm shadow-lg transition-colors hover:opacity-90 flex items-center justify-center gap-2 relative z-10 group"
         >
             <span>Got it</span>
             <i className="fas fa-arrow-right group-hover:translate-x-1 transition-transform"></i>

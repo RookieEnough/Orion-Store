@@ -1,3 +1,4 @@
+import plugin from 'tailwindcss/plugin';
 
 /** @type {import('tailwindcss').Config} */
 export default {
@@ -10,7 +11,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Space Grotesk', 'sans-serif'],
+        sans: ['var(--app-font-family)', 'sans-serif'],
       },
       colors: {
         // Vibrant Gen Z Palette
@@ -45,6 +46,11 @@ export default {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'shine': 'shine 3s linear infinite',
       },
+      boxShadow: {
+        'glow': '0 0 20px 2px rgba(99, 102, 241, 0.15)',
+        'glow-lg': '0 0 40px 4px rgba(99, 102, 241, 0.2)',
+        'glow-acid': '0 0 20px 2px rgba(190, 242, 100, 0.15)',
+      },
       keyframes: {
         shine: {
           '0%': { backgroundPosition: '200% center' },
@@ -53,5 +59,9 @@ export default {
       }
     }
   },
-  plugins: [],
+  plugins: [
+    plugin(function ({ addVariant }) {
+      addVariant('dusk', 'html.dusk &');
+    }),
+  ],
 }

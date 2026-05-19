@@ -1,0 +1,107 @@
+
+name: Process Leaderboard Submission
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  process-leaderboard:
+    # Only run if the issue is a leaderboard submission
+    if: startsWith(github.event.issue.title, 'Leaderboard Submission:')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Data Branch
+        uses: actions/checkout@v4
+        with:
+          ref: data # Checkout the orphaned data branch
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Process Submission
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const body = process.env.ISSUE_BODY;
+            
+            try {
+              // 1. Extract JSON Payload from Issue Body
+              const match = body.match(/```json([\s\S]*?)```/);
+              if (!match) throw new Error("No JSON payload found");
+              const payload = JSON.parse(match[1].trim());
+              
+              console.log("Processing submission for:", payload.username);
+
+              // 2. Load Database (leaderboard.json)
+              let db = [];
+              try {
+                if (fs.existsSync("leaderboard.json")) {
+                    db = JSON.parse(fs.readFileSync("leaderboard.json", "utf8"));
+                }
+              } catch(e) { console.log("Creating new DB"); }
+
+              // 3. Update or Insert
+              const existingIndex = db.findIndex(u => u.username === payload.username);
+              
+              // Calculate Class (Cosmetic logic)
+              let heroClass = "Hybrid";
+              if (payload.submissionCount > payload.adWatchCount * 2) heroClass = "Scribe";
+              else if (payload.adWatchCount > payload.submissionCount * 2) heroClass = "Warrior";
+
+              // Use provided avatarUrl or fallback to GitHub if missing
+              const avatar = payload.avatarUrl || `https://github.com/${payload.username}.png`;
+
+              const entry = {
+                  username: payload.username,
+                  xp: payload.xp,
+                  level: payload.level,
+                  title: payload.level > 20 ? "Legend" : payload.level > 10 ? "Veteran" : "Rookie",
+                  class: heroClass,
+                  avatar_url: avatar, 
+                  last_updated: Date.now()
+              };
+
+              if (existingIndex > -1) {
+                  // Anti-Cheat: Only update if XP is higher or equal
+                  if (entry.xp >= db[existingIndex].xp) {
+                      db[existingIndex] = entry;
+                      console.log("Updated existing entry.");
+                  } else {
+                      console.log("Ignored: New XP is lower than recorded XP.");
+                  }
+              } else {
+                  db.push(entry);
+                  console.log("New entry added.");
+              }
+
+              // 4. Save Database
+              fs.writeFileSync("leaderboard.json", JSON.stringify(db, null, 2));
+
+            } catch(e) {
+              console.error("Error:", e.message);
+              process.exit(1);
+            }
+          '
+
+      - name: Commit & Push
+        run: |
+          git config --global user.name "Orion Bot"
+          git config --global user.email "bot@orion.store"
+          git add leaderboard.json
+          git commit -m "Update Leaderboard [skip ci]" || echo "No changes"
+          git push
+
+      - name: Close Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue close ${{ github.event.issue.number }} --comment "✅ Leaderboard updated successfully."

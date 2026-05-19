@@ -1,8 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --app-font-family: 'Space Grotesk', sans-serif;
+  --orion-shadow-soft: 0 16px 30px -22px rgba(15, 23, 42, 0.2);
+  --orion-shadow-hover: 0 20px 38px -22px rgba(15, 23, 42, 0.26);
+  --orion-shadow-strong: 0 26px 52px -30px rgba(15, 23, 42, 0.3);
+  --orion-shadow-perf: 0 10px 18px -16px rgba(15, 23, 42, 0.18);
+  --glass-solid-bg: #ffffff;
+  --glass-solid-border: rgba(15, 23, 42, 0.08);
+  --glass-solid-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+}
 
 html {
   touch-action: manipulation;
@@ -12,7 +21,7 @@ html {
 }
 
 body {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--app-font-family);
   @apply bg-surface text-theme-text;
   overscroll-behavior: none;
   height: 100%;
@@ -20,10 +29,36 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
 #root {
   height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+@supports (height: 100dvh) {
+  html, body, #root {
+    height: 100dvh;
+  }
+}
+
+.app-shell {
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+:root {
+  --safe-left: max(env(safe-area-inset-left), 0px);
+  --safe-right: max(env(safe-area-inset-right), 0px);
+  --safe-top: max(env(safe-area-inset-top), 0px);
+  --safe-bottom: max(env(safe-area-inset-bottom), 0px);
 }
 
 /* --- 3D UTILITIES FOR FLIP CARD --- */
@@ -50,40 +85,139 @@ body.perf-mode * {
 
 body.perf-mode .app-card-optimized,
 body.perf-mode .app-card,
-body.perf-mode button,
-body.perf-mode img {
+body.perf-mode .orion-shadow-frame,
+body.perf-mode .orion-shadow-surface,
+body.perf-mode header,
+body.perf-mode nav,
+body.perf-mode .modal-content {
   transform: translateZ(0); 
-  will-change: transform, opacity; 
   backface-visibility: hidden; 
 }
 
 body.perf-mode .backdrop-blur-xl,
 body.perf-mode .backdrop-blur-lg,
-body.perf-mode .backdrop-blur-md {
+body.perf-mode .backdrop-blur-md,
+body.perf-mode .backdrop-blur-sm {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  background-color: var(--bg-card); 
-  opacity: 0.98;
+}
+
+body.perf-mode .animate-shine,
+body.perf-mode .module-particle,
+body.perf-mode .module-particle-fall,
+body.perf-mode .module-particle-spark,
+body.perf-mode .animate-ping {
+  animation: none !important;
+}
+
+body.perf-mode .animate-pulse,
+body.perf-mode .animate-pulse-slow {
+  animation-duration: 4.5s !important;
+}
+
+body.scroll-boost .orion-shadow-frame::before,
+body.low-memory-device .orion-shadow-frame::before {
+  box-shadow: var(--orion-shadow-perf);
+  opacity: 0.72;
+}
+
+body.scroll-boost .animate-ping,
+body.scroll-boost .animate-pulse,
+body.scroll-boost .animate-pulse-slow {
+  animation-play-state: paused !important;
+}
+
+body.low-memory-device .animate-ping {
+  animation: none !important;
+}
+
+body.low-memory-device .animate-pulse,
+body.low-memory-device .animate-pulse-slow {
+  animation-duration: 4.5s !important;
+}
+
+/* --- THEME TRANSITIONS --- */
+html {
+  transition: background-color 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body {
+  transition: background-color 0.24s cubic-bezier(0.22, 1, 0.36, 1), color 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.orion-shadow-surface, .bg-card, .bg-theme-element, nav, header, .modal-content {
+  transition: background-color 0.24s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.24s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body.theme-transitioning *,
+body.theme-transitioning *::before,
+body.theme-transitioning *::after {
+  transition: none !important;
+}
+
+::view-transition-group(root),
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 240ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* --- NO GLASS MODE --- */
-body.no-glass .backdrop-blur-xl,
-body.no-glass .backdrop-blur-lg,
-body.no-glass .backdrop-blur-md,
-body.no-glass .backdrop-blur-sm,
-body.no-glass .bg-surface\/95,
-body.no-glass .bg-surface\/90 {
+/* Remove glass blur from UI surfaces only, NOT from .backdrop-scrim overlays */
+body.no-glass .backdrop-blur-xl:not(.backdrop-scrim),
+body.no-glass .backdrop-blur-lg:not(.backdrop-scrim),
+body.no-glass .backdrop-blur-md:not(.backdrop-scrim),
+body.no-glass .backdrop-blur-sm:not(.backdrop-scrim),
+body.perf-mode .backdrop-blur-xl:not(.backdrop-scrim),
+body.perf-mode .backdrop-blur-lg:not(.backdrop-scrim),
+body.perf-mode .backdrop-blur-md:not(.backdrop-scrim),
+body.perf-mode .backdrop-blur-sm:not(.backdrop-scrim) {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
-    background-color: var(--bg-card) !important;
-    opacity: 1 !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-    border-color: var(--border-color) !important;
 }
 
-body.no-glass nav {
-    background-color: var(--bg-card) !important;
-    border: 1px solid var(--border-color);
+/* Force solid backgrounds on glass-style surface/card elements (not scrim overlays) */
+body.no-glass .bg-surface\/95,
+body.no-glass .bg-surface\/90,
+body.no-glass .bg-surface\/60,
+body.no-glass .bg-surface\/40,
+body.no-glass .bg-card\/95,
+body.no-glass .bg-card\/90,
+body.no-glass .backdrop-blur-xl:not(.backdrop-scrim),
+body.no-glass .backdrop-blur-lg:not(.backdrop-scrim),
+body.no-glass .backdrop-blur-md:not(.backdrop-scrim),
+body.no-glass .backdrop-blur-sm:not(.backdrop-scrim),
+body.perf-mode .bg-surface\/95,
+body.perf-mode .bg-surface\/90,
+body.perf-mode .bg-surface\/60,
+body.perf-mode .bg-surface\/40,
+body.perf-mode .bg-card\/95,
+body.perf-mode .bg-card\/90,
+body.perf-mode .backdrop-blur-xl:not(.backdrop-scrim),
+body.perf-mode .backdrop-blur-lg:not(.backdrop-scrim),
+body.perf-mode .backdrop-blur-md:not(.backdrop-scrim),
+body.perf-mode .backdrop-blur-sm:not(.backdrop-scrim) {
+    background-color: var(--glass-solid-bg) !important;
+    border-color: var(--glass-solid-border) !important;
+    box-shadow: var(--glass-solid-shadow) !important;
+    opacity: 1 !important;
+}
+
+body.no-glass nav,
+body.perf-mode nav {
+    background-color: var(--glass-solid-bg) !important;
+    border-color: var(--glass-solid-border) !important;
+    box-shadow: var(--glass-solid-shadow) !important;
+}
+
+body.native-ui .shadow-2xl {
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.2);
+}
+
+/* Keep horizontal lanes clean: avoid compositor clipping from heavy utility shadows. */
+.no-scrollbar .shadow-xl,
+.no-scrollbar .shadow-2xl {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
 }
 
 .app-card-optimized {
@@ -134,12 +268,82 @@ header, nav, .modal-content {
   animation: fade-in 0.15s ease-out forwards;
 }
 
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--element-bg) 25%, var(--element-hover) 50%, var(--element-bg) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: inherit;
+}
+
+/* Light mode: stronger skeleton contrast */
+:root .skeleton-shimmer {
+  background: linear-gradient(90deg, #d4dbe6 25%, #c1cad6 50%, #d4dbe6 75%);
+  background-size: 200% 100%;
+}
+
 @keyframes pulse-slow {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
 .animate-pulse-slow {
   animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* --- Lightweight Module Particle FX --- */
+.module-particle {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+}
+
+.module-shell-optimized {
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: 360px;
+}
+
+@keyframes module-particle-fall {
+  0% {
+    transform: translate3d(0, -8%, 0) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate3d(var(--module-drift, 0px), 120%, 0) rotate(var(--module-rot, 180deg));
+    opacity: 0;
+  }
+}
+
+.module-particle-fall {
+  animation-name: module-particle-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes module-particle-spark {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(0.62);
+    opacity: 0.2;
+  }
+  25% {
+    transform: translate3d(calc(var(--module-drift, 0px) * 0.6), -8px, 0) scale(1);
+    opacity: 0.7;
+  }
+  75% {
+    transform: translate3d(calc(var(--module-drift, 0px) * -0.6), 8px, 0) scale(0.9);
+    opacity: 0.58;
+  }
+}
+
+.module-particle-spark {
+  animation-name: module-particle-spark;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
 }
 
 /* --- SPLASH PREVIEW ANIMATIONS --- */
@@ -190,14 +394,21 @@ header, nav, .modal-content {
 
 
 :root {
-  --bg-surface: #f8fafc;
-  --bg-card: #ffffff;
+  --bg-surface: #eef2f7;
+  --bg-card: #f2f5f9;
   --text-main: #111827;
   --text-sub: #6b7280;
-  --border-color: #e5e7eb;
-  --element-bg: #f3f4f6;
-  --element-hover: #e5e7eb;
-  --input-bg: #ffffff;
+  --border-color: #c9d2df;
+  --element-bg: #dce3ed;
+  --element-hover: #c9d2df;
+  --input-bg: #f2f5f9;
+  --glass-solid-bg: #f2f5f9;
+  --glass-solid-border: rgba(15, 23, 42, 0.12);
+  --glass-solid-shadow: 0 12px 24px rgba(15, 23, 42, 0.1);
+  --orion-shadow-soft: 0 2px 8px -2px rgba(15, 23, 42, 0.18), 0 8px 20px -6px rgba(15, 23, 42, 0.12);
+  --orion-shadow-hover: 0 6px 16px -4px rgba(15, 23, 42, 0.22), 0 12px 28px -8px rgba(15, 23, 42, 0.14);
+  --orion-shadow-strong: 0 10px 24px -6px rgba(15, 23, 42, 0.26), 0 18px 40px -10px rgba(15, 23, 42, 0.16);
+  --orion-shadow-perf: 0 2px 6px -2px rgba(15, 23, 42, 0.1);
 }
 
 html.dusk {
@@ -205,10 +416,17 @@ html.dusk {
   --bg-card: #2a2d3e;
   --text-main: #e2e8f0;
   --text-sub: #94a3b8;
-  --border-color: #374151;
+  --border-color: transparent;
   --element-bg: #374151;
   --element-hover: #4b5563;
   --input-bg: #2a2d3e;
+  --glass-solid-bg: #2a2d3e;
+  --glass-solid-border: transparent;
+  --glass-solid-shadow: 0 16px 30px rgba(2, 6, 23, 0.28);
+  --orion-shadow-soft: 0 18px 34px -22px rgba(2, 6, 23, 0.38);
+  --orion-shadow-hover: 0 22px 42px -22px rgba(2, 6, 23, 0.46);
+  --orion-shadow-strong: 0 30px 58px -30px rgba(2, 6, 23, 0.52);
+  --orion-shadow-perf: 0 12px 22px -16px rgba(2, 6, 23, 0.28);
 }
 
 html.dark {
@@ -216,21 +434,75 @@ html.dark {
   --bg-card: #18181b;
   --text-main: #ffffff;
   --text-sub: #a1a1aa;
-  --border-color: #27272a;
+  --border-color: transparent;
   --element-bg: #27272a;
   --element-hover: #3f3f46;
   --input-bg: #121214;
+  --glass-solid-bg: #09090b;
+  --glass-solid-border: transparent;
+  --glass-solid-shadow: 0 18px 34px rgba(0, 0, 0, 0.42);
+  --orion-shadow-soft: 0 18px 34px -22px rgba(0, 0, 0, 0.44);
+  --orion-shadow-hover: 0 24px 42px -22px rgba(0, 0, 0, 0.52);
+  --orion-shadow-strong: 0 30px 56px -28px rgba(0, 0, 0, 0.6);
+  --orion-shadow-perf: 0 12px 22px -16px rgba(0, 0, 0, 0.34);
 }
 
 html.oled {
   --bg-surface: #000000;
-  --bg-card: #000000;
+  --bg-card: #06080b;
   --text-main: #ffffff;
   --text-sub: #a3a3a3;
-  --border-color: rgba(255, 255, 255, 0.25); 
-  --element-bg: #1a1a1a;
-  --element-hover: #333333;
-  --input-bg: #121212;
+  --border-color: rgba(30, 36, 48, 0.88);
+  --element-bg: #0e1116;
+  --element-hover: #171b23;
+  --input-bg: #0b0e13;
+  --glass-solid-bg: #05070a;
+  --glass-solid-border: rgba(30, 36, 48, 0.82);
+  --glass-solid-shadow: 0 20px 38px rgba(0, 0, 0, 0.72);
+  --orion-shadow-soft: 0 14px 28px -20px rgba(0, 0, 0, 0.76);
+  --orion-shadow-hover: 0 20px 36px -20px rgba(0, 0, 0, 0.84);
+  --orion-shadow-strong: 0 28px 52px -24px rgba(0, 0, 0, 0.92);
+  --orion-shadow-perf: 0 10px 18px -14px rgba(0, 0, 0, 0.62);
+}
+
+/* Subtle elevation glow for dark modes (borderless cards still pop) */
+html.dusk .orion-shadow-surface {
+    box-shadow: inset 0 1px 0 0 rgba(168, 162, 255, 0.06), 0 1px 3px rgba(2, 6, 23, 0.25);
+}
+html.dark .orion-shadow-surface,
+html.oled .orion-shadow-surface {
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+html.oled .orion-shadow-surface {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0) 40%), radial-gradient(120% 120% at 50% -10%, rgba(99, 102, 241, 0.06), transparent 62%);
+    border: 1px solid rgba(28, 34, 46, 0.78);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.02), inset 0 -1px 0 0 rgba(255, 255, 255, 0.015), 0 0 0 1px rgba(15, 18, 24, 0.9), 0 14px 28px -22px rgba(0, 0, 0, 0.95);
+}
+
+html.dusk .bg-card {
+    box-shadow: inset 0 1px 0 0 rgba(168, 162, 255, 0.04);
+}
+html.dark .bg-card,
+html.oled .bg-card {
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+html.oled .bg-card {
+    border-color: rgba(28, 34, 46, 0.72);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.02), 0 0 0 1px rgba(15, 18, 24, 0.85);
+}
+
+html.oled .bg-theme-element,
+html.oled .bg-theme-input {
+    border-color: rgba(31, 37, 48, 0.82);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.015);
+}
+
+html.oled .orion-shadow-frame::before {
+  inset: 0.28rem 0.2rem 0.12rem;
+  box-shadow: 0 18px 32px -28px rgba(0, 0, 0, 0.98), 0 0 0 1px rgba(18, 22, 30, 0.9);
+  opacity: 0.9;
 }
 
 body.no-anim *, body.no-anim *::before, body.no-anim *::after {
@@ -238,19 +510,99 @@ body.no-anim *, body.no-anim *::before, body.no-anim *::after {
   transition: none !important;
 }
 
-body.compact-mode .app-card-optimized {
+body.compact-mode:not(.modern-layout-active) .app-card-optimized,
+body.compact-mode .compact-allow .app-card-optimized {
   padding: 0.75rem !important;
 }
-body.compact-mode h3 {
+body.compact-mode:not(.modern-layout-active) h3,
+body.compact-mode .compact-allow h3 {
   font-size: 0.95rem !important;
 }
 
-html.oled .app-card-optimized {
-  border: 1px solid #333;
+/* Compact mode: tighter grid gaps for denser layout */
+body.compact-mode:not(.modern-layout-active) .grid.grid-cols-1.gap-4,
+body.compact-mode:not(.modern-layout-active) .grid.grid-cols-1[class*="gap-4"],
+body.compact-mode .compact-allow .grid.grid-cols-1.gap-4,
+body.compact-mode .compact-allow .grid.grid-cols-1[class*="gap-4"] {
+  gap: 0.375rem !important; /* gap-1.5 equivalent */
+}
+@media (min-width: 768px) {
+  body.compact-mode:not(.modern-layout-active) .grid.grid-cols-1.gap-4,
+  body.compact-mode:not(.modern-layout-active) .grid.grid-cols-1[class*="gap-4"],
+  body.compact-mode .compact-allow .grid.grid-cols-1.gap-4,
+  body.compact-mode .compact-allow .grid.grid-cols-1[class*="gap-4"] {
+    gap: 0.5rem !important; /* gap-2 equivalent on larger screens */
+  }
 }
 
 .will-change-transform {
     will-change: transform;
+}
+
+.orion-shadow-frame {
+  position: relative;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+.orion-shadow-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0.6rem 0.4rem 0.18rem;
+  border-radius: inherit;
+  box-shadow: var(--orion-shadow-soft);
+  opacity: 1;
+  pointer-events: none;
+  z-index: 0;
+  transition: box-shadow 220ms ease, opacity 220ms ease, transform 220ms ease;
+}
+
+/* Light mode: tighter shadow frame so cards visually pop from background */
+:root .orion-shadow-frame::before {
+  inset: 0.2rem 0.15rem 0.08rem;
+}
+
+/* Light mode: surface elevation - border + shadow for definition */
+:root .orion-shadow-surface {
+    border: 1px solid var(--border-color);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.8), 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+/* Light mode: card background with border for definition */
+:root .bg-card {
+    border: 1px solid var(--border-color);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+}
+
+/* Light mode: element background with border for definition */
+:root .bg-theme-element {
+    border: 1px solid var(--border-color);
+}
+
+/* Light mode: exclude specific elements from auto borders */
+:root .no-light-border.orion-shadow-surface,
+:root .no-light-border.bg-card {
+    border: none;
+}
+
+.orion-shadow-frame:hover::before {
+  box-shadow: var(--orion-shadow-hover);
+}
+
+.orion-shadow-frame-strong::before {
+  inset: 0.82rem 0.55rem 0.24rem;
+  box-shadow: var(--orion-shadow-strong);
+}
+
+.orion-shadow-surface {
+  position: relative;
+  z-index: 1;
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+body.perf-mode .orion-shadow-frame::before {
+  box-shadow: var(--orion-shadow-perf);
+  opacity: 0.72;
 }
 
 /* --- Sentinel Water Fill Animation --- */

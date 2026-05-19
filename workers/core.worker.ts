@@ -1,4 +1,14 @@
-import { AppItem, AppCategory, Platform, SortOption, AppVariant, VersionOption, UpdateStream } from '../types';
+import {
+    AppItem,
+    AppVariant,
+    VersionOption,
+    UpdateStream,
+    StoreCollection,
+    StorefrontAnimation,
+    StorefrontModuleConfig,
+    BundleItem
+} from '../types';
+import { appMatchesCategoryFilter, getHomepageCategoryCards } from '../utils/discovery';
 
 // --- CONSTANTS & ENUMS ---
 // Re-declared for isolation
@@ -81,6 +91,7 @@ const sanitizeApp = (app: any): AppItem => {
         description: String(app.description || ''),
         author: String(app.author || 'Unknown'),
         category: normalizedCategory,
+        tags: Array.isArray(app.tags) ? app.tags.map((t: string) => String(t).trim()) : [],
         platform: app.platform || 'Android',
         icon: sanitizeUrl(String(app.icon || '')),
         version: String(app.version || 'Latest'),
@@ -270,11 +281,13 @@ const performSearch = (query: string, category: string, sort: string, apps: AppI
     }
 
     if (category && category !== 'All') {
-        results = results.filter(app => app.category === category);
+        results = results.filter((app) => appMatchesCategoryFilter(app, category));
     }
 
     results.sort((a, b) => {
         switch (sort) {
+            case 'Oldest Added': return 0;
+            case 'Recently Added': return 0;
             case 'Name (A-Z)': return a.name.localeCompare(b.name);
             case 'Name (Z-A)': return b.name.localeCompare(a.name);
             case 'Size (Smallest)': return parseSizeToNumber(a.size) - parseSizeToNumber(b.size);
@@ -288,6 +301,384 @@ const performSearch = (query: string, category: string, sort: string, apps: AppI
     }
 
     return results;
+};
+
+// --- STOREFRONT GENERATOR ---
+const mulberry32 = (a: number) => {
+    return function() {
+      var t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+}
+
+const getDailySeed = () => {
+    const d = new Date();
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+};
+
+const shuffleArray = <T>(array: T[], seed: number): T[] => {
+    const rng = mulberry32(seed);
+    const result = [...array];
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        const temp = result[i];
+        result[i] = result[j] as T;
+        result[j] = temp as T;
+    }
+    return result;
+};
+
+const normalizeModuleAnimation = (animation?: string): StorefrontAnimation => {
+    if (animation === 'snowfall' || animation === 'confetti' || animation === 'spark' || animation === 'none') {
+        return animation;
+    }
+    return 'snowfall';
+};
+
+const buildBundleMonogram = (title: string) => {
+    const words = title
+        .split(/\s+/)
+        .map((word) => word.replace(/[^a-z0-9]/gi, '').trim())
+        .filter(Boolean);
+
+    if (words.length === 0) return 'B';
+    if (words.length === 1) return words[0]!.slice(0, 1).toUpperCase();
+    return `${words[0]!.slice(0, 1)}${words[1]!.slice(0, 1)}`.toUpperCase();
+};
+
+const resolveAppsByIds = (ids: string[] | undefined, appMap: Map<string, AppItem>): AppItem[] => {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    const seen = new Set<string>();
+    const resolved: AppItem[] = [];
+    ids.forEach((id) => {
+        const app = appMap.get(id);
+        if (app && !seen.has(app.id)) {
+            seen.add(app.id);
+            resolved.push(app);
+        }
+    });
+    return resolved;
+};
+
+const isModuleForPlatform = (module: StorefrontModuleConfig, platform: string): boolean => {
+    const target = (module.platform || 'all').toLowerCase();
+    return target === 'all' || target === platform.toLowerCase();
+};
+
+const buildDefaultModules = (platformApps: AppItem[], seed: number): StorefrontModuleConfig[] => {
+    const shuffled = shuffleArray(platformApps, seed + 17);
+
+    return [
+        {
+            id: 'default_category_cards',
+            type: 'category_cards',
+            title: 'Browse by Category',
+            subtitle: 'Swipe the cards, then tap one to show only matching apps',
+            insertAfterCategory: 0,
+            animation: 'confetti'
+        },
+        {
+            id: 'default_curved_showcase',
+            type: 'curved_apps',
+            title: 'Curated Spotlight',
+            subtitle: 'A quick 6-app mix you should not miss',
+            insertAfterCategory: 2,
+            animation: 'snowfall',
+            appIds: shuffled.slice(0, 6).map((app) => app.id)
+        },
+        {
+            id: 'default_recommended_bundles',
+            type: 'recommendation_bundles',
+            title: 'Recommended App Bundles',
+            subtitle: 'Install in packs for faster setup',
+            insertAfterCategory: 4,
+            animation: 'spark',
+            bundles: [
+                {
+                    id: 'default_bundle_daily',
+                    title: 'Daily Driver Kit',
+                    description: 'Core apps for your everyday workflow',
+                    appIds: shuffled.slice(0, 3).map((app) => app.id),
+                    badge: 'Starter',
+                    icon: 'fa-bolt'
+                },
+                {
+                    id: 'default_bundle_media',
+                    title: 'Media Escape',
+                    description: 'Watch, listen, and unwind quickly',
+                    appIds: shuffled.slice(3, 6).map((app) => app.id),
+                    badge: 'Popular',
+                    icon: 'fa-photo-film'
+                },
+                {
+                    id: 'default_bundle_power',
+                    title: 'Power User Stack',
+                    description: 'Advanced tools for people who build and tweak',
+                    appIds: shuffled.slice(6, 9).map((app) => app.id),
+                    badge: 'Pro',
+                    icon: 'fa-terminal'
+                }
+            ]
+        }
+    ];
+};
+
+interface InterludeCollection {
+    insertAfterCategory: number;
+    collection: StoreCollection;
+}
+
+const buildInterludeCollection = (
+    module: StorefrontModuleConfig,
+    index: number,
+    platformApps: AppItem[],
+    appMap: Map<string, AppItem>,
+    seed: number
+): InterludeCollection | null => {
+    const fallbackInsert = 2 + (index * 2);
+    const insertAfterCategory = Math.max(0, Math.floor(module.insertAfterCategory ?? fallbackInsert));
+    const animation = normalizeModuleAnimation(module.animation);
+
+    if (module.type === 'category_cards') {
+        const sourceApps = resolveAppsByIds(module.appIds, appMap);
+        const cards = getHomepageCategoryCards(sourceApps.length > 0 ? sourceApps : platformApps);
+        if (cards.length === 0) return null;
+        return {
+            insertAfterCategory,
+            collection: {
+                id: module.id,
+                title: module.title,
+                subtitle: module.subtitle,
+                type: 'category_cards',
+                animation,
+                categoryCards: cards
+            }
+        };
+    }
+
+    if (module.type === 'curved_apps') {
+        const selected = resolveAppsByIds(module.appIds, appMap);
+        const taken = new Set(selected.map((app) => app.id));
+        const fallback = shuffleArray(platformApps, seed + index + 41);
+
+        for (const app of fallback) {
+            if (selected.length >= 6) break;
+            if (!taken.has(app.id)) {
+                selected.push(app);
+                taken.add(app.id);
+            }
+        }
+
+        if (selected.length === 0) return null;
+        return {
+            insertAfterCategory,
+            collection: {
+                id: module.id,
+                title: module.title,
+                subtitle: module.subtitle,
+                type: 'bundle',
+                animation,
+                apps: selected.slice(0, 6)
+            }
+        };
+    }
+
+    if (module.type === 'update_pills') {
+        return null;
+    }
+
+    if (module.type === 'recommendation_bundles') {
+        const bundles: BundleItem[] = [];
+
+        if (Array.isArray(module.bundles) && module.bundles.length > 0) {
+            module.bundles.forEach((bundle, bundleIndex) => {
+                const apps = resolveAppsByIds(bundle.appIds, appMap);
+                if (apps.length === 0) return;
+                bundles.push({
+                    id: bundle.id || `${module.id}-bundle-${bundleIndex}`,
+                    title: bundle.title || `Bundle ${bundleIndex + 1}`,
+                    description: bundle.description || 'Recommended apps',
+                    appIds: bundle.appIds,
+                    apps,
+                    color: bundle.color,
+                    badge: bundle.badge,
+                    icon: bundle.icon,
+                    monogram: bundle.monogram || buildBundleMonogram(bundle.title || `Bundle ${bundleIndex + 1}`)
+                });
+            });
+        }
+
+        if (bundles.length === 0) {
+            const sourceApps = resolveAppsByIds(module.appIds, appMap);
+            const fallbackApps = sourceApps.length > 0 ? sourceApps : shuffleArray(platformApps, seed + index + 67).slice(0, 9);
+            for (let bundleIndex = 0; bundleIndex < 3; bundleIndex++) {
+                const start = bundleIndex * 3;
+                const chunk = fallbackApps.slice(start, start + 3);
+                if (chunk.length < 2) continue;
+                bundles.push({
+                    id: `${module.id}-bundle-${bundleIndex}`,
+                    title: `Recommended Pack ${bundleIndex + 1}`,
+                    description: 'Hand-picked apps that work great together',
+                    appIds: chunk.map((app) => app.id),
+                    apps: chunk,
+                    badge: bundleIndex === 0 ? 'Hot' : bundleIndex === 1 ? 'Fresh' : 'Classic',
+                    icon: bundleIndex === 0 ? 'fa-wand-magic-sparkles' : bundleIndex === 1 ? 'fa-headphones' : 'fa-rocket',
+                    monogram: buildBundleMonogram(`Recommended Pack ${bundleIndex + 1}`)
+                });
+            }
+        }
+
+        if (bundles.length === 0) return null;
+        return {
+            insertAfterCategory,
+            collection: {
+                id: module.id,
+                title: module.title,
+                subtitle: module.subtitle,
+                type: 'recommendation_bundles',
+                animation,
+                bundles
+            }
+        };
+    }
+
+    return null;
+};
+
+const generateStorefront = (
+    apps: AppItem[],
+    platform: string,
+    storefrontModules: StorefrontModuleConfig[] = []
+): StoreCollection[] => {
+    const platformApps = apps.filter(a => a.platform.toLowerCase() === platform.toLowerCase());
+    if (platformApps.length === 0) return [];
+
+    const collections: StoreCollection[] = [];
+    const seed = getDailySeed();
+    const appMap = new Map<string, AppItem>(platformApps.map((app) => [app.id, app]));
+
+    // 1. Hero Carousel (Featured Today)
+    const shuffledForHero = shuffleArray(platformApps, seed);
+    collections.push({
+        id: 'hero_daily',
+        title: 'Featured Today',
+        type: 'hero',
+        apps: shuffledForHero.slice(0, 5)
+    });
+
+    // 2. Recommended For You (Daily Rotation)
+    const shuffledForRecommended = shuffleArray(platformApps, seed + 1);
+    collections.push({
+        id: 'recommended_daily',
+        title: 'Recommended For You',
+        type: 'swimlane',
+        apps: shuffledForRecommended.slice(0, 10)
+    });
+
+    // 3. New & Updated
+    collections.push({
+        id: 'new_updated',
+        title: 'New & Updated',
+        type: 'swimlane',
+        apps: [...platformApps].reverse().slice(0, 12)
+    });
+
+    // 4. Dynamic Categories with interludes inserted between rows
+    const categories = Array.from(new Set(platformApps.map(a => a.category))).filter(c => c !== 'All');
+    const categoryRows: StoreCollection[] = [];
+    categories.forEach((cat) => {
+        const catApps = platformApps.filter(a => a.category === cat);
+        if (catApps.length >= 3) {
+            categoryRows.push({
+                id: `cat_${cat.toLowerCase()}`,
+                title: `Top in ${cat}`,
+                type: 'swimlane',
+                filter: cat,
+                apps: catApps.slice(0, 12)
+            });
+        }
+    });
+
+    const configuredModules = storefrontModules
+        .filter((module) => isModuleForPlatform(module, platform))
+        .filter((module) => module.type !== 'update_pills');
+    let activeModules = configuredModules.length > 0 ? configuredModules : buildDefaultModules(platformApps, seed);
+    if (!activeModules.some((module) => module.type === 'category_cards')) {
+        activeModules = [
+            {
+                id: `default_category_cards_${platform.toLowerCase()}`,
+                type: 'category_cards',
+                title: 'Browse by Category',
+                subtitle: 'Swipe the cards, then tap one to show only matching apps',
+                insertAfterCategory: 0,
+                animation: 'confetti'
+            },
+            ...activeModules
+        ];
+    }
+    const interludeCollections = activeModules
+        .filter((module) => isModuleForPlatform(module, platform))
+        .map((module, index) => buildInterludeCollection(module, index, platformApps, appMap, seed))
+        .filter((entry): entry is InterludeCollection => entry !== null)
+        .sort((a, b) => a.insertAfterCategory - b.insertAfterCategory);
+
+    const interleavedRows: StoreCollection[] = [];
+    let categoryCount = 0;
+    let interludeIndex = 0;
+
+    while (interludeIndex < interludeCollections.length) {
+        const nextInterlude = interludeCollections[interludeIndex];
+        if (!nextInterlude || nextInterlude.insertAfterCategory > 0) break;
+        interleavedRows.push(nextInterlude.collection);
+        interludeIndex += 1;
+    }
+
+    categoryRows.forEach((row) => {
+        interleavedRows.push(row);
+        categoryCount += 1;
+
+        while (interludeIndex < interludeCollections.length) {
+            const nextInterlude = interludeCollections[interludeIndex];
+            if (!nextInterlude || categoryCount < nextInterlude.insertAfterCategory) break;
+            interleavedRows.push(nextInterlude.collection);
+            interludeIndex += 1;
+        }
+    });
+
+    while (interludeIndex < interludeCollections.length) {
+        const nextInterlude = interludeCollections[interludeIndex];
+        if (!nextInterlude) break;
+        interleavedRows.push(nextInterlude.collection);
+        interludeIndex += 1;
+    }
+
+    collections.push(...interleavedRows);
+
+    // 5. Tag-based collections
+    const allTags = new Set<string>();
+    platformApps.forEach(a => a.tags?.forEach(t => allTags.add(t)));
+    
+    if (allTags.size > 0) {
+        const shuffledTags = shuffleArray(Array.from(allTags), seed + 2);
+        const tagsToFeature = shuffledTags.slice(0, 2);
+        
+        tagsToFeature.forEach(tag => {
+            const tagApps = platformApps.filter(a => a.tags?.includes(tag));
+            if (tagApps.length >= 3) {
+                collections.push({
+                    id: `tag_${tag.toLowerCase()}`,
+                    title: `Curated: ${tag}`,
+                    type: 'swimlane',
+                    filter: tag,
+                    apps: tagApps.slice(0, 12)
+                });
+            }
+        });
+    }
+
+    return collections;
 };
 
 // --- SHARED MESSAGE HANDLER ---
@@ -319,8 +710,19 @@ const handleMessage = (data: any, postMessage: (msg: any) => void) => {
             break;
 
         case 'FILTER':
-            const results = performSearch(payload.query, payload.category, payload.sort, allApps);
-            postMessage({ type: 'FILTER_RESULTS', payload: results });
+            let filteredApps = allApps;
+            if (payload.platform) {
+                filteredApps = allApps.filter(a => a.platform === payload.platform);
+            }
+            const results = performSearch(payload.query, payload.category, payload.sort, filteredApps);
+            
+            let collections: StoreCollection[] = [];
+            if (!payload.query && payload.platform) {
+                const storefrontModules: StorefrontModuleConfig[] = Array.isArray(payload.storefrontModules) ? payload.storefrontModules : [];
+                collections = generateStorefront(allApps, payload.platform, storefrontModules);
+            }
+            
+            postMessage({ type: 'FILTER_RESULTS', payload: { results, collections } });
             break;
 
         case 'HASH':

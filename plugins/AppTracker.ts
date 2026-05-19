@@ -48,6 +48,7 @@ export interface PermissionsStatusResult {
 
 export interface AppTrackerPlugin {
   getAppInfo(options: { packageName: string }): Promise<AppInfoResult>;
+  getMultipleAppInfo(options: { packageNames: string[] }): Promise<Record<string, AppInfoResult>>;
   downloadFile(options: { url: string, fileName: string }): Promise<{ downloadId: string }>;
   getDownloadProgress(options: { downloadId: string }): Promise<DownloadProgressResult>;
   checkActiveDownloads(): Promise<Record<string, boolean>>;

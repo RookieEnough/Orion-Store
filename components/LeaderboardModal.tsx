@@ -13,7 +13,7 @@ interface LeaderboardModalProps {
 
 const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, workerUrl, onOpenSubmit }) => {
   useScrollLock(true);
-  const { glassEffect, lastSubmissionTime } = useSettingsStore();
+  const { lastSubmissionTime } = useSettingsStore();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -65,7 +65,7 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, workerUrl,
     <div className="fixed inset-0 z-[10000] flex items-center justify-center touch-none">
         {/* Backdrop */}
         <div 
-            className={`absolute inset-0 bg-black/90 transition-all duration-300 ${glassEffect ? 'backdrop-blur-xl' : ''}`} 
+            className="backdrop-scrim absolute inset-0 bg-black/90 backdrop-blur-xl transition-all duration-300"
             onClick={onClose}
         ></div>
         

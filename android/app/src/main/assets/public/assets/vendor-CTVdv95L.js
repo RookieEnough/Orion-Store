@@ -1,0 +1,17 @@
+import{r as A,_ as V,W as _}from"./capacitor-vendor-DKNwReMz.js";import{r as p,g as W}from"./react-vendor-qa-ci6LT.js";const Y=A("Unityads",{web:()=>V(()=>Promise.resolve().then(()=>N),void 0,import.meta.url).then(t=>new t.UnityAdsWeb)});var g={exports:{}},h={},S={exports:{}},U={};/**
+ * @license React
+ * use-sync-external-store-shim.production.js
+ *
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */var l=p;function R(t,e){return t===e&&(t!==0||1/t===1/e)||t!==t&&e!==e}var I=typeof Object.is=="function"?Object.is:R,j=l.useState,$=l.useEffect,x=l.useLayoutEffect,L=l.useDebugValue;function O(t,e){var r=e(),s=j({inst:{value:r,getSnapshot:e}}),o=s[0].inst,n=s[1];return x(function(){o.value=r,o.getSnapshot=e,y(o)&&n({inst:o})},[t,r,e]),$(function(){return y(o)&&n({inst:o}),t(function(){y(o)&&n({inst:o})})},[t]),L(r),r}function y(t){var e=t.getSnapshot;t=t.value;try{var r=e();return!I(t,r)}catch{return!0}}function z(t,e){return e()}var D=typeof window>"u"||typeof window.document>"u"||typeof window.document.createElement>"u"?z:O;U.useSyncExternalStore=l.useSyncExternalStore!==void 0?l.useSyncExternalStore:D;S.exports=U;var M=S.exports;/**
+ * @license React
+ * use-sync-external-store-shim/with-selector.production.js
+ *
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */var v=p,P=M;function T(t,e){return t===e&&(t!==0||1/t===1/e)||t!==t&&e!==e}var k=typeof Object.is=="function"?Object.is:T,C=P.useSyncExternalStore,G=v.useRef,F=v.useEffect,B=v.useMemo,H=v.useDebugValue;h.useSyncExternalStoreWithSelector=function(t,e,r,s,o){var n=G(null);if(n.current===null){var i={hasValue:!1,value:null};n.current=i}else i=n.current;n=B(function(){function w(a){if(!b){if(b=!0,c=a,a=s(a),o!==void 0&&i.hasValue){var u=i.value;if(o(u,a))return f=u}return f=a}if(u=f,k(c,a))return u;var E=s(a);return o!==void 0&&o(u,E)?(c=a,u):(c=a,f=E)}var b=!1,c,f,m=r===void 0?null:r;return[function(){return w(e())},m===null?void 0:function(){return w(m())}]},[e,r,s,o]);var d=C(t,n[0],n[1]);return F(function(){i.hasValue=!0,i.value=d},[d]),H(d),d};g.exports=h;var J=g.exports;const Z=W(J);class K extends _{async initialize(e){throw console.log("UnityAds Web: initialize",e),new Error("Unity Ads is not available on web platform")}async loadRewardedVideo(e){throw console.log("UnityAds Web: loadRewardedVideo",e),new Error("Unity Ads is not available on web platform")}async showRewardedVideo(){throw console.log("UnityAds Web: showRewardedVideo"),new Error("Unity Ads is not available on web platform")}async isRewardedVideoLoaded(){return console.log("UnityAds Web: isRewardedVideoLoaded"),{loaded:!1}}async loadInterstitial(e){throw console.log("UnityAds Web: loadInterstitial",e),new Error("Unity Ads is not available on web platform")}async showInterstitial(){throw console.log("UnityAds Web: showInterstitial"),new Error("Unity Ads is not available on web platform")}async isInterstitialLoaded(){return console.log("UnityAds Web: isInterstitialLoaded"),{loaded:!1}}async setTestMode(e){console.log("UnityAds Web: setTestMode",e)}async getVersion(){return console.log("UnityAds Web: getVersion"),{version:"web-mock"}}}const N=Object.freeze(Object.defineProperty({__proto__:null,UnityAdsWeb:K},Symbol.toStringTag,{value:"Module"}));export{Y as U,Z as u};

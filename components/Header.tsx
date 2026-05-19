@@ -30,7 +30,7 @@ const Header: React.FC<HeaderProps> = ({
   const hasNotifications = updateCount > 0 || activeDownloadCount > 0 || storeUpdateAvailable;
 
   return (
-    <header className="relative z-30 w-full px-6 pb-6 pt-[calc(1.5rem+env(safe-area-inset-top))] flex justify-between items-center bg-surface transition-all duration-300">
+    <header className="relative z-30 flex w-full items-center justify-between bg-surface px-3 pb-4 pt-[calc(1.15rem+env(safe-area-inset-top))] transition-all duration-300">
         <div className="flex items-center gap-3 select-none relative group">
             <div className="relative">
                 <div className="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/30 transform rotate-3">
@@ -48,11 +48,11 @@ const Header: React.FC<HeaderProps> = ({
             </div>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
             {storeUpdateAvailable && (
                 <button
                     onClick={onUpdateStore}
-                    className="px-3 py-2 rounded-xl bg-acid/20 text-lime-700 dark:text-acid border border-acid/30 font-bold text-xs flex items-center gap-2 animate-pulse"
+                    className="flex items-center gap-2 rounded-xl border border-acid/30 bg-acid/20 px-3 py-2 text-xs font-bold text-lime-700 animate-pulse dark:text-acid"
                     title="Update Orion Store"
                 >
                     <i className="fas fa-arrow-circle-up"></i>
@@ -103,4 +103,4 @@ const Header: React.FC<HeaderProps> = ({
   );
 };
 
-export default Header;
+export default React.memo(Header);

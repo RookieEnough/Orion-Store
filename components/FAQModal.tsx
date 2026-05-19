@@ -18,9 +18,9 @@ const FAQModal: React.FC<FAQModalProps> = ({ onClose, items }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col animate-slide-up">
-      {/* Backdrop - Removed backdrop-blur-sm to fix no-glass mode opacity bug */}
+      {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/60"
+        className="backdrop-scrim absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}
       ></div>
 
@@ -51,7 +51,7 @@ const FAQModal: React.FC<FAQModalProps> = ({ onClose, items }) => {
                 key={idx}
                 onClick={() => toggleFAQ(idx)}
                 className={`
-                  group rounded-2xl transition-all duration-300 border cursor-pointer overflow-hidden
+                  group rounded-2xl transition-all duration-300 border cursor-pointer relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5
                   ${activeIndex === idx 
                     ? 'bg-primary/5 border-primary/30 shadow-lg shadow-primary/10' 
                     : 'bg-card border-theme-border hover:border-primary/50'}

@@ -41,6 +41,7 @@ interface AboutViewProps {
   onTriggerUpdate: (app: AppItem) => void;
   onTriggerDebugToast: (type: 'install' | 'error' | 'cleanup') => void;
   setDevUnlocked: (isUnlocked: boolean) => void;
+  onTriggerModernUITutorial: () => void;
 }
 
 const WORKER_URL = "https://orion-relay.sarthaksinha5088.workers.dev/";
@@ -81,9 +82,10 @@ const AboutView: React.FC<AboutViewProps> = ({
   onTestStoreUpdate,
   mirrorSource,
   onTriggerDebugToast,
-  setDevUnlocked
+  setDevUnlocked,
+  onTriggerModernUITutorial
 }) => {
-  const { hapticEnabled } = useSettingsStore(); 
+  const hapticEnabled = useSettingsStore((state) => state.hapticEnabled); 
   
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showSubmitRank, setShowSubmitRank] = useState(false);
@@ -456,6 +458,10 @@ const AboutView: React.FC<AboutViewProps> = ({
                                  <button onClick={() => onTriggerDebugToast('error')} className="py-2 bg-theme-element hover:bg-theme-hover rounded-lg text-[10px] font-bold border border-theme-border">Toast: Error</button>
                                  <button onClick={() => onTriggerDebugToast('cleanup')} className="py-2 bg-theme-element hover:bg-theme-hover rounded-lg text-[10px] font-bold border border-theme-border">Deck: Clean</button>
                              </div>
+                             <button onClick={onTriggerModernUITutorial} className="w-full py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-[10px] font-bold text-primary border border-primary/20 transition-colors flex items-center justify-center gap-1.5">
+                                 <i className="fas fa-sparkles text-[8px]"></i>
+                                 Trigger: Try New UI
+                             </button>
                          </div>
 
                          <div className="h-px bg-theme-border w-full"></div>

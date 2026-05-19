@@ -1,6 +1,8 @@
 
 import { IMAGE_PROXY_CONFIG } from '../constants';
 
+const prefetchedImageUrls = new Set<string>();
+
 /**
  * Generates an optimized URL for an image using the configured proxy provider.
  * 
@@ -39,16 +41,30 @@ export const getOptimizedImageUrl = (url: string, width?: number, height?: numbe
     // Default: wsrv.nl (Global CDN + Resizing)
     // ------------------------------------------
     // output=webp: Modern format, smaller size
-    // q=80:  Excellent balance of visual quality vs size
+    // q=70:  Reduced quality for small icons to speed up loading
     // l=1:   Optimization level (compression speed vs size)
-    // il=1:  Interlaced (Progressive) - Loads blurry first, then sharpens. FEELS faster.
+    // il=0:  Disabled interlacing for small icons as it can sometimes be slower to decode
     // maxage=31d: Force CDN to cache for 1 month (Super fast repeat loads)
     // n=-1:  No filter (Faster decoding on device)
     
-    let query = `?url=${encodedUrl}&output=webp&q=${IMAGE_PROXY_CONFIG.quality}&l=1&il=1&maxage=31d&n=-1`;
+    let quality = IMAGE_PROXY_CONFIG.quality;
+    if (width && width <= 112) quality = 60;
+    else if (width && width < 200) quality = 68;
+    
+    let query = `?url=${encodedUrl}&output=webp&q=${quality}&l=1&il=${width && width < 200 ? 0 : 1}&maxage=31d&n=-1`;
     
     if (width) query += `&w=${width}`;
     if (height) query += `&h=${height}`;
     
     return `https://wsrv.nl/${query}`;
+};
+
+export const prefetchImage = (url: string): void => {
+    if (typeof window === 'undefined' || !url || prefetchedImageUrls.has(url)) return;
+
+    prefetchedImageUrls.add(url);
+    const image = new Image();
+    image.decoding = 'async';
+    image.loading = 'eager';
+    image.src = url;
 };

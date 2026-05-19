@@ -15,6 +15,7 @@ export enum Platform {
 }
 
 export enum SortOption {
+  HOME = 'Home Page',
   NEWEST = 'Recently Added',
   OLDEST = 'Oldest Added',
   NAME_ASC = 'Name (A-Z)',
@@ -24,6 +25,7 @@ export enum SortOption {
 }
 
 export type UpdateStream = 'Stable' | 'Beta' | 'Alpha' | 'Nightly';
+export type AppFontKey = 'spaceGrotesk' | 'inter' | 'poppins' | 'manrope' | 'outfit' | 'dmSans' | 'plusJakartaSans' | 'rubik' | 'nunitoSans' | 'publicSans' | 'systemDefault';
 
 export interface AppVariant {
   arch: string;
@@ -56,12 +58,14 @@ export interface AppItem {
   releaseKeyword?: string;
   packageName?: string;
   category: string; // Changed from AppCategory to string to support dynamic categories
+  tags?: string[]; // V1.3.0: Support for tag-driven curation
   platform: Platform;
   size: string;
   author: string;
   screenshots: string[];
   isInstalled?: boolean;
   officialSite?: string;
+  patches?: string[];
 }
 
 export interface SocialLinks {
@@ -90,6 +94,41 @@ export interface Notice {
   show: boolean;
 }
 
+export type StorefrontAnimation = 'snowfall' | 'confetti' | 'spark' | 'none';
+export type StorefrontModuleType = 'curved_apps' | 'category_cards' | 'update_pills' | 'recommendation_bundles';
+export type StorefrontModulePlatform = 'android' | 'pc' | 'tv' | 'all';
+
+export interface StorefrontPillConfig {
+  id?: string;
+  label?: string;
+  appId?: string;
+  tone?: 'primary' | 'success' | 'warning' | 'info';
+}
+
+export interface StorefrontModuleBundleConfig {
+  id: string;
+  title: string;
+  description?: string;
+  appIds: string[];
+  color?: string;
+  badge?: string;
+  icon?: string;
+  monogram?: string;
+}
+
+export interface StorefrontModuleConfig {
+  id: string;
+  type: StorefrontModuleType;
+  title: string;
+  subtitle?: string;
+  platform?: StorefrontModulePlatform;
+  insertAfterCategory?: number; // Insert after N category rows (0 places it before category rows)
+  animation?: StorefrontAnimation;
+  appIds?: string[];
+  pills?: StorefrontPillConfig[];
+  bundles?: StorefrontModuleBundleConfig[];
+}
+
 export interface StoreConfig {
   appsJsonUrl: string;
   mirrorJsonUrl?: string;
@@ -106,6 +145,7 @@ export interface StoreConfig {
   supportEmail?: string;
   easterEggUrl?: string;
   leaderboardUrl?: string; // New field for custom leaderboard endpoint (worker)
+  storefrontModules?: StorefrontModuleConfig[]; // Optional homepage modules from config.json
 }
 
 export type Tab = 'android' | 'pc' | 'tv' | 'about' | 'updates';
@@ -118,4 +158,46 @@ export interface LeaderboardEntry {
     class: 'Warrior' | 'Scribe' | 'Hybrid';
     avatar_url: string;
     rank?: number; // Injected by client
+}
+
+export interface BundleItem {
+  id: string;
+  title: string;
+  description: string;
+  appIds: string[];
+  apps?: AppItem[];
+  color?: string;
+  badge?: string;
+  icon?: string;
+  monogram?: string;
+}
+
+export interface StorePillItem {
+  id: string;
+  label: string;
+  tone: 'primary' | 'success' | 'warning' | 'info';
+}
+
+export interface StoreCategoryCard {
+  id: string;
+  label: string;
+  icon: string;
+  count: number;
+  accent: string;
+  gradient: string;
+}
+
+export interface StoreCollection {
+  id: string;
+  title: string;
+  subtitle?: string;
+  type: 'hero' | 'swimlane' | 'auto_category' | 'bundle' | 'update_pills' | 'recommendation_bundles' | 'category_cards' | 'sorted_grid';
+  filter?: string; // e.g. "Games" or tag name
+  animation?: StorefrontAnimation;
+  appIds?: string[]; // Explicit app IDs for curated collections
+  apps?: AppItem[]; // Populated by the worker
+  bundles?: BundleItem[]; // Populated by the worker
+  pillItems?: StorePillItem[]; // Populated by the worker
+  categoryCards?: StoreCategoryCard[]; // Populated by the worker
+  totalAppCount?: number;
 }

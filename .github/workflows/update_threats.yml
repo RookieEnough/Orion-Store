@@ -1,0 +1,55 @@
+
+name: Update Orion Sentinel Intelligence
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Daily
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  compile-intelligence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: pip install requests
+
+      - name: Compile Threat Database
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p .github/scripts
+          python .github/scripts/threat_compiler.py
+
+      - name: Deploy to Ghost Branch (Data)
+        run: |
+          git config --global user.name "Orion Sentinel"
+          git config --global user.email "bot@orion.store"
+          
+          # Stash the FOLDER
+          mkdir -p ../temp_sentinel_folder
+          cp -r sentinel ../temp_sentinel_folder/ 2>/dev/null || echo "No Sentinel Folder"
+          
+          # Switch to data branch
+          git fetch origin data:data || git checkout --orphan data
+          git checkout data
+          
+          # Nuke old sentinel folder in data branch to avoid stale shards
+          rm -rf sentinel
+          
+          # Copy back
+          cp -r ../temp_sentinel_folder/sentinel . 2>/dev/null || :
+          
+          git add sentinel/
+          git commit -m "Update Threat Intelligence [skip ci]" || echo "No changes"
+          git push origin data

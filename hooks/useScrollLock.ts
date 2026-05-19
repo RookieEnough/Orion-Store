@@ -1,29 +1,67 @@
 
 import { useEffect } from 'react';
 
+interface ScrollLockSnapshot {
+  bodyOverflow: string;
+  bodyOverscrollBehavior: string;
+  rootOverflowX: string;
+  rootOverflowY: string;
+  rootOverscrollBehavior: string;
+}
+
+let activeScrollLocks = 0;
+let scrollLockSnapshot: ScrollLockSnapshot | null = null;
+
 /**
  * Locks the body and root element scroll when the condition is true.
- * Essential for the #root scroll architecture defined in index.css.
+ * Uses a shared ref-count so nested modals cannot restore scrolling too early.
  */
 export const useScrollLock = (isLocked: boolean) => {
   useEffect(() => {
-    if (!isLocked) return;
+    if (!isLocked || typeof document === 'undefined') return;
 
     const root = document.getElementById('root');
     const body = document.body;
 
-    // Save original overflow styles
-    const originalBodyOverflow = body.style.overflow;
-    const originalRootOverflow = root ? root.style.overflow : '';
+    if (activeScrollLocks === 0) {
+      scrollLockSnapshot = {
+        bodyOverflow: body.style.overflow,
+        bodyOverscrollBehavior: body.style.overscrollBehavior,
+        rootOverflowX: root?.style.overflowX || '',
+        rootOverflowY: root?.style.overflowY || '',
+        rootOverscrollBehavior: root?.style.overscrollBehavior || ''
+      };
 
-    // Apply lock
-    body.style.overflow = 'hidden';
-    if (root) root.style.overflow = 'hidden';
+      body.classList.add('orion-scroll-locked');
+      body.style.overflow = 'hidden';
+      body.style.overscrollBehavior = 'none';
 
-    // Cleanup
+      if (root) {
+        root.style.overflowX = 'hidden';
+        root.style.overflowY = 'hidden';
+        root.style.overscrollBehavior = 'none';
+      }
+    }
+
+    activeScrollLocks += 1;
+
     return () => {
-      body.style.overflow = originalBodyOverflow;
-      if (root) root.style.overflow = originalRootOverflow;
+      activeScrollLocks = Math.max(0, activeScrollLocks - 1);
+
+      if (activeScrollLocks > 0 || !scrollLockSnapshot) return;
+
+      body.classList.remove('orion-scroll-locked');
+      body.style.overflow = scrollLockSnapshot.bodyOverflow;
+      body.style.overscrollBehavior = scrollLockSnapshot.bodyOverscrollBehavior;
+
+      const latestRoot = document.getElementById('root');
+      if (latestRoot) {
+        latestRoot.style.overflowX = scrollLockSnapshot.rootOverflowX;
+        latestRoot.style.overflowY = scrollLockSnapshot.rootOverflowY;
+        latestRoot.style.overscrollBehavior = scrollLockSnapshot.rootOverscrollBehavior;
+      }
+
+      scrollLockSnapshot = null;
     };
   }, [isLocked]);
 };

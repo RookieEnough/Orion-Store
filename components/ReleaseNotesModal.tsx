@@ -140,7 +140,7 @@ const ReleaseNotesModal: React.FC<ReleaseNotesModalProps> = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 animate-fade-in touch-none">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose}></div>
+      <div className="backdrop-scrim absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose}></div>
       
       <div className="relative w-full max-w-sm bg-surface border border-theme-border rounded-[2.5rem] shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[80vh]">
         

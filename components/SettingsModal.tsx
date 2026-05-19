@@ -1,9 +1,9 @@
 import React, { useState, memo, useRef, lazy, Suspense } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useSettingsStore, useDataStore } from '../store/useAppStore';
-import { useScrollLock } from '../hooks/useScrollLock';
 import { AppItem } from '../types';
 import AppTracker from '../plugins/AppTracker';
+import { APP_FONT_OPTIONS, getAppFontDefinition } from '../constants';
 
 // Lazy load heavy power modals
 const ShizukuPowerModal = lazy(() => import('./ShizukuPowerModal'));
@@ -15,13 +15,14 @@ interface SettingsModalProps {
   availableUpdates: AppItem[];
   onTriggerUpdate: (app: AppItem) => void;
   onInstallApp: (app: AppItem, file: string) => void;
-  onCancelDownload: (app: AppItem, dlId: string) => void;
+  onCancelDownloadById: (appId: string, dlId: string) => void;
   installingId: string | null;
   onUpdateAll: () => void;
   onNavigateToApp: (appId: string) => void;
+  initialMenu?: SubMenu;
 }
 
-type SubMenu = 'none' | 'network' | 'storage' | 'visuals' | 'interface' | 'queue' | 'identity' | 'installer';
+type SubMenu = 'none' | 'network' | 'storage' | 'visuals' | 'interface' | 'queue' | 'identity' | 'installer' | 'developer';
 
 // --- ANTI-CHEAT CONFIGURATION ---
 const SALT_KEY = "ORION_PROTOCOL_OMEGA_8842_SECURE_HASH_V1"; 
@@ -49,26 +50,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   availableUpdates,
   onTriggerUpdate,
   onInstallApp,
-  onCancelDownload,
+  onCancelDownloadById,
   installingId,
   onUpdateAll,
-  onNavigateToApp
+  onNavigateToApp,
+  initialMenu = 'none'
 }) => {
-  useScrollLock(true);
-  
   const settings = useSettingsStore();
   const data = useDataStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeMenu, setActiveMenu] = useState<SubMenu>('none');
+  const [activeMenu, setActiveMenu] = useState<SubMenu>(initialMenu);
   const [importStatus, setImportStatus] = useState<{msg: string, type: 'success' | 'error' | 'neutral'}>({ msg: '', type: 'neutral' });
   const [shizukuError, setShizukuError] = useState<string | null>(null);
+  const [isFontPickerOpen, setIsFontPickerOpen] = useState(false);
   
   // Modal State Control
   const [activeModal, setActiveModal] = useState<'none' | 'guardian' | 'sentinel'>('none');
   
   const activeDlCount = Object.keys(data.activeDownloads).length;
   const readyCount = Object.keys(data.readyToInstall).length;
+  const selectedFont = getAppFontDefinition(settings.appFont);
 
   const menuItems = [
       { id: 'identity', icon: 'fa-id-card', color: 'text-pink-500', bg: 'bg-pink-500/10', title: 'Identity & Backup', desc: 'Save progress, Transfer profile' },
@@ -80,10 +82,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       { id: 'interface', icon: 'fa-layer-group', color: 'text-green-500', bg: 'bg-green-500/10', title: 'Interface', desc: 'Customize tabs' },
   ];
 
+  if (settings.isDevUnlocked) {
+      menuItems.push({ id: 'developer', icon: 'fa-code', color: 'text-yellow-500', bg: 'bg-yellow-500/10', title: 'Developer Options', desc: 'Advanced testing & mocks' });
+  }
+
   // --- IDENTITY LOGIC ---
   const handleExportIdentity = async () => {
       try {
           const state = useSettingsStore.getState();
+          const dataState = useDataStore.getState();
           const exportData = {
               adWatchCount: state.adWatchCount,
               submissionCount: state.submissionCount,
@@ -91,6 +98,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               isContributor: state.isContributor,
               isDevUnlocked: state.isDevUnlocked,
               theme: state.theme,
+              appFont: state.appFont,
+              favorites: dataState.favorites,
               timestamp: Date.now()
           };
 
@@ -148,8 +157,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   isLegend: pkg.data.isLegend || false,
                   isContributor: pkg.data.isContributor || false,
                   isDevUnlocked: pkg.data.isDevUnlocked || false,
-                  theme: pkg.data.theme || 'light'
+                  theme: pkg.data.theme || 'light',
+                  appFont: pkg.data.appFont || settings.appFont
               });
+              if (Array.isArray(pkg.data.favorites)) {
+                  useDataStore.setState({ favorites: pkg.data.favorites });
+              }
 
               setImportStatus({ msg: 'Identity restored successfully!', type: 'success' });
               setTimeout(() => window.location.reload(), 1500); 
@@ -186,16 +199,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const renderIdentitySettings = () => (
       <div className="space-y-6 animate-slide-up">
-          <div className="p-5 bg-gradient-to-br from-pink-500/10 to-rose-500/10 border border-pink-500/20 rounded-2xl flex flex-col items-center text-center">
+          <div className="p-5 bg-gradient-to-br from-pink-500/10 to-rose-500/10 border border-pink-500/20 rounded-2xl flex flex-col items-center text-center relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-pink-500/10">
               <div className="w-16 h-16 rounded-full bg-pink-500 text-white flex items-center justify-center text-2xl mb-3 shadow-lg shadow-pink-500/30"><i className="fas fa-fingerprint"></i></div>
               <h4 className="font-black text-theme-text text-lg">Save Your Progress</h4>
               <p className="text-xs text-theme-sub mt-2 leading-relaxed max-w-xs">Orion is serverless. Your badges, levels, and stats live on this device. Export your <b>Identity File (.osf)</b> to keep them safe.</p>
           </div>
           <div className="space-y-3">
-              <button onClick={handleExportIdentity} className="w-full py-4 rounded-2xl bg-card border border-theme-border flex items-center justify-between px-6 hover:bg-theme-element transition-all active:scale-95 group">
+              <button onClick={handleExportIdentity} className="w-full py-4 rounded-2xl bg-card border border-theme-border flex items-center justify-between px-6 hover:bg-theme-element transition-all active:scale-95 group relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
                   <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center"><i className="fas fa-file-export"></i></div><div className="text-left"><span className="block font-bold text-theme-text">Backup Identity</span><span className="text-[10px] text-theme-sub">Save .osf file</span></div></div><i className="fas fa-download text-theme-sub group-hover:text-primary"></i>
               </button>
-              <button onClick={() => fileInputRef.current?.click()} className="w-full py-4 rounded-2xl bg-card border border-theme-border flex items-center justify-between px-6 hover:bg-theme-element transition-all active:scale-95 group">
+              <button onClick={() => fileInputRef.current?.click()} className="w-full py-4 rounded-2xl bg-card border border-theme-border flex items-center justify-between px-6 hover:bg-theme-element transition-all active:scale-95 group relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
                   <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center"><i className="fas fa-file-import"></i></div><div className="text-left"><span className="block font-bold text-theme-text">Restore Identity</span><span className="text-[10px] text-theme-sub">Load .osf file</span></div></div><i className="fas fa-upload text-theme-sub group-hover:text-primary"></i>
               </button>
               <input type="file" ref={fileInputRef} className="hidden" accept=".osf" onChange={handleImportIdentity} />
@@ -206,8 +219,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const renderNetworkSettings = () => (
       <div className="space-y-4 animate-slide-up">
-          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm"><div><h4 className="font-bold text-theme-text">WiFi-Only Mode</h4><p className="text-[10px] text-theme-sub mt-1">Block downloads on cellular data.</p></div><Toggle checked={settings.wifiOnly} onChange={settings.toggleWifiOnly} /></div>
-          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm"><div><h4 className="font-bold text-theme-text">Auto-Update Apps</h4><p className="text-[10px] text-theme-sub mt-1">Automatically download updates in background.</p></div><Toggle checked={settings.autoUpdateEnabled} onChange={settings.toggleAutoUpdate} /></div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><div><h4 className="font-bold text-theme-text">WiFi-Only Mode</h4><p className="text-[10px] text-theme-sub mt-1">Block downloads on cellular data.</p></div><Toggle checked={settings.wifiOnly} onChange={settings.toggleWifiOnly} /></div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><div><h4 className="font-bold text-theme-text">Auto-Update Apps</h4><p className="text-[10px] text-theme-sub mt-1">Automatically download updates in background.</p></div><Toggle checked={settings.autoUpdateEnabled} onChange={settings.toggleAutoUpdate} /></div>
       </div>
   );
 
@@ -216,7 +229,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* COSMIC SHIELD BUTTON - GUARDIAN */}
           <button 
               onClick={() => setActiveModal('guardian')}
-              className="w-full py-5 bg-gradient-to-r from-violet-600 via-indigo-600 to-slate-900 text-white rounded-3xl font-black flex items-center justify-center gap-4 shadow-xl shadow-indigo-500/20 active:scale-95 transition-all group relative overflow-hidden"
+              className="w-full py-5 bg-gradient-to-r from-violet-600 via-indigo-600 to-slate-900 text-white rounded-3xl font-black flex items-center justify-center gap-4 shadow-xl shadow-indigo-500/20 active:scale-95 transition-all group relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-indigo-500/20"
           >
               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 animate-pulse"></div>
               <div className="relative w-10 h-10 flex items-center justify-center">
@@ -234,7 +247,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* SENTINEL BUTTON - DEDICATED */}
           <button 
               onClick={() => setActiveModal('sentinel')}
-              className="w-full py-5 bg-gradient-to-r from-emerald-400 via-green-500 to-teal-700 text-white rounded-3xl font-black flex items-center justify-center gap-4 shadow-xl shadow-emerald-500/20 active:scale-95 transition-all group relative overflow-hidden"
+              className="w-full py-5 bg-gradient-to-r from-emerald-400 via-green-500 to-teal-700 text-white rounded-3xl font-black flex items-center justify-center gap-4 shadow-xl shadow-emerald-500/20 active:scale-95 transition-all group relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-emerald-500/20"
           >
               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
               <div className="relative w-10 h-10 flex items-center justify-center">
@@ -247,18 +260,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <i className="fas fa-chevron-right opacity-50 group-hover:translate-x-1 transition-transform"></i>
           </button>
 
-          <div className={`bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm transition-colors ${shizukuError ? 'border-red-500/30 bg-red-500/5' : ''}`}>
+          <div className={`bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm transition-colors ${shizukuError ? 'border-red-500/30 bg-red-500/5' : ''} relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5`}>
               <div><h4 className="font-bold text-theme-text">Silent Install</h4><p className="text-[10px] text-theme-sub mt-1">Updates & Install apps in background without prompts.</p></div>
               <Toggle checked={settings.useShizuku} onChange={handleShizukuToggle} />
           </div>
           {shizukuError && (<div className="px-4 py-3 bg-theme-element rounded-xl border border-theme-border flex items-center gap-3 animate-slide-up"><i className="fas fa-exclamation-circle text-red-500 text-sm"></i><p className="text-[10px] font-bold text-theme-sub">{shizukuError}</p></div>)}
           
-          <div className="p-4 bg-theme-element/50 rounded-2xl border border-theme-border flex gap-3"><i className="fas fa-terminal text-theme-sub text-lg mt-0.5"></i><p className="text-xs text-theme-sub font-medium leading-relaxed">Requires <button onClick={() => onNavigateToApp('shizuku')} className="text-primary underline font-bold hover:text-primary/80 transition-colors inline">Shizuku</button> app. Enabling this allows Orion to install updates & APKs with one tap.</p></div>
+          <div className="p-4 bg-theme-element/50 rounded-2xl border border-theme-border flex gap-3 relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><i className="fas fa-terminal text-theme-sub text-lg mt-0.5"></i><p className="text-xs text-theme-sub font-medium leading-relaxed">Requires <button onClick={() => onNavigateToApp('shizuku')} className="text-primary underline font-bold hover:text-primary/80 transition-colors inline">Shizuku</button> app. Enabling this allows Orion to install updates & APKs with one tap.</p></div>
           
           {/* Manual Rescan Button */}
           <button 
               onClick={() => { window.location.reload(); onClose(); }}
-              className="w-full py-3 bg-card border border-theme-border rounded-2xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-theme-element active:scale-95 transition-all text-theme-sub"
+              className="w-full py-3 bg-card border border-theme-border rounded-2xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-theme-element active:scale-95 transition-all text-theme-sub relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"
           >
               <i className="fas fa-sync-alt"></i>
               <span>Force Rescan Packages (Reload App)</span>
@@ -268,20 +281,116 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const renderStorageSettings = () => (
       <div className="space-y-4 animate-slide-up">
-          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm"><div><h4 className="font-bold text-theme-text">Auto-Cleanup Installer</h4><p className="text-[10px] text-theme-sub mt-1">Silently delete installed APKs on app startup.</p></div><Toggle checked={settings.deleteApk} onChange={settings.toggleDeleteApk} /></div>
-          <div className="p-4 bg-theme-element/50 rounded-2xl border border-theme-border flex gap-3"><i className="fas fa-info-circle text-theme-sub text-lg mt-0.5"></i><p className="text-xs text-theme-sub font-medium leading-relaxed">When enabled, Orion acts as a "Janitor". Files are kept during your session but wiped next time you open the app.</p></div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><div><h4 className="font-bold text-theme-text">Auto-Cleanup Installer</h4><p className="text-[10px] text-theme-sub mt-1">Silently delete installed APKs on app startup.</p></div><Toggle checked={settings.deleteApk} onChange={settings.toggleDeleteApk} /></div>
+          <div className="p-4 bg-theme-element/50 rounded-2xl border border-theme-border flex gap-3 relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><i className="fas fa-info-circle text-theme-sub text-lg mt-0.5"></i><p className="text-xs text-theme-sub font-medium leading-relaxed">When enabled, Orion acts as a "Janitor". Files are kept during your session but wiped next time you open the app.</p></div>
       </div>
   );
 
   const renderVisuals = () => (
       <div className="space-y-4 animate-slide-up">
-          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm"><div><h4 className="font-bold text-theme-text">Haptic Feedback</h4><p className="text-[10px] text-theme-sub mt-1">Vibration on interactions.</p></div><Toggle checked={settings.hapticEnabled} onChange={settings.toggleHaptic} /></div>
-          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm"><div><h4 className="font-bold text-theme-text">Glass Effect</h4><p className="text-[10px] text-theme-sub mt-1">Transparent blur on headers & tabs.</p></div><Toggle checked={settings.glassEffect} onChange={settings.toggleGlass} /></div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
+              <button
+                  onClick={() => setIsFontPickerOpen(true)}
+                  className="w-full flex items-center justify-between gap-3 text-left"
+              >
+                  <div>
+                      <h4 className="font-bold text-theme-text">Change Font</h4>
+                      <p className="text-[10px] text-theme-sub mt-1">Apply a font across the entire app.</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                      <div className="min-w-0 text-right">
+                          <span
+                              className="block text-sm font-bold text-theme-text truncate"
+                              style={{ fontFamily: selectedFont.family }}
+                          >
+                              {selectedFont.label}
+                          </span>
+                          <span className="text-[10px] text-theme-sub">Tap to preview</span>
+                      </div>
+                      <i className="fas fa-chevron-right text-theme-sub text-xs"></i>
+                  </div>
+              </button>
+          </div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><div><h4 className="font-bold text-theme-text">Haptic Feedback</h4><p className="text-[10px] text-theme-sub mt-1">Vibration on interactions.</p></div><Toggle checked={settings.hapticEnabled} onChange={settings.toggleHaptic} /></div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><div><h4 className="font-bold text-theme-text">Glass Effect</h4><p className="text-[10px] text-theme-sub mt-1">Transparent blur on headers & tabs.</p></div><Toggle checked={settings.glassEffect} onChange={settings.toggleGlass} /></div>
           <div className="h-px bg-theme-border w-full"></div>
-          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm"><div><h4 className="font-bold text-theme-text">Smooth Motion</h4><p className="text-[10px] text-theme-sub mt-1">Unlock Maximum Refresh Rate.</p></div><Toggle checked={settings.highRefreshRate} onChange={settings.toggleHighRefreshRate} /></div>
-          <div className="bg-card border border-theme-border rounded-2xl p-4 shadow-sm"><div className="flex items-center justify-between mb-2"><div><h4 className="font-bold text-theme-text">OLED Black Mode</h4><p className="text-[10px] text-theme-sub mt-1">True black for Dark theme.</p></div><Toggle checked={settings.isOled} onChange={settings.toggleOled} /></div></div>
-          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm"><div><h4 className="font-bold text-theme-text">Disable Animations</h4><p className="text-[10px] text-theme-sub mt-1">Snappier UI on older devices.</p></div><Toggle checked={settings.disableAnimations} onChange={settings.toggleDisableAnimations} /></div>
-          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm"><div><h4 className="font-bold text-theme-text">Compact Mode</h4><p className="text-[10px] text-theme-sub mt-1">Shrink app cards for more density.</p></div><Toggle checked={settings.compactMode} onChange={settings.toggleCompactMode} /></div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><div><h4 className="font-bold text-theme-text">Smooth Motion</h4><p className="text-[10px] text-theme-sub mt-1">Unlock Maximum Refresh Rate.</p></div><Toggle checked={settings.highRefreshRate} onChange={settings.toggleHighRefreshRate} /></div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><div className="flex items-center justify-between mb-2"><div><h4 className="font-bold text-theme-text">OLED Black Mode</h4><p className="text-[10px] text-theme-sub mt-1">True black for Dark theme.</p></div><Toggle checked={settings.isOled} onChange={settings.toggleOled} /></div></div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><div><h4 className="font-bold text-theme-text">Disable Animations</h4><p className="text-[10px] text-theme-sub mt-1">Snappier UI on older devices.</p></div><Toggle checked={settings.disableAnimations} onChange={settings.toggleDisableAnimations} /></div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5"><div><h4 className="font-bold text-theme-text">Compact Mode</h4><p className="text-[10px] text-theme-sub mt-1">Shrink app cards for more density.</p></div><Toggle checked={settings.compactMode} onChange={settings.toggleCompactMode} /></div>
+      </div>
+  );
+
+  const renderFontPicker = () => (
+      <div
+          className="backdrop-scrim absolute inset-0 z-20 flex items-end justify-center bg-black/45 p-3 backdrop-blur-sm animate-fade-in sm:items-center sm:p-6"
+          onClick={() => setIsFontPickerOpen(false)}
+      >
+          <div
+              className="w-full max-w-md overflow-hidden rounded-[2.2rem] border border-theme-border bg-surface shadow-2xl animate-slide-up"
+              onClick={(event) => event.stopPropagation()}
+          >
+              <div className="flex items-center justify-between border-b border-theme-border px-5 py-4">
+                  <div>
+                      <h4 className="text-lg font-black text-theme-text">Choose Font</h4>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-theme-sub">Preview before applying</p>
+                  </div>
+                  <button
+                      type="button"
+                      onClick={() => setIsFontPickerOpen(false)}
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-theme-border bg-theme-element text-theme-text transition-colors hover:bg-theme-hover"
+                  >
+                      <i className="fas fa-times"></i>
+                  </button>
+              </div>
+
+              <div className="space-y-4 p-5">
+                  <div
+                      className="rounded-[1.8rem] border border-theme-border bg-card px-5 py-5 shadow-sm"
+                      style={{ fontFamily: selectedFont.family }}
+                  >
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/80">Live Preview</span>
+                      <h5 className="mt-2 text-2xl font-black tracking-tight text-theme-text">Orion Store</h5>
+                      <p className="mt-2 text-sm text-theme-sub">Fast updates, clean cards, and smooth browsing across the whole app.</p>
+                      <p className="mt-3 text-xs font-bold text-theme-text">Aa Bb Cc 123</p>
+                  </div>
+
+                  <div className="max-h-[52vh] space-y-2 overflow-y-auto no-scrollbar">
+                      {APP_FONT_OPTIONS.map((font) => {
+                          const isActive = settings.appFont === font.key;
+                          return (
+                              <button
+                                  key={font.key}
+                                  type="button"
+                                  onClick={() => {
+                                      settings.setAppFont(font.key);
+                                      setIsFontPickerOpen(false);
+                                  }}
+                                  className={`flex w-full items-center justify-between gap-4 rounded-[1.6rem] border px-4 py-3 text-left transition-all active:scale-[0.985] ${
+                                      isActive
+                                          ? 'border-primary bg-primary/10 text-theme-text shadow-lg shadow-primary/10'
+                                          : 'border-theme-border bg-card text-theme-text hover:bg-theme-element/70'
+                                  }`}
+                                  style={{ fontFamily: font.family }}
+                              >
+                                  <div className="min-w-0">
+                                      <span className="block truncate text-base font-black">{font.label}</span>
+                                      <span className="block text-[11px] font-medium text-theme-sub">Aa Bb Cc 123</span>
+                                      {font.key === 'systemDefault' && (
+                                          <span className="mt-1 block text-[10px] font-medium text-theme-sub">
+                                              Uses the WebView system font, which is usually Roboto on Android.
+                                          </span>
+                                      )}
+                                  </div>
+                                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isActive ? 'border-primary/20 bg-primary text-white' : 'border-theme-border bg-theme-element text-theme-sub'}`}>
+                                      <i className={`fas ${isActive ? 'fa-check' : 'fa-font'} text-xs`}></i>
+                                  </div>
+                              </button>
+                          );
+                      })}
+                  </div>
+              </div>
+          </div>
       </div>
   );
 
@@ -296,18 +405,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       const app = allApps.find(a => a.id === appId);
                       const isThisInstalling = installingId === appId;
                       return (
-                          <div key={appId} className="bg-primary/10 border border-primary/30 rounded-2xl p-4 flex items-center justify-between animate-pulse">
+                          <div key={appId} className="bg-primary/10 border border-primary/30 rounded-2xl p-4 flex items-center justify-between animate-pulse relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-primary/20">
                               <div className="flex flex-col"><span className="font-black text-primary text-sm">{app?.name || appId}</span><span className="text-[10px] text-primary/70 uppercase font-black">Download Ready</span></div>
                               {isThisInstalling ? (<div className="px-4 py-2 flex items-center gap-2"><div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div><span className="text-[10px] font-bold text-primary">Installing...</span></div>) : (<button onClick={() => app && onInstallApp(app, data.readyToInstall[appId] || '')} className="px-4 py-2 rounded-xl bg-primary text-white font-bold text-xs shadow-lg shadow-primary/30 active:scale-95 transition-transform">Install</button>)}
                           </div>
                       );
                   })}
                   {Object.keys(data.activeDownloads).map(appId => {
-                      const app = availableUpdates.find(u => u.id === appId);
+                      const app = allApps.find(a => a.id === appId);
                       const rawVal = data.activeDownloads[appId] || '';
                       return (
-                        <div key={appId} className="bg-card border border-theme-border rounded-2xl p-4 flex flex-col gap-2 shadow-sm">
-                            <div className="flex justify-between items-center"><span className="font-bold text-theme-text text-sm truncate max-w-[150px]">{app?.name || appId}</span><div className="flex items-center gap-2"><span className="text-[10px] font-black text-primary">{data.downloadProgress[appId] || 0}%</span><button onClick={() => app && onCancelDownload(app, rawVal)} className="w-5 h-5 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors"><i className="fas fa-times text-[10px]"></i></button></div></div>
+                        <div key={appId} className="bg-card border border-theme-border rounded-2xl p-4 flex flex-col gap-2 shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
+                            <div className="flex justify-between items-center"><span className="font-bold text-theme-text text-sm truncate max-w-[150px]">{app?.name || appId}</span><div className="flex items-center gap-2"><span className="text-[10px] font-black text-primary">{data.downloadProgress[appId] || 0}%</span><button onClick={() => onCancelDownloadById(appId, rawVal)} className="w-5 h-5 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors"><i className="fas fa-times text-[10px]"></i></button></div></div>
                             <div className="w-full bg-theme-element h-1.5 rounded-full overflow-hidden"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${data.downloadProgress[appId] || 0}%` }}></div></div>
                         </div>
                       );
@@ -323,24 +432,55 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       </div>
   );
 
+  const renderDeveloperSettings = () => (
+      <div className="space-y-4 animate-slide-up">
+          <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl flex gap-3 text-yellow-600 dark:text-yellow-500 relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-yellow-500/5">
+              <i className="fas fa-exclamation-triangle mt-0.5"></i>
+              <p className="text-xs font-bold leading-relaxed">These options are for testing and modifying core app behavior. They may cause instability.</p>
+          </div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
+              <div><h4 className="font-bold text-theme-text">Enable Built-in Data</h4><p className="text-[10px] text-theme-sub mt-1">Allows loading local data gracefully before fetching remote.</p></div>
+              <Toggle checked={settings.loadLocalData} onChange={settings.toggleLoadLocalData} />
+          </div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
+              <div><h4 className="font-bold text-theme-text">Simulate Network Delay</h4><p className="text-[10px] text-theme-sub mt-1">Mock slow 2G connections.</p></div>
+              <Toggle checked={false} onChange={() => {}} />
+          </div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
+              <div><h4 className="font-bold text-theme-text">Mock Remote Failure</h4><p className="text-[10px] text-theme-sub mt-1">Forces Gitlab/JSDelivr Fallback.</p></div>
+              <Toggle checked={false} onChange={() => {}} />
+          </div>
+          <button 
+              onClick={() => {
+                  useDataStore.getState().setPendingCleanup({});
+                  useDataStore.getState().setReadyToInstall({});
+              }}
+              className="w-full py-4 bg-red-500/10 text-red-500 border border-red-500/20 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-500/20 active:scale-95 transition-all text-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-red-500/5"
+          >
+              <i className="fas fa-trash-alt"></i>
+              <span>Clear System Cache</span>
+          </button>
+      </div>
+  );
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
-        <div className="absolute inset-0 bg-black/80 touch-none" onClick={onClose}></div>
-        <div className="bg-surface border border-theme-border rounded-3xl w-full max-w-lg relative z-10 animate-slide-up shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
-            <div className="p-6 pb-4 border-b border-theme-border flex justify-between items-center bg-surface z-20">
+        <div className="backdrop-scrim absolute inset-0 bg-black/80 backdrop-blur-md touch-none" onClick={onClose}></div>
+        <div className="bg-surface border border-theme-border rounded-3xl w-full max-w-lg relative z-10 animate-slide-up shadow-2xl flex flex-col max-h-[85vh] overflow-hidden compact-allow">
+            <div className="p-3 pb-4 border-b border-theme-border flex justify-between items-center bg-surface z-20">
                 <div className="flex items-center gap-3">
                     {activeMenu !== 'none' && (
-                        <button onClick={() => { setActiveMenu('none'); setImportStatus({msg: '', type: 'neutral'}); setShizukuError(null); }} className="w-8 h-8 rounded-full bg-theme-element border border-theme-border flex items-center justify-center text-theme-text hover:bg-theme-hover mr-1 transition-colors"><i className="fas fa-arrow-left"></i></button>
+                        <button onClick={() => { setActiveMenu('none'); setImportStatus({msg: '', type: 'neutral'}); setShizukuError(null); setIsFontPickerOpen(false); }} className="w-8 h-8 rounded-full bg-theme-element border border-theme-border flex items-center justify-center text-theme-text hover:bg-theme-hover mr-1 transition-colors"><i className="fas fa-arrow-left"></i></button>
                     )}
-                    <h3 className="text-2xl font-black text-theme-text capitalize">{activeMenu === 'none' ? 'Settings' : activeMenu.replace('queue', 'Update Center').replace('identity', 'Identity').replace('installer', 'Orion Guardian')}</h3>
+                    <h3 className="text-2xl font-black text-theme-text capitalize">{activeMenu === 'none' ? 'Settings' : activeMenu.replace('queue', 'Update Center').replace('identity', 'Identity').replace('installer', 'Orion Xtra').replace('developer', 'Developer Options')}</h3>
                 </div>
                 <button onClick={onClose} className="w-10 h-10 rounded-full bg-theme-element border border-theme-border flex items-center justify-center text-theme-text hover:bg-theme-hover transition-colors"><i className="fas fa-times"></i></button>
             </div>
-            <div className="overflow-y-auto p-6 space-y-6 no-scrollbar flex-1 will-change-transform overscroll-contain">
+            <div className="overflow-y-auto p-3 space-y-6 no-scrollbar flex-1 will-change-transform overscroll-contain">
                 {activeMenu === 'none' ? (
                     <div className="grid grid-cols-1 gap-3">
                         {menuItems.map(item => (
-                            <button key={item.id} onClick={() => setActiveMenu(item.id as SubMenu)} className="bg-card border border-theme-border p-4 rounded-2xl flex items-center justify-between hover:bg-theme-element/50 transition-all active:scale-[0.98] group relative shadow-sm">
+                            <button key={item.id} onClick={() => { setActiveMenu(item.id as SubMenu); setIsFontPickerOpen(false); }} className="bg-card border border-theme-border p-4 rounded-2xl flex items-center justify-between hover:bg-theme-element/50 transition-all active:scale-[0.98] group relative shadow-sm isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
                                 <div className="flex items-center gap-4">
                                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl ${item.bg} ${item.color}`}><i className={`fas ${item.icon}`}></i></div>
                                     <div className="text-left"><span className="block font-bold text-theme-text text-lg">{item.title}</span><span className="text-[10px] text-theme-sub">{item.desc}</span></div>
@@ -361,19 +501,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         {activeMenu === 'queue' && renderQueue()}
                         {activeMenu === 'visuals' && renderVisuals()}
                         {activeMenu === 'interface' && (
-                            <div className="bg-card border border-theme-border rounded-2xl overflow-hidden shadow-sm">
-                                {['android', 'pc', 'tv'].map((tab, idx) => (
-                                    <div key={tab} className={`flex items-center justify-between p-4 ${idx !== 2 ? 'border-b border-theme-border' : ''}`}>
-                                        <span className="font-bold text-theme-text text-sm capitalize">{tab} Tab</span>
-                                        <Toggle checked={!settings.hiddenTabs.includes(tab)} onChange={() => settings.toggleHiddenTab(tab)} />
+                            <div className="flex flex-col gap-4">
+                                <div className="bg-card border border-theme-border rounded-2xl shadow-sm p-4 flex items-center justify-between relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-theme-text text-sm">Modern Store Layout</span>
+                                        <span className="text-xs text-theme-sub mt-0.5">Use the new curated app store experience</span>
                                     </div>
-                                ))}
+                                    <Toggle 
+                                        checked={settings.storeLayout === 'modern'} 
+                                        onChange={() => settings.setStoreLayout(settings.storeLayout === 'modern' ? 'classic' : 'modern')} 
+                                    />
+                                </div>
+                                <div className="bg-card border border-theme-border rounded-2xl shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
+                                    {['android', 'pc', 'tv'].map((tab, idx) => (
+                                        <div key={tab} className={`flex items-center justify-between p-4 ${idx !== 2 ? 'border-b border-theme-border' : ''}`}>
+                                            <span className="font-bold text-theme-text text-sm capitalize">{tab} Tab</span>
+                                            <Toggle checked={!settings.hiddenTabs.includes(tab)} onChange={() => settings.toggleHiddenTab(tab)} />
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
+                        {activeMenu === 'developer' && renderDeveloperSettings()}
                     </>
                 )}
             </div>
         </div>
+        {isFontPickerOpen && renderFontPicker()}
         <Suspense fallback={null}>
             {activeModal === 'guardian' && <ShizukuPowerModal onClose={() => setActiveModal('none')} />}
             {activeModal === 'sentinel' && <SentinelModal onClose={() => setActiveModal('none')} />}

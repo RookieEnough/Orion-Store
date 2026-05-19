@@ -73,7 +73,7 @@ That design carries through the app. Orion tracks installed packages, surfaces u
 Rather than treating Orion like a download button with a search bar, the app is built as a complete release-aware client. The best way to explain it is to show the major capabilities as systems, not as a long checklist.
 
 <p align="center">
-  <img src="assets/features-pill.svg" width="320" alt="Orion Store features">
+  <img src="assets/features-pill.svg" width="520" alt="Orion Store features">
 </p>
 
 <table>

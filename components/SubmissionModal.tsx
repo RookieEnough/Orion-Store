@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppCategory, Platform, Tab } from '../types';
 import { useScrollLock } from '../hooks/useScrollLock';
+import { useSettingsStore } from '../store/useAppStore';
 
 interface SubmissionModalProps {
   onClose: () => void;
@@ -32,8 +33,155 @@ const LabelWithTooltip: React.FC<{
     </label>
 );
 
+type RepoDetectionStatus = 'idle' | 'loading' | 'success' | 'error';
+
+interface RepoSource {
+    provider: 'github' | 'gitlab' | 'codeberg';
+    repoPath: string;
+    owner: string;
+    repo: string;
+    domain?: string;
+}
+
+interface RepoAutofillResult {
+    name?: string;
+    description?: string;
+    packageName?: string;
+    author?: string;
+}
+
+const COMMON_ANDROID_PATHS = [
+    'app/src/main/AndroidManifest.xml',
+    'src/main/AndroidManifest.xml',
+    'android/app/src/main/AndroidManifest.xml',
+    'app/build.gradle',
+    'app/build.gradle.kts',
+    'android/app/build.gradle',
+    'android/app/build.gradle.kts',
+    'build.gradle',
+    'build.gradle.kts'
+] as const;
+
+const PACKAGE_PATTERNS = [
+    /applicationId\s*(?:=)?\s*["']([a-zA-Z0-9_.]+)["']/,
+    /namespace\s*(?:=)?\s*["']([a-zA-Z0-9_.]+)["']/,
+    /package\s*=\s*["']([a-zA-Z0-9_.]+)["']/
+] as const;
+
+const parseRepoSource = (repoUrl: string): RepoSource | null => {
+    try {
+        const url = new URL(repoUrl.trim());
+        const rawParts = url.pathname.split('/').filter(Boolean);
+        const stopMarkers = new Set(['tree', 'blob', 'raw', 'releases']);
+        const markerIndex = rawParts.findIndex((part) => stopMarkers.has(part));
+        const pathParts = (markerIndex >= 0 ? rawParts.slice(0, markerIndex) : rawParts).filter((part) => part !== '-');
+        if (pathParts.length < 2) return null;
+
+        const owner = pathParts[0] || '';
+        const repo = (url.hostname.includes('gitlab') ? pathParts[pathParts.length - 1] || '' : pathParts[1] || '').replace(/\.git$/i, '');
+        const repoPath = url.hostname.includes('gitlab')
+            ? pathParts.join('/').replace(/\.git$/i, '')
+            : `${owner}/${repo}`.replace(/\.git$/i, '');
+
+        if (url.hostname.endsWith('github.com')) {
+            return { provider: 'github', repoPath, owner, repo };
+        }
+        if (url.hostname.includes('gitlab')) {
+            return { provider: 'gitlab', repoPath, owner, repo, domain: url.hostname };
+        }
+        if (url.hostname.endsWith('codeberg.org')) {
+            return { provider: 'codeberg', repoPath, owner, repo };
+        }
+    } catch (error) {
+        return null;
+    }
+
+    return null;
+};
+
+const extractPackageName = (content: string): string | undefined => {
+    for (const pattern of PACKAGE_PATTERNS) {
+        const match = content.match(pattern);
+        if (match?.[1]) return match[1];
+    }
+    return undefined;
+};
+
+const humanizeRepoName = (repo: string): string => repo
+    .replace(/\.git$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const fetchJson = async (url: string, init?: RequestInit) => {
+    const response = await fetch(url, init);
+    if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+    }
+    return response.json();
+};
+
+const fetchTextIfExists = async (url: string, init?: RequestInit) => {
+    const response = await fetch(url, init);
+    if (!response.ok) return null;
+    return response.text();
+};
+
+const detectRepoAutofill = async (source: RepoSource, githubToken?: string): Promise<RepoAutofillResult> => {
+    let description = '';
+    let defaultBranch = 'main';
+    const githubHeaders = source.provider === 'github' && githubToken
+        ? { Authorization: `Bearer ${githubToken}` }
+        : undefined;
+
+    if (source.provider === 'github') {
+        const repoInfo = await fetchJson(`https://api.github.com/repos/${source.owner}/${source.repo}`, {
+            headers: githubHeaders
+        });
+        description = repoInfo.description || '';
+        defaultBranch = repoInfo.default_branch || defaultBranch;
+    } else if (source.provider === 'gitlab') {
+        const repoInfo = await fetchJson(`https://${source.domain}/api/v4/projects/${encodeURIComponent(source.repoPath)}`);
+        description = repoInfo.description || '';
+        defaultBranch = repoInfo.default_branch || defaultBranch;
+    } else if (source.provider === 'codeberg') {
+        const repoInfo = await fetchJson(`https://codeberg.org/api/v1/repos/${source.owner}/${source.repo}`);
+        description = repoInfo.description || '';
+        defaultBranch = repoInfo.default_branch || defaultBranch;
+    }
+
+    const rawBase =
+        source.provider === 'github'
+            ? `https://raw.githubusercontent.com/${source.owner}/${source.repo}/${defaultBranch}`
+            : source.provider === 'gitlab'
+                ? `https://${source.domain}/${source.repoPath}/-/raw/${defaultBranch}`
+                : `https://codeberg.org/${source.owner}/${source.repo}/raw/branch/${defaultBranch}`;
+
+    let packageName = '';
+    for (const path of COMMON_ANDROID_PATHS) {
+        const content = await fetchTextIfExists(`${rawBase}/${path}`, {
+            headers: githubHeaders
+        });
+        if (!content) continue;
+        const detectedPackage = extractPackageName(content);
+        if (detectedPackage) {
+            packageName = detectedPackage;
+            break;
+        }
+    }
+
+    return {
+        name: humanizeRepoName(source.repo),
+        description: description || undefined,
+        packageName: packageName || undefined,
+        author: source.owner || undefined
+    };
+};
+
 const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, currentStoreVersion, onSuccess, submissionCount = 0, activeTab }) => {
   useScrollLock(true);
+  const githubToken = useSettingsStore((state) => state.githubToken);
 
   // --- DRAFT PERSISTENCE KEY ---
   const DRAFT_KEY = 'orion_submission_draft';
@@ -86,16 +234,25 @@ const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, currentStore
     author: '',
     officialSite: '', 
   });
+  const [autoFilledPackageName, setAutoFilledPackageName] = useState(savedDraft?.autoFilledPackageName || '');
+  const [autoFilledDescription, setAutoFilledDescription] = useState(savedDraft?.autoFilledDescription || '');
+  const [autoFilledName, setAutoFilledName] = useState(savedDraft?.autoFilledName || '');
+  const [repoAutofillState, setRepoAutofillState] = useState<{ status: RepoDetectionStatus; message: string }>(
+    savedDraft?.repoAutofillState || { status: 'idle', message: '' }
+  );
+  const lastAutofillRepo = useRef('');
+  const [issueUrlToOpen, setIssueUrlToOpen] = useState<string | null>(null);
 
   // Save draft to sessionStorage on key state changes
   useEffect(() => {
     try {
       sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
         mode, jsonInput, addedScreenshots, obtainiumIcon, obtainiumKeyword,
-        obtainiumDescription, isManualKeyword, formData
+        obtainiumDescription, isManualKeyword, formData,
+        autoFilledPackageName, autoFilledDescription, autoFilledName, repoAutofillState
       }));
     } catch (e) {}
-  }, [mode, jsonInput, addedScreenshots, obtainiumIcon, obtainiumKeyword, obtainiumDescription, isManualKeyword, formData]);
+  }, [mode, jsonInput, addedScreenshots, obtainiumIcon, obtainiumKeyword, obtainiumDescription, isManualKeyword, formData, autoFilledPackageName, autoFilledDescription, autoFilledName, repoAutofillState]);
 
   const clearDraft = () => { try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) {} };
 
@@ -209,6 +366,79 @@ const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, currentStore
         }
     }
   }, [formData.repoUrl, activeTab]);
+
+  const repoSource = useMemo(() => {
+      if (activeTab !== 'android' || mode !== 'manual' || !formData.repoUrl.trim()) return null;
+      return parseRepoSource(formData.repoUrl);
+  }, [activeTab, mode, formData.repoUrl]);
+
+  useEffect(() => {
+      if (activeTab !== 'android' || mode !== 'manual') return;
+      if (!repoSource) {
+          lastAutofillRepo.current = '';
+          setRepoAutofillState({ status: 'idle', message: '' });
+          return;
+      }
+
+      const repoKey = `${repoSource.provider}:${repoSource.domain || ''}:${repoSource.repoPath}`;
+      if (lastAutofillRepo.current === repoKey) return;
+
+      let cancelled = false;
+      setRepoAutofillState({ status: 'loading', message: 'Detecting description and package name from the repo...' });
+
+      const timer = window.setTimeout(async () => {
+          try {
+              const detected = await detectRepoAutofill(repoSource, githubToken);
+              if (cancelled) return;
+
+              lastAutofillRepo.current = repoKey;
+
+              setFormData((prev) => {
+                  const next = { ...prev };
+                  if (detected.author && !prev.author) next.author = detected.author;
+                  if (detected.name && (!prev.name || prev.name === autoFilledName)) {
+                      next.name = detected.name;
+                  }
+                  if (detected.description && (!prev.description || prev.description === autoFilledDescription)) {
+                      next.description = detected.description;
+                  }
+                  if (detected.packageName && (!prev.packageName || prev.packageName === autoFilledPackageName)) {
+                      next.packageName = detected.packageName;
+                  }
+                  return next;
+              });
+
+              if (detected.name) setAutoFilledName(detected.name);
+              if (detected.description) setAutoFilledDescription(detected.description);
+              if (detected.packageName) setAutoFilledPackageName(detected.packageName);
+
+              const statusMessage = detected.name && detected.packageName && detected.description
+                  ? 'App name, package name, and description detected automatically.'
+                  : detected.name && detected.packageName
+                      ? 'App name and package name detected automatically.'
+                  : detected.packageName
+                      ? 'Package name detected. Add a custom description if needed.'
+                      : detected.name
+                          ? 'App name detected. Orion still needs Android metadata.'
+                      : detected.description
+                          ? 'Description detected. Package name still needs confirmation.'
+                          : 'Repo found, but Orion could not detect Android metadata.';
+
+              setRepoAutofillState({
+                  status: detected.packageName || detected.description ? 'success' : 'error',
+                  message: statusMessage
+              });
+          } catch (error) {
+              if (cancelled) return;
+              setRepoAutofillState({ status: 'error', message: 'Could not auto-detect repo metadata right now.' });
+          }
+      }, 650);
+
+      return () => {
+          cancelled = true;
+          window.clearTimeout(timer);
+      };
+  }, [activeTab, mode, repoSource, githubToken, autoFilledDescription, autoFilledName, autoFilledPackageName]);
 
   // Derived Releases URL for Manual Mode Helper
   const releasesUrl = useMemo(() => {
@@ -427,13 +657,9 @@ ${jsonPayload}
               }];
           }
 
-          if (onSuccess) onSuccess();
-
           const url = generateIssueUrl(appsToSubmit);
-          window.open(url, '_blank');
-          
-          clearDraft();
-          onClose();
+          if (onSuccess) onSuccess();
+          setIssueUrlToOpen(url);
 
       } catch (e) {
           console.error(e);
@@ -494,6 +720,8 @@ ${jsonPayload}
       setObtainiumIcon('');
       setObtainiumKeyword('');
       setJsonInput('');
+      setAutoFilledName('');
+      setIssueUrlToOpen(null);
       clearDraft();
   };
 
@@ -501,10 +729,10 @@ ${jsonPayload}
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in">
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-md touch-none" onClick={onClose}></div>
+        <div className="backdrop-scrim absolute inset-0 bg-black/80 backdrop-blur-md touch-none" onClick={onClose}></div>
         
         {/* Main Content Modal */}
-        <div className="bg-surface border border-theme-border rounded-3xl p-0 w-full max-w-lg relative z-10 animate-slide-up shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="bg-surface border border-theme-border rounded-3xl p-0 w-full max-w-lg relative z-10 animate-slide-up shadow-2xl overflow-hidden flex flex-col max-h-[90vh] compact-allow">
             
             {/* Header */}
             <div className="p-6 pb-4 border-b border-theme-border flex justify-between items-center bg-surface/95 backdrop-blur-xl z-20">
@@ -651,6 +879,28 @@ ${jsonPayload}
                                         value={formData.repoUrl}
                                         onChange={(e) => handleInputChange('repoUrl', e.target.value)}
                                     />
+                                    {formData.repoUrl.trim() && (
+                                        <div className={`mt-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-bold ${
+                                            repoAutofillState.status === 'error'
+                                                ? 'border-red-500/20 bg-red-500/10 text-red-500'
+                                                : repoAutofillState.status === 'success'
+                                                    ? 'border-green-500/20 bg-green-500/10 text-green-600'
+                                                    : 'border-theme-border bg-theme-element/50 text-theme-sub'
+                                        }`}>
+                                            <i className={`fas ${
+                                                repoAutofillState.status === 'loading'
+                                                    ? 'fa-spinner fa-spin'
+                                                    : repoAutofillState.status === 'success'
+                                                        ? 'fa-check-circle'
+                                                        : repoAutofillState.status === 'error'
+                                                            ? 'fa-triangle-exclamation'
+                                                            : 'fa-wand-magic-sparkles'
+                                            }`}></i>
+                                            <span>
+                                                {repoAutofillState.message || 'Orion will try to detect the package name and description from this repo.'}
+                                            </span>
+                                        </div>
+                                    )}
                                     {formData.githubRepo && (
                                         <p className="text-[10px] text-green-500 mt-1 font-mono flex items-center gap-1">
                                             <i className="fab fa-github"></i> GitHub: {formData.githubRepo}
@@ -789,9 +1039,10 @@ ${jsonPayload}
                                             <button 
                                                 type="button"
                                                 onClick={() => setIsManualKeyword(!isManualKeyword)}
-                                                className={`w-8 h-4 rounded-full relative transition-colors ${isManualKeyword ? 'bg-primary' : 'bg-theme-border'}`}
+                                                className={`relative h-4 w-8 overflow-hidden rounded-full transition-colors ${isManualKeyword ? 'bg-primary' : 'bg-theme-border'}`}
+                                                aria-pressed={isManualKeyword}
                                             >
-                                                <div className={`w-3 h-3 rounded-full bg-white absolute top-0.5 transition-transform ${isManualKeyword ? 'translate-x-4.5' : 'translate-x-0.5'}`}></div>
+                                                <div className={`absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${isManualKeyword ? 'translate-x-4' : 'translate-x-0'}`}></div>
                                             </button>
                                         </div>
                                     </div>
@@ -849,6 +1100,39 @@ ${jsonPayload}
                     <i className="fas fa-info-circle text-2xl text-primary mb-2"></i>
                     <p className="text-sm font-medium whitespace-pre-wrap leading-relaxed">{activeHelpText}</p>
                     <button onClick={() => setActiveHelpText(null)} className="mt-4 text-xs font-bold text-theme-sub uppercase tracking-widest hover:text-white">Close</button>
+                </div>
+            </div>
+        )}
+
+        {issueUrlToOpen && (
+            <div className="absolute inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 animate-fade-in" onClick={() => setIssueUrlToOpen(null)}>
+                <div className="w-full max-w-sm rounded-[2rem] border border-theme-border bg-surface p-6 shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <i className="fas fa-triangle-exclamation text-xl"></i>
+                    </div>
+                    <h3 className="text-center text-xl font-black text-theme-text">Before You Continue</h3>
+                    <p className="mt-3 text-center text-sm leading-relaxed text-theme-sub">
+                        Orion already generated the correct JSON for your submission. Please do not manually edit the JSON block on the GitHub issue page, or the submission may break.
+                    </p>
+                    <div className="mt-5 flex flex-col gap-2">
+                        <button
+                            onClick={() => {
+                                window.open(issueUrlToOpen, '_blank');
+                                clearDraft();
+                                setIssueUrlToOpen(null);
+                                onClose();
+                            }}
+                            className="w-full rounded-2xl bg-primary px-4 py-3 font-bold text-white shadow-lg shadow-primary/20 transition-all active:scale-95"
+                        >
+                            Open GitHub Issue
+                        </button>
+                        <button
+                            onClick={() => setIssueUrlToOpen(null)}
+                            className="w-full rounded-2xl bg-theme-element px-4 py-3 text-sm font-bold text-theme-text transition-colors hover:bg-theme-hover"
+                        >
+                            Go Back
+                        </button>
+                    </div>
                 </div>
             </div>
         )}

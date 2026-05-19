@@ -1,0 +1,109 @@
+
+name: Discord Notification (New Request)
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  notify-discord:
+    if: startsWith(github.event.issue.title, 'App Submission')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Send Discord Embed
+        uses: actions/github-script@v7
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          USER_LOGIN: ${{ github.event.issue.user.login }}
+          USER_AVATAR: ${{ github.event.issue.user.avatar_url }}
+        with:
+          script: |
+            const issueBody = process.env.ISSUE_BODY;
+            const webhookUrl = process.env.DISCORD_WEBHOOK;
+            
+            if (!webhookUrl) {
+              console.log("No DISCORD_WEBHOOK secret set. Skipping.");
+              return;
+            }
+
+            let appData = {
+                name: "Unknown App",
+                description: "New submission received.",
+                icon: "",
+                author: "Unknown"
+            };
+
+            // Attempt to parse the JSON from the issue body
+            try {
+                const match = issueBody.match(/```json([\s\S]*?)```/);
+                if (match) {
+                    const parsed = JSON.parse(match[1].trim());
+                    // Handle array or single object
+                    const item = Array.isArray(parsed) ? parsed[0] : parsed;
+                    appData.name = item.name || appData.name;
+                    appData.description = item.description || appData.description;
+                    appData.icon = item.icon || "";
+                    appData.author = item.author || appData.author;
+                }
+            } catch (e) {
+                console.log("JSON Parse warning:", e);
+            }
+
+            // Construct Discord Embed
+            const payload = {
+              username: "Orion Store Bot",
+              avatar_url: "https://raw.githubusercontent.com/RookieEnough/Orion-Data/main/assets/orion_logo_512.png",
+              embeds: [
+                {
+                  title: `📱 New App Request: ${appData.name}`,
+                  url: process.env.ISSUE_URL,
+                  color: 6514673, // #6366f1 (Indigo)
+                  description: appData.description.substring(0, 200) + (appData.description.length > 200 ? "..." : ""),
+                  thumbnail: {
+                    url: appData.icon
+                  },
+                  fields: [
+                    {
+                      name: "Author",
+                      value: appData.author,
+                      inline: true
+                    },
+                    {
+                      name: "Submitted By",
+                      value: process.env.USER_LOGIN,
+                      inline: true
+                    }
+                  ],
+                  footer: {
+                    text: "Orion Store • Apply 'approved' label to merge",
+                    icon_url: process.env.USER_AVATAR
+                  },
+                  timestamp: new Date().toISOString()
+                }
+              ],
+              components: [
+                {
+                    type: 1,
+                    components: [
+                        {
+                            type: 2,
+                            style: 5,
+                            label: "Review & Approve",
+                            url: process.env.ISSUE_URL
+                        }
+                    ]
+                }
+              ]
+            };
+
+            await fetch(webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });

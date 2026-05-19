@@ -1,7 +1,8 @@
 import { create, StateCreator } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { get, set, del } from 'idb-keyval';
-import { AppItem, SortOption, UpdateStream } from '../types';
+import { AppFontKey, AppItem, SortOption, UpdateStream } from '../types';
+import { DEFAULT_APP_FONT } from '../constants';
 
 // --- Types ---
 
@@ -21,6 +22,8 @@ export interface TabViewState {
 
 interface SettingsState {
   theme: Theme;
+  appFont: AppFontKey;
+  storeLayout: 'classic' | 'modern';
   isOled: boolean;
   hiddenTabs: string[];
   autoUpdateEnabled: boolean;
@@ -40,15 +43,20 @@ interface SettingsState {
   lastSubmissionTime: number;
   lastLeaderboardSubmissionTime: number;
   useRemoteJson: boolean;
+  loadLocalData: boolean;
   githubToken: string;
   installedVersions: Record<string, string>; // { appId: version } (From OS)
   lastRemoteVersions: Record<string, string>; // { appId: version } (From Orion Install)
   appStreams: Record<string, UpdateStream>; // { appId: 'Beta' } - Stream Locking
   resolvedPackageNames: Record<string, string>; // { appId: "com.app.preview" } - For handling forks/suffixes
+  packageOwners: Record<string, string>; // { packageName: appId } - Ownership for duplicate package entries
   ignoredUpdates: Record<string, { type: 'week' | 'version' | 'never', timestamp?: number, version?: string }>;
+  hasSeenModernUITutorial: boolean;
 
   // Actions
   setTheme: (theme: Theme) => void;
+  setAppFont: (font: AppFontKey) => void;
+  setStoreLayout: (layout: 'classic' | 'modern') => void;
   toggleOled: () => void;
   toggleHiddenTab: (tab: string) => void;
   toggleAutoUpdate: () => void;
@@ -67,6 +75,7 @@ interface SettingsState {
   registerLeaderboardSubmission: () => void;
   setSubmissionCount: (count: number) => void;
   setUseRemoteJson: (useRemote: boolean) => void;
+  toggleLoadLocalData: () => void;
   setGithubToken: (token: string) => void;
   setInstalledVersions: (versions: Record<string, string>) => void;
   setLastRemoteVersion: (appId: string, version: string) => void;
@@ -74,8 +83,12 @@ interface SettingsState {
   setAppStream: (appId: string, stream: UpdateStream) => void;
   setResolvedPackageName: (appId: string, packageName: string) => void;
   setAllResolvedPackageNames: (packages: Record<string, string>) => void;
+  setPackageOwner: (packageName: string, appId: string) => void;
+  clearPackageOwner: (packageName: string) => void;
+  setPackageOwners: (owners: Record<string, string>) => void;
   setIgnoredUpdate: (appId: string, type: 'week' | 'version' | 'never', version?: string) => void;
   clearIgnoredUpdate: (appId: string) => void;
+  setHasSeenModernUITutorial: (seen: boolean) => void;
 }
 
 interface DataState {
@@ -135,6 +148,8 @@ const idbStorage: StateStorage = {
 
 const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   theme: 'light',
+  appFont: DEFAULT_APP_FONT,
+  storeLayout: 'classic', // Default to classic for lighter new installs
   isOled: false,
   hiddenTabs: [],
   autoUpdateEnabled: false,
@@ -154,14 +169,19 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   lastSubmissionTime: 0,
   lastLeaderboardSubmissionTime: 0,
   useRemoteJson: true,
+  loadLocalData: false,
   githubToken: '',
   installedVersions: {},
   lastRemoteVersions: {},
   appStreams: {},
   resolvedPackageNames: {},
+  packageOwners: {},
   ignoredUpdates: {},
+  hasSeenModernUITutorial: false,
 
   setTheme: (theme) => set({ theme }),
+  setAppFont: (appFont) => set({ appFont }),
+  setStoreLayout: (layout) => set({ storeLayout: layout }),
   toggleOled: () => set((state) => ({ isOled: !state.isOled })),
   toggleHiddenTab: (tab) => set((state) => {
     const exists = state.hiddenTabs.includes(tab);
@@ -197,6 +217,7 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   registerLeaderboardSubmission: () => set({ lastLeaderboardSubmissionTime: Date.now() }),
   setSubmissionCount: (count) => set({ submissionCount: count }),
   setUseRemoteJson: (val) => set({ useRemoteJson: val }),
+  toggleLoadLocalData: () => set((state) => ({ loadLocalData: !state.loadLocalData })),
   setGithubToken: (token) => set({ githubToken: token }),
   setInstalledVersions: (versions) => set({ installedVersions: versions }),
   setLastRemoteVersion: (appId, version) => set((state) => ({
@@ -214,6 +235,15 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
     resolvedPackageNames: { ...state.resolvedPackageNames, [appId]: packageName }
   })),
   setAllResolvedPackageNames: (packages) => set({ resolvedPackageNames: packages }),
+  setPackageOwner: (packageName, appId) => set((state) => ({
+    packageOwners: { ...state.packageOwners, [packageName]: appId }
+  })),
+  clearPackageOwner: (packageName) => set((state) => {
+    const next = { ...state.packageOwners };
+    delete next[packageName];
+    return { packageOwners: next };
+  }),
+  setPackageOwners: (owners) => set({ packageOwners: owners }),
   setIgnoredUpdate: (appId, type, version) => set((state) => ({
     ignoredUpdates: { ...state.ignoredUpdates, [appId]: { type, timestamp: Date.now(), version } }
   })),
@@ -222,6 +252,7 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
     delete next[appId];
     return { ignoredUpdates: next };
   }),
+  setHasSeenModernUITutorial: (seen) => set({ hasSeenModernUITutorial: seen }),
 });
 
 export const useSettingsStore = create<SettingsState>()(
@@ -233,6 +264,8 @@ export const useSettingsStore = create<SettingsState>()(
       // IMPORTANT: Explicitly persist package detection state so it survives app restarts
       partialize: (state) => ({
         theme: state.theme,
+        appFont: state.appFont,
+        storeLayout: state.storeLayout,
         isOled: state.isOled,
         hiddenTabs: state.hiddenTabs,
         autoUpdateEnabled: state.autoUpdateEnabled,
@@ -252,12 +285,15 @@ export const useSettingsStore = create<SettingsState>()(
         lastSubmissionTime: state.lastSubmissionTime,
         lastLeaderboardSubmissionTime: state.lastLeaderboardSubmissionTime,
         useRemoteJson: state.useRemoteJson,
+        loadLocalData: state.loadLocalData,
         githubToken: state.githubToken,
         installedVersions: state.installedVersions,
         lastRemoteVersions: state.lastRemoteVersions,
         appStreams: state.appStreams,
         resolvedPackageNames: state.resolvedPackageNames,
+        packageOwners: state.packageOwners,
         ignoredUpdates: state.ignoredUpdates,
+        hasSeenModernUITutorial: state.hasSeenModernUITutorial,
       })
     }
   )

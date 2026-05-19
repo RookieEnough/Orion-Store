@@ -11,7 +11,7 @@ build/
 .DS_Store
 Thumbs.db
 
-# Android / Capacitor
+# Android Build Artifacts
 android/app/build/
 android/.gradle/
 android/local.properties
@@ -25,9 +25,26 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Guide Files / Code Dumps (Exclude these from repo)
+# IDE / Tooling
+.vscode/
+.idea/
+*.iml
+
+# Data Files (Managed in Orion-Data repo)
+apps.json
+config.json
+mirror.json
+mirror_config.json
+notice_v1.2.3.json
+release_notes.json
+storefront_modules.example.json
+
+# Utility Scripts
+*.py
+__pycache__/
+
+# Guide / Text Files
 *.txt
-*.yml
-metadata.json
-/orion logo.svg
-/.github/
+
+# Local-only folders
+Orion-RE/

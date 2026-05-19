@@ -1,0 +1,111 @@
+
+name: Update Store Mirror
+
+on:
+  workflow_dispatch:
+  # Trigger immediately after an app is approved and added
+  workflow_run:
+    workflows: ["Process App Submission"]
+    types:
+      - completed
+  release:
+    types: [published]
+  schedule:
+    - cron: '0 */6 * * *' # Run every 6 hours to sync data
+
+permissions:
+  contents: write
+
+jobs:
+  update-mirror:
+    # Only run if the triggering workflow succeeded (or if run manually/scheduled)
+    if: ${{ !github.event.workflow_run || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: pip install requests msgpack
+
+      - name: Generate Mirror Data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python .github/scripts/mirror_generator.py
+
+      - name: Deploy to Ghost Branch (Data)
+        run: |
+          git config --global user.name "Orion Bot"
+          git config --global user.email "bot@orion.store"
+          
+          echo "📦 Stashing new mirror data..."
+          # 1. Stash generated data OUTSIDE the git workspace
+          mkdir -p ../temp_ghost
+          cp mirror.json ../temp_ghost/ 2>/dev/null || echo "⚠️ mirror.json missing"
+          cp updates.bin ../temp_ghost/ 2>/dev/null || echo "⚠️ updates.bin missing"
+          cp -r mirrors ../temp_ghost/ 2>/dev/null || echo "⚠️ mirrors/ missing"
+          
+          # Clean generated files from working tree to prevent git checkout conflict
+          rm -f mirror.json updates.bin
+          rm -rf mirrors
+
+          echo "🛡️ Fetching existing Data branch..."
+          # 2. Fetch existing data branch to preserve persistent files
+          git fetch origin data:data || echo "Remote data branch not found."
+          
+          if git show-ref --verify --quiet refs/heads/data; then
+            echo "✅ Data branch found. Backing up persistent files..."
+            
+            git checkout data
+            
+            # Preserve Sentinel Folder
+            if [ -d "sentinel" ]; then
+               echo "✅ Sentinel directory found! Backing up..."
+               cp -r sentinel ../temp_ghost/
+            fi
+
+            # Preserve Leaderboard File
+            if [ -f "leaderboard.json" ]; then
+               echo "✅ Leaderboard found! Backing up..."
+               cp leaderboard.json ../temp_ghost/
+            fi
+          else
+            echo "ℹ️ Data branch does not exist yet. Skipping persistent backup."
+          fi
+          
+          # 3. Create fresh orphan state (Ghost Protocol)
+          echo "👻 Initiating Ghost Protocol (Wipe History)..."
+          git checkout --orphan ghost_data
+          
+          # 4. Nuke everything in the current branch context
+          git rm -rf .
+          git clean -fdx
+          
+          # 5. Restore All Data (New generated + Old persistent)
+          echo "♻️ Restoring data..."
+          cp ../temp_ghost/mirror.json . 2>/dev/null || :
+          cp ../temp_ghost/updates.bin . 2>/dev/null || :
+          cp ../temp_ghost/leaderboard.json . 2>/dev/null || :
+          cp -r ../temp_ghost/mirrors . 2>/dev/null || :
+          
+          if [ -d "../temp_ghost/sentinel" ]; then
+             echo "🛡️ Restoring Sentinel Data..."
+             cp -r ../temp_ghost/sentinel .
+          fi
+          
+          rm -rf ../temp_ghost
+          
+          # 6. Commit & Force Push
+          git add .
+          git commit -m "Update Data (Mirror + Sentinel + Leaderboard) [skip ci]"
+          
+          # Rename to data and push
+          git branch -M data
+          git push origin data --force

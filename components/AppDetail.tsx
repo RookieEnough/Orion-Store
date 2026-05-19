@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { shallow } from 'zustand/shallow';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { AppItem, Platform, VersionOption } from '../types';
@@ -75,7 +76,7 @@ const LazyScreenshot: React.FC<LazyScreenshotProps> = ({ src, index, platform, o
             onClick={onClick}
             className={`relative shrink-0 snap-center ${heightClass} ${widthClass} flex items-center justify-center cursor-zoom-in active:scale-[0.98] transition-transform`}
         >
-            {(!isLoaded || !isVisible) && <div className={`absolute inset-0 bg-theme-element animate-pulse border border-theme-border rounded-2xl`} />}
+            {(!isLoaded || !isVisible) && <div className={`absolute inset-0 bg-theme-element animate-pulse rounded-2xl`} />}
             {isVisible && (
                 <img
                     src={optimizedSrc}
@@ -96,8 +97,11 @@ const AppDetail: React.FC<AppDetailProps> = ({
     currentProgress, currentStatus, readyFileName,
     onCancelDownload, onDeleteReadyFile, onExportAPK, onNavigateToApp, isScanning
 }) => {
-    const { favorites, toggleFavorite } = useDataStore();
-    const { setIgnoredUpdate } = useSettingsStore();
+    const { favorites, toggleFavorite } = useDataStore((state) => ({
+        favorites: state.favorites,
+        toggleFavorite: state.toggleFavorite
+    }), shallow);
+    const setIgnoredUpdate = useSettingsStore((state) => state.setIgnoredUpdate);
     const [showIgnoreMenu, setShowIgnoreMenu] = useState(false);
     const isFavorite = favorites.includes(app.id);
 
@@ -137,19 +141,36 @@ const AppDetail: React.FC<AppDetailProps> = ({
     const [isHighResLoaded, setIsHighResLoaded] = useState(false);
 
     useEffect(() => {
+        setDisplayIconUrl(lowResUrl);
+        setIsHighResLoaded(false);
         const img = new Image();
         img.src = highResUrl;
         img.onload = () => {
             setDisplayIconUrl(highResUrl);
             setIsHighResLoaded(true);
         };
-    }, [highResUrl]);
+        img.onerror = () => {
+            setDisplayIconUrl(app.icon);
+            setIsHighResLoaded(true);
+        };
+    }, [app.icon, highResUrl, lowResUrl]);
 
     const bgGradient = CATEGORY_GRADIENTS[app.category] || CATEGORY_GRADIENTS['Default'];
     const needsUpdate = isUpdateAvailable;
     const isInstalled = !!localVersion;
     const isUpToDate = isInstalled && !needsUpdate;
     const isFallbackMode = app.latestVersion === "Unknown" || app.version === "View on GitHub";
+    const hasDownloadTarget = !!(
+        app.downloadUrl && app.downloadUrl !== '#'
+        || (app.variants && app.variants.length > 0)
+        || (app.availableVersions && app.availableVersions.length > 0)
+    );
+    const isUnavailable = !readyFileName
+        && !cleanupFileName
+        && !isInstalled
+        && !hasDownloadTarget
+        && app.latestVersion === 'Latest'
+        && app.size === 'Varies';
 
     const rawUrl = app.downloadUrl || '';
     const cleanUrl = rawUrl.toLowerCase();
@@ -436,7 +457,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
     };
 
     const handleAction = async (url?: string) => {
-        if (isInstalling || activeDownloadId || isScanning) return;
+        if (isInstalling || activeDownloadId || isScanning || isUnavailable) return;
         if (url) { checkMicroGAndDownload(url); return; }
         if (readyFileName) { onDownload(app, url); return; }
         if (!targetVersion && app.availableVersions && app.availableVersions.length > 1) { setShowVersionSelector(true); return; }
@@ -503,7 +524,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
         // 2. DOWNLOAD IN PROGRESS
         if (isActuallyDownloading) {
             return (
-                <div className="w-full h-14 bg-theme-element rounded-2xl relative overflow-hidden flex items-center justify-between border border-theme-border animate-fade-in">
+                <div className="w-full h-14 bg-theme-element rounded-2xl relative overflow-hidden flex items-center justify-between animate-fade-in">
                     <div className="flex-1 relative h-full flex items-center justify-center">
                         <div className="absolute left-0 top-0 bottom-0 transition-all duration-300 ease-out bg-primary/20" style={{ width: `${currentProgress || 0}%` }}></div>
                         <div className="relative z-10 flex items-center gap-3">
@@ -511,7 +532,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
                             <span className="font-black text-theme-text text-sm tracking-tighter">{Math.floor(currentProgress || 0)}%</span>
                         </div>
                     </div>
-                    <button onClick={(e) => { e.stopPropagation(); onCancelDownload && activeDownloadId && onCancelDownload(app, activeDownloadId); }} className="w-12 h-full rounded-r-2xl flex items-center justify-center hover:bg-red-500 hover:text-white text-theme-sub transition-colors border-l border-theme-border group"><i className="fas fa-times text-sm group-active:scale-90"></i></button>
+                    <button onClick={(e) => { e.stopPropagation(); onCancelDownload && activeDownloadId && onCancelDownload(app, activeDownloadId); }} className="w-12 h-full rounded-r-2xl flex items-center justify-center hover:bg-red-500 hover:text-white text-theme-sub transition-colors group"><i className="fas fa-times text-sm group-active:scale-90"></i></button>
                 </div>
             );
         }
@@ -531,7 +552,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
             return (
                 <div className="flex gap-3 animate-fade-in">
                     <button onClick={handleLaunch} className="flex-1 py-4 rounded-2xl font-bold text-lg shadow-sm flex items-center justify-center gap-2 bg-green-500 text-white hover:bg-green-600 transition-colors active:scale-95"><i className="fas fa-play"></i><span>Open</span></button>
-                    <button onClick={handleExport} className="w-16 rounded-2xl bg-theme-element border border-theme-border flex items-center justify-center text-theme-sub hover:text-primary transition-colors active:scale-95 group relative" title="Export APK to Downloads"><i className="fas fa-file-export text-xl group-hover:scale-110 transition-transform"></i><span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full border-2 border-surface"></span></button>
+                    <button onClick={handleExport} className="w-16 rounded-2xl bg-theme-element flex items-center justify-center text-theme-sub hover:text-primary transition-colors active:scale-95 group relative" title="Export APK to Downloads"><i className="fas fa-file-export text-xl group-hover:scale-110 transition-transform"></i><span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full border-2 border-surface"></span></button>
                 </div>
             );
         }
@@ -546,25 +567,25 @@ const AppDetail: React.FC<AppDetailProps> = ({
             <div className="flex gap-3">
                 <button
                     onClick={() => handleAction()}
-                    disabled={isInstalling || isFallbackMode}
-                    className={`flex-1 py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95 ${isFallbackMode ? 'bg-theme-element text-theme-sub cursor-not-allowed border border-theme-border' : isInstalling ? 'bg-theme-element text-theme-sub cursor-wait border border-theme-border' : isExternalSource ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-500/30' : needsUpdate ? 'bg-acid text-black hover:bg-acid/90 shadow-acid/30' : 'bg-primary text-white hover:bg-primary/90 shadow-primary/30'}`}
+                    disabled={isInstalling || isFallbackMode || isUnavailable}
+                    className={`flex-1 py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95 ${isFallbackMode || isUnavailable ? 'bg-theme-element text-theme-sub cursor-not-allowed' : isInstalling ? 'bg-theme-element text-theme-sub cursor-wait' : isExternalSource ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-500/30' : needsUpdate ? 'bg-acid text-black hover:bg-acid/90 shadow-acid/30' : 'bg-primary text-white hover:bg-primary/90 shadow-primary/30'}`}
                 >
-                    {isInstalling ? <><div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div><span>Installing...</span></> : isFallbackMode ? <><i className="fas fa-external-link-alt"></i><span>View on GitHub</span></> : isExternalSource ? <><i className="fas fa-external-link-alt"></i><span>Get from Source</span></> : needsUpdate ? <><i className="fas fa-sync-alt"></i><span>Update Now</span></> : app.platform === Platform.PC ? <><i className="fas fa-desktop"></i><span>Get on PC</span></> : <><i className="fas fa-download"></i><span>Download</span></>}
+                    {isInstalling ? <><div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div><span>Installing...</span></> : isUnavailable ? <><i className="fas fa-circle-exclamation"></i><span>Currently Unavailable</span></> : isFallbackMode ? <><i className="fas fa-external-link-alt"></i><span>View on GitHub</span></> : isExternalSource ? <><i className="fas fa-external-link-alt"></i><span>Get from Source</span></> : needsUpdate ? <><i className="fas fa-sync-alt"></i><span>Update Now</span></> : app.platform === Platform.PC ? <><i className="fas fa-desktop"></i><span>Get on PC</span></> : <><i className="fas fa-download"></i><span>Download</span></>}
                 </button>
 
-                {needsUpdate && !isInstalling && !isFallbackMode && (
+                {needsUpdate && !isInstalling && !isFallbackMode && !isUnavailable && (
                     <div className="relative">
                         <button
                             onClick={() => { setShowIgnoreMenu(!showIgnoreMenu); if (!showIgnoreMenu) Haptics.impact({ style: ImpactStyle.Light }); }}
-                            className={`w-14 h-full rounded-2xl border transition-all active:scale-95 flex items-center justify-center ${showIgnoreMenu ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'bg-theme-element text-theme-sub border-theme-border hover:text-primary'}`}
+                            className={`w-14 h-full rounded-2xl transition-all active:scale-95 flex items-center justify-center ${showIgnoreMenu ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-theme-element text-theme-sub hover:text-primary'}`}
                             title="Ignore Update Options"
                         >
                             <i className={`fas fa-eye-slash transition-transform duration-300 ${showIgnoreMenu ? 'rotate-12' : ''}`}></i>
                         </button>
 
                         {showIgnoreMenu && (
-                            <div className="absolute bottom-full right-0 mb-3 w-60 bg-card border border-theme-border rounded-2xl shadow-2xl overflow-hidden animate-slide-up z-50">
-                                <div className="p-3 border-b border-theme-border bg-theme-element/30">
+                            <div className="absolute bottom-full right-0 mb-3 w-60 bg-card rounded-2xl shadow-2xl overflow-hidden animate-slide-up z-50">
+                                <div className="p-3 bg-theme-element/30">
                                     <span className="text-[10px] font-bold text-theme-sub uppercase tracking-widest">Ignore Update</span>
                                 </div>
                                 <div className="flex flex-col">
@@ -650,7 +671,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-[100] bg-surface flex flex-col animate-slide-up overflow-hidden">
+        <div className="fixed inset-0 z-[100] bg-surface flex flex-col animate-slide-up overflow-hidden compact-allow">
             <div className="absolute top-0 left-0 right-0 h-96 overflow-hidden -z-10 opacity-30 dark:opacity-20 pointer-events-none">
                 <div className="absolute inset-0 bg-gradient-to-b from-current to-surface text-primary/30"></div>
                 <img src={displayIconUrl} className="w-full h-full object-cover blur-3xl scale-150 transition-opacity duration-1000" alt="" />
@@ -658,11 +679,11 @@ const AppDetail: React.FC<AppDetailProps> = ({
             </div>
             <div className="flex-1 overflow-y-auto pb-40 no-scrollbar relative">
                 <div className="px-4 pb-0 pt-[calc(1rem+env(safe-area-inset-top))] flex items-center justify-between z-10 relative">
-                    <button onClick={onClose} className="w-10 h-10 rounded-full bg-theme-element/80 border border-theme-border backdrop-blur-md flex items-center justify-center hover:bg-theme-hover transition-colors text-theme-text shadow-sm"><i className="fas fa-arrow-left"></i></button>
+                    <button onClick={onClose} className="w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md flex items-center justify-center hover:bg-theme-hover transition-colors text-theme-text shadow-sm"><i className="fas fa-arrow-left"></i></button>
                     <div className="flex gap-3">
-                        <button onClick={handleFavoriteToggle} className={`w-10 h-10 rounded-full bg-theme-element/80 border border-theme-border backdrop-blur-md flex items-center justify-center transition-colors shadow-sm ${isFavorite ? 'text-rose-500' : 'text-theme-text hover:bg-theme-hover'}`}><i className={`${isFavorite ? 'fas' : 'far'} fa-heart`}></i></button>
-                        <button onClick={handleShare} className="w-10 h-10 rounded-full bg-theme-element/80 border border-theme-border backdrop-blur-md flex items-center justify-center hover:bg-theme-hover transition-colors text-theme-text shadow-sm"><i className="fas fa-share-alt"></i></button>
-                        <button onClick={() => { Haptics.impact({ style: ImpactStyle.Light }); const subject = `Report Issue: ${app.name}`; window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}`; }} className="w-10 h-10 rounded-full bg-theme-element/80 border border-theme-border backdrop-blur-md text-theme-sub flex items-center justify-center hover:text-red-500 transition-colors shadow-sm"><i className="fas fa-flag"></i></button>
+                        <button onClick={handleFavoriteToggle} className={`w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md flex items-center justify-center transition-colors shadow-sm ${isFavorite ? 'text-rose-500' : 'text-theme-text hover:bg-theme-hover'}`}><i className={`${isFavorite ? 'fas' : 'far'} fa-heart`}></i></button>
+                        <button onClick={handleShare} className="w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md flex items-center justify-center hover:bg-theme-hover transition-colors text-theme-text shadow-sm"><i className="fas fa-share-alt"></i></button>
+                        <button onClick={() => { Haptics.impact({ style: ImpactStyle.Light }); const subject = `Report Issue: ${app.name}`; window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}`; }} className="w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md text-theme-sub flex items-center justify-center hover:text-red-500 transition-colors shadow-sm"><i className="fas fa-flag"></i></button>
                     </div>
                 </div>
                 <div className="px-6 pt-6 pb-6 flex gap-5 items-start">
@@ -678,20 +699,23 @@ const AppDetail: React.FC<AppDetailProps> = ({
                     </div>
                 </div>
                 <div className="px-6 mb-6 flex flex-wrap gap-2">
-                    <span className="px-3 py-1 rounded-lg bg-theme-element text-theme-sub text-xs font-bold uppercase tracking-wide border border-theme-border">{app.category}</span>
-                    {cleanupFileName ? <span className="px-3 py-1 rounded-lg bg-acid/20 text-acid-dark dark:text-acid text-xs font-bold uppercase tracking-wide border border-acid/30 animate-pulse">Pending Cleanup</span> : readyFileName ? <span className="px-3 py-1 rounded-lg bg-primary/20 text-primary text-xs font-bold uppercase tracking-wide border border-primary/30 animate-pulse">{isInstalling ? 'Installing...' : 'Ready to Install'}</span> : needsUpdate ? <span className="px-3 py-1 rounded-lg bg-acid/20 text-acid-dark dark:text-acid text-xs font-bold uppercase tracking-wide border border-acid/30 animate-pulse">Update Available</span> : isUpToDate ? <span className="px-3 py-1 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-bold uppercase tracking-wide border border-green-500/20">Installed v{localVersion}</span> : null}
+                    <span className="px-3 py-1 rounded-lg bg-theme-element text-theme-sub text-xs font-bold uppercase tracking-wide">{app.category}</span>
+                    {app.patches && app.patches.length > 0 && <span className="px-3 py-1 rounded-lg bg-primary/10 text-primary text-xs font-bold uppercase tracking-wide flex items-center gap-1"><i className="fas fa-puzzle-piece text-[8px]"></i>{app.patches.length} Patches</span>}
+                    {cleanupFileName ? <span className="px-3 py-1 rounded-lg bg-acid/20 text-acid-dark dark:text-acid text-xs font-bold uppercase tracking-wide animate-pulse">Pending Cleanup</span> : readyFileName ? <span className="px-3 py-1 rounded-lg bg-primary/20 text-primary text-xs font-bold uppercase tracking-wide animate-pulse">{isInstalling ? 'Installing...' : 'Ready to Install'}</span> : needsUpdate ? <span className="px-3 py-1 rounded-lg bg-acid/20 text-acid-dark dark:text-acid text-xs font-bold uppercase tracking-wide animate-pulse">Update Available</span> : isUpToDate ? <span className="px-3 py-1 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-bold uppercase tracking-wide">Installed v{localVersion}</span> : null}
                 </div>
                 <div className="px-6 mb-6">
-                    <div className="flex items-center justify-between bg-card border border-theme-border rounded-2xl p-4 shadow-sm">
-                        <div className="flex flex-col items-center flex-1 border-r border-theme-border"><span className="font-black text-theme-text text-lg">{app.platform === Platform.ANDROID ? <i className="fab fa-android text-green-500 text-2xl"></i> : app.platform === Platform.TV ? <i className="fas fa-tv text-indigo-500 text-2xl"></i> : <i className="fab fa-windows text-blue-500 text-2xl"></i>}</span><span className="text-[10px] text-theme-sub font-bold uppercase mt-1">{app.platform}</span></div>
-                        <div className="flex flex-col items-center flex-1 border-r border-theme-border"><span className="font-black text-theme-text text-lg truncate max-w-[80px]">{app.latestVersion.replace(/^v/, '')}</span><span className="text-[10px] text-theme-sub font-bold uppercase mt-1">Version</span></div>
+                    <div className="flex items-center justify-between bg-card rounded-2xl p-4 shadow-sm orion-shadow-surface">
+                        <div className="flex flex-col items-center flex-1"><span className="font-black text-theme-text text-lg">{app.platform === Platform.ANDROID ? <i className="fab fa-android text-green-500 text-2xl"></i> : app.platform === Platform.TV ? <i className="fas fa-tv text-indigo-500 text-2xl"></i> : <i className="fab fa-windows text-blue-500 text-2xl"></i>}</span><span className="text-[10px] text-theme-sub font-bold uppercase mt-1">{app.platform}</span></div>
+                        <div className="w-px h-8 bg-theme-border/40"></div>
+                        <div className="flex flex-col items-center flex-1"><span className="font-black text-theme-text text-lg truncate max-w-[80px]">{app.latestVersion.replace(/^v/, '')}</span><span className="text-[10px] text-theme-sub font-bold uppercase mt-1">Version</span></div>
+                        <div className="w-px h-8 bg-theme-border/40"></div>
                         <div className="flex flex-col items-center flex-1"><span className="font-black text-theme-text text-lg">{app.size}</span><span className="text-[10px] text-theme-sub font-bold uppercase mt-1">Size</span></div>
                     </div>
                 </div>
 
                 {app.repoUrl && app.repoUrl !== '#' && (
                     <div className="px-6 mb-6">
-                        <button onClick={() => { Haptics.selection(); window.open(app.repoUrl, '_blank'); }} className="w-full py-4 bg-card border border-theme-border rounded-2xl flex items-center justify-center gap-3 hover:bg-theme-element transition-all active:scale-[0.98] shadow-sm group">
+                        <button onClick={() => { Haptics.selection(); window.open(app.repoUrl, '_blank'); }} className="w-full py-4 bg-card rounded-2xl flex items-center justify-center gap-3 hover:bg-theme-element transition-all active:scale-[0.98] shadow-sm group">
                             {app.repoUrl.includes('gitlab') ? (
                                 <i className="fab fa-gitlab text-orange-500 text-2xl group-hover:scale-110 transition-transform"></i>
                             ) : app.repoUrl.includes('codeberg') ? (
@@ -716,29 +740,51 @@ const AppDetail: React.FC<AppDetailProps> = ({
                         ))}
                     </div>
                 </div>
-                <div className="px-6 mb-8"><h3 className="text-lg font-bold text-theme-text mb-3">About this app</h3><p className="text-theme-sub leading-relaxed whitespace-pre-wrap font-medium text-sm">{app.description}</p></div>
-                <div className="h-px bg-theme-border mx-6 mb-8"></div>
                 <div className="px-6 mb-8">
-                    <h3 className="text-lg font-bold text-theme-text mb-4">App info</h3>
-                    <div className="grid grid-cols-1 gap-1">
-                        {isInstalled && <div className="flex justify-between items-center py-3 border-b border-theme-border"><span className="text-theme-sub font-medium text-sm">Installed Version</span><span className="text-theme-text font-bold text-sm">{localVersion}</span></div>}
-                        <div className="flex justify-between items-center py-3 border-b border-theme-border"><span className="text-theme-sub font-medium text-sm">Developer</span><span className="text-theme-text font-bold text-sm text-primary">{app.author}</span></div>
-                        <div className="flex justify-between items-center py-3 border-b border-theme-border"><span className="text-theme-sub font-medium text-sm">Size</span><span className="text-theme-text font-bold text-sm">{app.size}</span></div>
+                    <h3 className="text-sm font-black text-theme-sub uppercase tracking-widest mb-3">About</h3>
+                    <p className="text-theme-text leading-relaxed font-medium text-sm">{app.description}</p>
+                </div>
 
-                        {/* Source Display Logic */}
-                        {app.githubRepo && <div className="flex justify-between items-center py-3 border-b border-theme-border"><span className="text-theme-sub font-medium text-sm">GitHub</span><span className="text-theme-text font-mono text-xs opacity-70 truncate max-w-[150px]">{app.githubRepo}</span></div>}
-                        {app.gitlabRepo && <div className="flex justify-between items-center py-3 border-b border-theme-border"><span className="text-theme-sub font-medium text-sm">GitLab</span><span className="text-theme-text font-mono text-xs opacity-70 truncate max-w-[150px]">{app.gitlabRepo}</span></div>}
-                        {app.codebergRepo && <div className="flex justify-between items-center py-3 border-b border-theme-border"><span className="text-theme-sub font-medium text-sm">Codeberg</span><span className="text-theme-text font-mono text-xs opacity-70 truncate max-w-[150px]">{app.codebergRepo}</span></div>}
+                {app.patches && app.patches.length > 0 && (
+                    <div className="px-6 mb-8">
+                        <div className="rounded-2xl p-5 border-2 border-dashed border-primary/25">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="w-8 h-8 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
+                                    <i className="fas fa-puzzle-piece text-sm"></i>
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-theme-text">Patches Applied</h3>
+                                    <p className="text-[10px] text-theme-sub font-bold">{app.patches.length} modifications</p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {[...app.patches].sort((a, b) => a.length - b.length).map((patch, i) => (
+                                    <span key={i} className="px-3 py-1 rounded-full bg-primary/8 text-primary text-[10px] font-bold border border-primary/15">{patch}</span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
-                        {app.packageName && <div className="flex justify-between items-center py-3 border-b border-theme-border"><span className="text-theme-sub font-medium text-sm">Package</span><span className="text-theme-text font-mono text-xs opacity-70 truncate max-w-[150px]">{app.packageName}</span></div>}
+                <div className="h-px bg-theme-border/40 mx-6 mb-8"></div>
+                <div className="px-6 mb-8">
+                    <h3 className="text-sm font-black text-theme-sub uppercase tracking-widest mb-4">App Info</h3>
+                    <div className="bg-card rounded-2xl p-4 shadow-sm orion-shadow-surface space-y-0">
+                        {isInstalled && <div className="flex justify-between items-center py-3"><span className="text-theme-sub font-medium text-sm">Installed</span><span className="text-theme-text font-bold text-sm">{localVersion}</span></div>}
+                        <div className="flex justify-between items-center py-3"><span className="text-theme-sub font-medium text-sm">Developer</span><span className="text-theme-text font-bold text-sm text-primary">{app.author}</span></div>
+                        <div className="flex justify-between items-center py-3"><span className="text-theme-sub font-medium text-sm">Size</span><span className="text-theme-text font-bold text-sm">{app.size}</span></div>
+                        {app.githubRepo && <div className="flex justify-between items-center py-3"><span className="text-theme-sub font-medium text-sm">GitHub</span><span className="text-theme-text font-mono text-xs opacity-70 truncate max-w-[150px]">{app.githubRepo}</span></div>}
+                        {app.gitlabRepo && <div className="flex justify-between items-center py-3"><span className="text-theme-sub font-medium text-sm">GitLab</span><span className="text-theme-text font-mono text-xs opacity-70 truncate max-w-[150px]">{app.gitlabRepo}</span></div>}
+                        {app.codebergRepo && <div className="flex justify-between items-center py-3"><span className="text-theme-sub font-medium text-sm">Codeberg</span><span className="text-theme-text font-mono text-xs opacity-70 truncate max-w-[150px]">{app.codebergRepo}</span></div>}
+                        {app.packageName && <div className="flex justify-between items-center py-3"><span className="text-theme-sub font-medium text-sm">Package</span><span className="text-theme-text font-mono text-xs opacity-70 truncate max-w-[150px]">{app.packageName}</span></div>}
                     </div>
                 </div>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 p-6 bg-surface/90 backdrop-blur-xl border-t border-theme-border z-20">{renderActionButton()}</div>
+            <div className="absolute bottom-0 left-0 right-0 p-6 bg-surface/90 backdrop-blur-xl z-20">{renderActionButton()}</div>
 
             {showCleanupPrompt && (
                 <div className="absolute inset-0 z-[110] flex items-center justify-center p-6 bg-black/70 animate-fade-in">
-                    <div className="bg-surface border border-theme-border rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl relative animate-slide-up overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="bg-surface rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl relative animate-slide-up overflow-hidden" onClick={e => e.stopPropagation()}>
                         {isCleaning ? (
                             <div className="flex flex-col items-center justify-center py-4">
                                 <div className="relative mb-6">
@@ -768,11 +814,11 @@ const AppDetail: React.FC<AppDetailProps> = ({
 
             {showVersionSelector && (
                 <div className="absolute inset-0 z-[110] flex items-end sm:items-center justify-center sm:p-4 bg-black/60 animate-fade-in" onClick={() => setShowVersionSelector(false)}>
-                    <div className="bg-surface w-full max-w-sm rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 pb-8 shadow-2xl animate-slide-up flex flex-col gap-5 relative border-t sm:border border-theme-border" onClick={e => e.stopPropagation()}>
+                    <div className="bg-surface w-full max-w-sm rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 pb-8 shadow-2xl animate-slide-up flex flex-col gap-5 relative" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center"><div><h3 className="text-xl font-black text-theme-text tracking-tight">Select Version</h3><p className="text-xs text-theme-sub font-bold uppercase tracking-wider mt-1">Choose your release channel</p></div><button onClick={() => setShowVersionSelector(false)} className="w-9 h-9 rounded-full bg-theme-element flex items-center justify-center text-theme-sub hover:text-theme-text transition-colors"><i className="fas fa-times"></i></button></div>
                         <div className="space-y-3">
                             {app.availableVersions?.map(ver => (
-                                <button key={ver.version} onClick={() => { setShowVersionSelector(false); setTargetVersion(ver); proceedWithVersion(ver); }} className="w-full p-3 rounded-2xl bg-card border border-theme-border flex items-center justify-between hover:bg-theme-element active:scale-[0.98] transition-all group">
+                                <button key={ver.version} onClick={() => { setShowVersionSelector(false); setTargetVersion(ver); proceedWithVersion(ver); }} className="w-full p-3 rounded-2xl bg-card flex items-center justify-between hover:bg-theme-element active:scale-[0.98] transition-all group">
                                     <div className="flex items-center gap-4">
                                         <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl ${getStreamColor(ver.type).replace('text-white', '').replace('bg-', 'text-').replace('500', '500 bg-opacity-10')}`}><i className={`fas ${ver.type === 'Stable' ? 'fa-check-circle' : 'fa-flask'}`}></i></div>
                                         <div className="flex flex-col items-start"><div className="flex items-center gap-2"><span className="font-bold text-theme-text text-base">{ver.version}</span><span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${getStreamColor(ver.type)}`}>{ver.type}</span></div><span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider mt-0.5">{ver.date}</span></div>
@@ -787,16 +833,16 @@ const AppDetail: React.FC<AppDetailProps> = ({
 
             {showVariants && (
                 <div className="absolute inset-0 z-[110] flex items-end sm:items-center justify-center sm:p-4 bg-black/60 animate-fade-in" onClick={() => setShowVariants(false)}>
-                    <div className="bg-surface w-full max-w-sm rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 pb-8 shadow-2xl animate-slide-up flex flex-col gap-5 relative border-t sm:border border-theme-border" onClick={e => e.stopPropagation()}>
+                    <div className="bg-surface w-full max-w-sm rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 pb-8 shadow-2xl animate-slide-up flex flex-col gap-5 relative" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center"><div><h3 className="text-xl font-black text-theme-text tracking-tight">Select Architecture</h3><div className="flex items-center gap-2 mt-1"><p className="text-xs text-theme-sub font-bold uppercase tracking-wider">Target:</p><span className="text-[10px] font-mono bg-theme-element px-1.5 rounded text-theme-text">{targetVersion ? targetVersion.version : app.latestVersion}</span><span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${getStreamColor(targetVersion?.type || 'Stable')}`}>{targetVersion?.type || 'Stable'}</span></div></div><button onClick={() => setShowVariants(false)} className="w-9 h-9 rounded-full bg-theme-element flex items-center justify-center text-theme-sub hover:text-theme-text transition-colors"><i className="fas fa-times"></i></button></div>
-                        <div className="space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar pb-2">{(() => { const rawVariants = targetVersion?.variants || app.variants || []; const seen = new Set<string>(); const deduped = rawVariants.filter((v: any) => { if (seen.has(v.arch)) return false; seen.add(v.arch); return true; }); return deduped.map((v: any) => (<button key={v.url} onClick={() => { setShowVariants(false); handleAction(v.url); }} className="w-full p-3 rounded-2xl bg-card border border-theme-border flex items-center justify-between hover:bg-theme-element active:scale-[0.98] transition-all group"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl"><i className="fas fa-microchip"></i></div><div className="flex flex-col items-start"><span className="font-bold text-theme-text text-base">{v.arch}</span><span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">APK</span></div></div><i className="fas fa-download text-theme-sub group-hover:text-primary transition-colors mr-2"></i></button>)); })()}</div>
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar pb-2">{(() => { const rawVariants = targetVersion?.variants || app.variants || []; const seen = new Set<string>(); const deduped = rawVariants.filter((v: any) => { if (seen.has(v.arch)) return false; seen.add(v.arch); return true; }); return deduped.map((v: any) => (<button key={v.url} onClick={() => { setShowVariants(false); handleAction(v.url); }} className="w-full p-3 rounded-2xl bg-card flex items-center justify-between hover:bg-theme-element active:scale-[0.98] transition-all group"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl"><i className="fas fa-microchip"></i></div><div className="flex flex-col items-start"><span className="font-bold text-theme-text text-base">{v.arch}</span><span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">APK</span></div></div><i className="fas fa-download text-theme-sub group-hover:text-primary transition-colors mr-2"></i></button>)); })()}</div>
                     </div>
                 </div>
             )}
 
             {showMicroGNotice && (
                 <div className="absolute inset-0 z-[110] flex items-center justify-center p-6 bg-black/80 animate-fade-in">
-                    <div className="bg-surface border border-theme-border rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-slide-up relative">
+                    <div className="bg-surface rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-slide-up relative">
                         <button onClick={() => setShowMicroGNotice(false)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center bg-theme-element rounded-full text-theme-sub hover:text-theme-text transition-colors"><i className="fas fa-times"></i></button>
                         <div className="w-16 h-16 bg-blue-500/20 text-blue-500 rounded-2xl flex items-center justify-center text-3xl mb-4 mx-auto"><i className="fas fa-info-circle"></i></div>
                         <h3 className="text-xl font-black text-theme-text text-center mb-2 tracking-tight">MicroG Required</h3>

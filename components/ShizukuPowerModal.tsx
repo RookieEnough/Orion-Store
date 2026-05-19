@@ -288,7 +288,7 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 md:p-4 touch-none">
-        <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={onClose}></div>
+        <div className="backdrop-scrim absolute inset-0 bg-black/90 backdrop-blur-md" onClick={onClose}></div>
         
         {/* INLINE STYLES FOR PACMAN ANIMATION */}
         <style>{`
@@ -303,41 +303,39 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
             @keyframes flow { 0% { transform: translate(0, -50%); } 100% { transform: translate(-30px, -50%); } }
         `}</style>
 
-        <div className="relative w-full h-full md:h-[90vh] md:max-w-xl bg-black/80 backdrop-blur-2xl md:rounded-[2rem] border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col animate-slide-up">
+        <div className="relative w-full h-full md:h-[90vh] md:max-w-xl bg-[#0a0a0f] backdrop-blur-2xl md:rounded-[2rem] shadow-[0_0_80px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col animate-slide-up">
             
             {/* Header */}
-            <div className="shrink-0 p-6 pb-4 border-b border-white/5 bg-black/20 z-10 flex justify-between items-center relative overflow-hidden">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-purple-500 to-blue-500 opacity-70"></div>
+            <div className="shrink-0 px-6 pt-6 pb-4 z-10 flex justify-between items-center relative">
                 <div>
-                    <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 tracking-widest flex items-center gap-2">
-                        <i className="fas fa-shield-virus text-indigo-400 drop-shadow-lg"></i> ORION GUARDIAN
+                    <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2.5">
+                        <div className="w-8 h-8 bg-indigo-500/15 text-indigo-400 rounded-xl flex items-center justify-center"><i className="fas fa-shield-virus text-sm"></i></div> Guardian
                     </h2>
-                    <p className="text-[10px] text-indigo-300 font-mono uppercase mt-1 tracking-wider opacity-80">System Level Access • Rootless</p>
+                    <p className="text-[10px] text-white/30 font-medium mt-1 ml-[42px]">System Level Access • Rootless</p>
                 </div>
-                <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-all active:scale-90">
-                    <i className="fas fa-times"></i>
+                <button onClick={onClose} className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90">
+                    <i className="fas fa-times text-sm"></i>
                 </button>
             </div>
 
             {/* Mode Tabs */}
-            <div className="flex p-3 gap-2 bg-black/20 border-b border-white/5 overflow-x-auto no-scrollbar">
-                <button onClick={() => setActiveTab('permissions')} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative overflow-hidden group ${activeTab === 'permissions' ? 'bg-red-500/10 text-red-400 border border-red-500/30 shadow-[0_0_15px_rgba(248,113,113,0.1)]' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>
-                    <i className="fas fa-user-secret text-sm group-hover:scale-110 transition-transform"></i> Perms
+            <div className="flex px-4 pb-3 gap-2 overflow-x-auto no-scrollbar">
+                <button onClick={() => setActiveTab('permissions')} className={`flex-1 min-w-[80px] py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeTab === 'permissions' ? 'bg-red-500/10 text-red-400' : 'text-white/25 hover:bg-white/5 hover:text-white/50'}`}>
+                    <i className="fas fa-user-secret text-xs"></i> Perms
                 </button>
-                <button onClick={() => setActiveTab('surgeon')} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative overflow-hidden group ${activeTab === 'surgeon' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30 shadow-[0_0_15px_rgba(96,165,250,0.1)]' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>
-                    <i className="fas fa-syringe text-sm group-hover:scale-110 transition-transform"></i> Surgeon
+                <button onClick={() => setActiveTab('surgeon')} className={`flex-1 min-w-[80px] py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeTab === 'surgeon' ? 'bg-blue-500/10 text-blue-400' : 'text-white/25 hover:bg-white/5 hover:text-white/50'}`}>
+                    <i className="fas fa-syringe text-xs"></i> Surgeon
                 </button>
-                <button onClick={() => setActiveTab('debloater')} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative overflow-hidden group ${activeTab === 'debloater' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/30 shadow-[0_0_15px_rgba(251,146,60,0.1)]' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>
-                    <i className="fas fa-trash-alt text-sm group-hover:scale-110 transition-transform"></i> Debloat
+                <button onClick={() => setActiveTab('debloater')} className={`flex-1 min-w-[80px] py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${activeTab === 'debloater' ? 'bg-orange-500/10 text-orange-400' : 'text-white/25 hover:bg-white/5 hover:text-white/50'}`}>
+                    <i className="fas fa-trash-alt text-xs"></i> Debloat
                 </button>
             </div>
 
             {/* SEARCH & FILTER BAR */}
-            <div className="p-4 border-b border-white/5 bg-black/10 space-y-3">
-                <div className="relative group">
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl opacity-20 group-focus-within:opacity-50 transition duration-500 blur-sm"></div>
-                    <div className="relative flex items-center bg-[#111] border border-white/10 rounded-xl">
-                        <i className="fas fa-search absolute left-3 text-gray-500 text-xs"></i>
+            <div className="px-4 pb-3 space-y-3">
+                <div className="relative">
+                    <div className="relative flex items-center bg-white/5 rounded-xl">
+                        <i className="fas fa-search absolute left-3 text-white/20 text-xs"></i>
                         <input 
                             type="text" 
                             placeholder={activeTab === 'debloater' ? "Search system apps..." : "Search packages..."}
@@ -349,10 +347,10 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
                 </div>
 
                 {activeTab !== 'debloater' && (
-                    <div className="flex gap-2 p-1 bg-black/40 rounded-lg border border-white/5">
-                        <button onClick={() => { setAppFilter('all'); Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'all' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}>All</button>
-                        <button onClick={() => { setAppFilter('user'); Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'user' ? 'bg-emerald-500/20 text-emerald-400 shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}>User</button>
-                        <button onClick={() => { setAppFilter('system'); Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'system' ? 'bg-amber-500/20 text-amber-400 shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}>System</button>
+                    <div className="flex gap-2 p-1 bg-white/5 rounded-lg">
+                        <button onClick={() => { setAppFilter('all'); Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'all' ? 'bg-white/10 text-white' : 'text-white/25 hover:text-white/50'}`}>All</button>
+                        <button onClick={() => { setAppFilter('user'); Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'user' ? 'bg-emerald-500/20 text-emerald-400' : 'text-white/25 hover:text-white/50'}`}>User</button>
+                        <button onClick={() => { setAppFilter('system'); Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'system' ? 'bg-amber-500/20 text-amber-400' : 'text-white/25 hover:text-white/50'}`}>System</button>
                     </div>
                 )}
             </div>
@@ -362,21 +360,21 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
                 
                 {/* DEBLOATER DISCLAIMER */}
                 {activeTab === 'debloater' && !disclaimerAccepted && (
-                    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/90 p-6 animate-fade-in backdrop-blur-sm">
-                        <div className="text-center max-w-sm border border-red-500/20 bg-red-950/20 p-6 rounded-3xl shadow-2xl">
-                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/30 shadow-[0_0_30px_rgba(239,68,68,0.2)]">
-                                <i className="fas fa-radiation text-4xl text-red-500 animate-pulse"></i>
+                    <div className="backdrop-scrim absolute inset-0 z-20 flex items-center justify-center bg-black/90 p-6 animate-fade-in backdrop-blur-sm">
+                        <div className="text-center max-w-sm bg-red-950/20 p-6 rounded-3xl shadow-2xl">
+                            <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                                <i className="fas fa-radiation text-3xl text-red-500 animate-pulse"></i>
                             </div>
-                            <h3 className="text-2xl font-black text-white mb-4 tracking-tight">NUCLEAR ZONE</h3>
-                            <div className="bg-black/40 border border-red-500/10 p-4 rounded-xl mb-6 text-left">
-                                <p className="text-xs text-red-200 font-medium leading-relaxed">
-                                    <strong className="text-red-400 block mb-2 uppercase tracking-wider">⚠️ Critical Warning</strong>
+                            <h3 className="text-xl font-black text-white mb-4 tracking-tight">Nuclear Zone</h3>
+                            <div className="bg-white/5 p-4 rounded-xl mb-6 text-left">
+                                <p className="text-xs text-red-200/80 font-medium leading-relaxed">
+                                    <strong className="text-red-400 block mb-2 uppercase tracking-wider text-[10px]">⚠️ Critical Warning</strong>
                                     Uninstalling system apps can brick your device. I am not responsible for bootloops or data loss.
                                 </p>
                             </div>
                             <button 
                                 onClick={handleAgreeDisclaimer}
-                                className="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl shadow-lg shadow-red-500/20 transition-all active:scale-95 border border-red-400/20"
+                                className="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl shadow-lg shadow-red-500/20 transition-all active:scale-95"
                             >
                                 I Accept the Risk
                             </button>
@@ -394,7 +392,7 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
                         <p className="text-xs font-bold font-mono animate-pulse text-indigo-400 uppercase tracking-widest min-w-[200px] text-center opacity-80">{LOADING_TEXTS[loadingMsgIndex]}</p>
                     </div>
                 ) : error ? (
-                    <div className="p-6 text-center text-red-400 bg-red-500/5 rounded-2xl border border-red-500/20 m-4">
+                    <div className="p-6 text-center text-red-400 bg-red-500/5 rounded-2xl m-4">
                         <i className="fas fa-bug text-3xl mb-3 opacity-80"></i><p className="text-xs font-bold font-mono">{error}</p>
                     </div>
                 ) : (
@@ -407,17 +405,17 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
                                 const systemApp = app as SystemApp;
                                 const risk = getDebloatRisk(systemApp.packageName);
                                 return (
-                                    <div key={systemApp.packageName} className={`bg-white/5 border ${risk.border} rounded-2xl overflow-hidden transition-all relative group hover:bg-white/10`}>
+                                    <div key={systemApp.packageName} className={`bg-white/5 rounded-2xl overflow-hidden transition-all hover:bg-white/8`}>
                                         <div className="p-4 pl-5 flex items-center gap-4">
-                                            <div className={`w-1 h-8 rounded-full ${systemApp.isInstalled ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]'}`}></div>
+                                            <div className={`w-1 h-8 rounded-full ${systemApp.isInstalled ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <h4 className={`font-bold text-sm truncate ${systemApp.isInstalled ? 'text-white' : 'text-white/40 line-through'}`}>{systemApp.name}</h4>
-                                                    <span className={`text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider ${risk.bg} ${risk.color} border border-current opacity-80`}>{risk.label}</span>
+                                                    <span className={`text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider ${risk.bg} ${risk.color}`}>{risk.label}</span>
                                                 </div>
-                                                <p className="text-[10px] text-gray-500 font-mono truncate cursor-pointer hover:text-indigo-300 transition-colors" onClick={(e) => handleCopyPackage(e, systemApp.packageName)}>{systemApp.packageName}</p>
+                                                <p className="text-[10px] text-white/25 font-mono truncate cursor-pointer hover:text-indigo-300 transition-colors" onClick={(e) => handleCopyPackage(e, systemApp.packageName)}>{systemApp.packageName}</p>
                                             </div>
-                                            <button onClick={() => triggerToggleSystemApp(systemApp)} disabled={isBusy} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-lg active:scale-90 ${systemApp.isInstalled ? 'bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white border border-emerald-500/30'}`}>
+                                            <button onClick={() => triggerToggleSystemApp(systemApp)} disabled={isBusy} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 ${systemApp.isInstalled ? 'bg-red-500/15 text-red-400 hover:bg-red-500 hover:text-white' : 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500 hover:text-white'}`}>
                                                 <i className={`fas ${isBusy ? 'fa-circle-notch fa-spin' : systemApp.isInstalled ? 'fa-trash' : 'fa-rotate-left'}`}></i>
                                             </button>
                                         </div>
@@ -428,37 +426,37 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
                             const dApp = app as DangerousApp;
                             const risk = getRiskLevel(dApp.permissions.length);
                             return (
-                                <div key={dApp.packageName} className={`bg-white/5 border border-white/5 rounded-2xl overflow-hidden transition-all hover:border-white/10 ${isExpanded ? 'bg-white/10 border-white/20' : ''}`}>
+                                <div key={dApp.packageName} className={`bg-white/5 rounded-2xl overflow-hidden transition-all hover:bg-white/8 ${isExpanded ? 'bg-white/8' : ''}`}>
                                     <div className="p-4 flex items-center gap-4 cursor-pointer" onClick={() => setExpandedApp(isExpanded ? null : dApp.packageName)}>
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shadow-inner transition-colors ${isExpanded ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-black/40 border-white/10 text-gray-500'}`}>
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${isExpanded ? 'bg-indigo-500/15 text-indigo-400' : 'bg-white/5 text-white/30'}`}>
                                             <i className={`fas ${activeTab === 'surgeon' ? 'fa-box-open' : 'fa-shield-halved'}`}></i>
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2">
                                                 <h4 className="text-white font-bold text-sm truncate">{dApp.name}</h4>
-                                                {dApp.isSystem && <span className="text-[8px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded border border-amber-500/30 font-black">SYS</span>}
+                                                {dApp.isSystem && <span className="text-[8px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded font-black">SYS</span>}
                                             </div>
-                                            <p className="text-[10px] text-gray-500 font-mono truncate hover:text-indigo-300 transition-colors" onClick={(e) => handleCopyPackage(e, dApp.packageName)}>{dApp.packageName}</p>
+                                            <p className="text-[10px] text-white/25 font-mono truncate hover:text-indigo-300 transition-colors" onClick={(e) => handleCopyPackage(e, dApp.packageName)}>{dApp.packageName}</p>
                                         </div>
                                         {activeTab === 'permissions' ? (
-                                            <div className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border ${risk.bg} ${risk.color} ${risk.border}`}>{dApp.permissions.length} Flags</div>
+                                            <div className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${risk.bg} ${risk.color}`}>{dApp.permissions.length} Flags</div>
                                         ) : (
-                                            <button onClick={(e) => { e.stopPropagation(); handleExtract(dApp); }} disabled={isBusy} className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center justify-center hover:bg-blue-500 hover:text-white transition-all active:scale-90">
+                                            <button onClick={(e) => { e.stopPropagation(); handleExtract(dApp); }} disabled={isBusy} className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center hover:bg-blue-500 hover:text-white transition-all active:scale-90">
                                                 <i className={`fas ${isBusy ? 'fa-circle-notch fa-spin' : 'fa-download'}`}></i>
                                             </button>
                                         )}
                                     </div>
                                     {isExpanded && activeTab === 'permissions' && (
-                                        <div className="px-4 pb-4 pt-0 animate-fade-in bg-black/20">
-                                            <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-3"></div>
+                                        <div className="px-4 pb-4 pt-0 animate-fade-in">
+                                            <div className="h-px bg-white/5 mb-3"></div>
                                             <div className="grid grid-cols-1 gap-2">
                                                 {dApp.permissions.map(perm => (
-                                                    <div key={perm} className="flex items-center justify-between bg-black/40 border border-white/5 px-3 py-2 rounded-xl group hover:border-red-500/30 transition-colors">
+                                                    <div key={perm} className="flex items-center justify-between bg-white/5 px-3 py-2 rounded-xl group hover:bg-red-500/5 transition-colors">
                                                         <div className="flex items-center gap-3 overflow-hidden">
-                                                            <div className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center text-gray-400"><i className={`fas ${getPermIcon(perm)} text-[10px]`}></i></div>
-                                                            <span className="text-[10px] text-gray-300 font-mono truncate">{cleanPermName(perm)}</span>
+                                                            <div className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center text-white/30"><i className={`fas ${getPermIcon(perm)} text-[10px]`}></i></div>
+                                                            <span className="text-[10px] text-white/60 font-mono truncate">{cleanPermName(perm)}</span>
                                                         </div>
-                                                        <button onClick={() => triggerRevoke(dApp.packageName, perm)} disabled={isBusy} className="w-7 h-7 rounded-lg flex items-center justify-center bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all active:scale-90 border border-red-500/20 opacity-0 group-hover:opacity-100" title="Revoke Permission"><i className="fas fa-ban text-[10px]"></i></button>
+                                                        <button onClick={() => triggerRevoke(dApp.packageName, perm)} disabled={isBusy} className="w-7 h-7 rounded-lg flex items-center justify-center bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all active:scale-90 opacity-0 group-hover:opacity-100" title="Revoke Permission"><i className="fas fa-ban text-[10px]"></i></button>
                                                     </div>
                                                 ))}
                                             </div>
@@ -469,8 +467,8 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
                         })}
                         {filteredList.length === 0 && (
                             <div className="text-center py-12 opacity-50">
-                                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fas fa-search text-2xl text-gray-500"></i></div>
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">No signals found</p>
+                                <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4"><i className="fas fa-search text-xl text-white/20"></i></div>
+                                <p className="text-xs font-bold text-white/25 uppercase tracking-widest">No signals found</p>
                             </div>
                         )}
                     </div>
@@ -480,7 +478,7 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
             {/* CUSTOM TOAST */}
             {toast && (
                 <div className="absolute bottom-6 left-6 right-6 z-50 flex justify-center animate-slide-up">
-                    <div className={`bg-black/90 backdrop-blur-xl border pl-4 pr-2 py-2.5 rounded-2xl shadow-2xl flex items-center gap-4 max-w-sm w-full ${toast.type === 'error' ? 'border-red-500/30 shadow-red-900/20' : 'border-white/10 shadow-black/50'}`}>
+                    <div className={`bg-black/90 backdrop-blur-xl pl-4 pr-2 py-2.5 rounded-2xl shadow-2xl flex items-center gap-4 max-w-sm w-full ${toast.type === 'error' ? 'shadow-red-900/20' : 'shadow-black/50'}`}>
                         <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${toast.type === 'error' ? 'bg-red-500/20 text-red-500' : toast.type === 'success' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-indigo-500/20 text-indigo-400'}`}>
                             <i className={`fas ${toast.type === 'error' ? 'fa-bug' : toast.type === 'confirm' ? 'fa-question' : 'fa-check'}`}></i>
                         </div>
@@ -488,10 +486,10 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
                         {toast.type === 'confirm' && toast.onConfirm ? (
                             <div className="flex gap-2">
                                 <button onClick={toast.onConfirm} className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-[10px] font-black transition-colors shadow-lg shadow-red-600/20">CONFIRM</button>
-                                <button onClick={() => setToast(null)} className="w-8 h-8 rounded-xl hover:bg-white/10 text-gray-400 flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
+                                <button onClick={() => setToast(null)} className="w-8 h-8 rounded-xl hover:bg-white/10 text-white/40 flex items-center justify-center transition-colors"><i className="fas fa-times"></i></button>
                             </div>
                         ) : (
-                            <button onClick={() => setToast(null)} className="w-8 h-8 rounded-xl hover:bg-white/10 flex items-center justify-center text-gray-400 transition-colors"><i className="fas fa-times text-xs"></i></button>
+                            <button onClick={() => setToast(null)} className="w-8 h-8 rounded-xl hover:bg-white/10 flex items-center justify-center text-white/40 transition-colors"><i className="fas fa-times text-xs"></i></button>
                         )}
                     </div>
                 </div>
