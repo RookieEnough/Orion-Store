@@ -1,0 +1,105 @@
+<svg width="512" height="96" viewBox="0 0 512 96" fill="none" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+  <defs>
+    <linearGradient id="pillGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Gradient pill background -->
+  <rect x="0" y="0" width="512" height="96" rx="24" fill="url(#pillGradient)"/>
+  
+  <!-- Icon 1: Release (position x=20, centered vertically at y=12) -->
+  <g transform="translate(20, 12)">
+    <rect x="20" y="16" width="32" height="4" fill="#8EA0FF"/>
+    <rect x="32" y="12" width="8" height="4" fill="#8EA0FF"/>
+    <rect x="24" y="20" width="24" height="4" fill="#8EA0FF"/>
+    <rect x="16" y="24" width="40" height="24" fill="#6366F1"/>
+    <rect x="20" y="28" width="32" height="16" fill="#A5B4FC"/>
+    <rect x="24" y="32" width="8" height="8" fill="#1B1D2A"/>
+    <rect x="40" y="32" width="8" height="8" fill="#1B1D2A"/>
+    <rect x="28" y="40" width="16" height="4" fill="#312E81"/>
+    <rect x="8" y="32" width="4" height="4" fill="#BEF264"/>
+    <rect x="12" y="28" width="4" height="4" fill="#BEF264"/>
+    <rect x="56" y="28" width="4" height="4" fill="#BEF264"/>
+    <rect x="60" y="32" width="4" height="4" fill="#BEF264"/>
+    <rect x="20" y="48" width="8" height="4" fill="#4C1D95"/>
+    <rect x="44" y="48" width="8" height="4" fill="#4C1D95"/>
+  </g>
+  
+  <!-- Icon 2: Update (position x=100) -->
+  <g transform="translate(100, 12)">
+    <rect x="18" y="18" width="36" height="28" fill="#BEF264"/>
+    <rect x="22" y="22" width="28" height="20" fill="#D9F99D"/>
+    <rect x="26" y="28" width="8" height="8" fill="#202428"/>
+    <rect x="38" y="28" width="8" height="8" fill="#202428"/>
+    <rect x="30" y="38" width="12" height="4" fill="#65A30D"/>
+    <rect x="30" y="10" width="12" height="8" fill="#84CC16"/>
+    <rect x="26" y="14" width="4" height="4" fill="#84CC16"/>
+    <rect x="42" y="14" width="4" height="4" fill="#84CC16"/>
+    <rect x="28" y="46" width="16" height="4" fill="#84CC16"/>
+    <rect x="24" y="50" width="24" height="4" fill="#84CC16"/>
+    <rect x="20" y="54" width="32" height="4" fill="#84CC16"/>
+    <rect x="52" y="50" width="4" height="4" fill="#FDE68A"/>
+    <rect x="56" y="46" width="4" height="4" fill="#FDE68A"/>
+  </g>
+  
+  <!-- Icon 3: Install (position x=180) -->
+  <g transform="translate(180, 12)">
+    <rect x="22" y="12" width="28" height="48" rx="4" fill="#2563EB"/>
+    <rect x="26" y="16" width="20" height="32" fill="#93C5FD"/>
+    <rect x="30" y="24" width="4" height="4" fill="#172033"/>
+    <rect x="38" y="24" width="4" height="4" fill="#172033"/>
+    <rect x="30" y="32" width="12" height="4" fill="#1D4ED8"/>
+    <rect x="32" y="50" width="8" height="4" fill="#BFDBFE"/>
+    <rect x="52" y="20" width="4" height="4" fill="#BEF264"/>
+    <rect x="56" y="24" width="4" height="4" fill="#BEF264"/>
+    <rect x="52" y="28" width="4" height="4" fill="#BEF264"/>
+    <rect x="12" y="46" width="20" height="4" fill="#60A5FA"/>
+    <rect x="20" y="38" width="4" height="8" fill="#60A5FA"/>
+    <rect x="12" y="50" width="20" height="4" fill="#3B82F6"/>
+  </g>
+  
+  <!-- Icon 4: Sentinel (position x=260) -->
+  <g transform="translate(260, 12)">
+    <rect x="24" y="12" width="8" height="8" fill="#2DD4BF"/>
+    <rect x="40" y="12" width="8" height="8" fill="#2DD4BF"/>
+    <path d="M20 24H52V36C52 48 44 56 36 60C28 56 20 48 20 36V24Z" fill="#14B8A6"/>
+    <path d="M24 28H48V36C48 44 42.5 49.5 36 53C29.5 49.5 24 44 24 36V28Z" fill="#99F6E4"/>
+    <rect x="28" y="32" width="8" height="8" fill="#0F172A"/>
+    <rect x="40" y="32" width="8" height="8" fill="#0F172A"/>
+    <rect x="32" y="40" width="8" height="4" fill="#0F766E"/>
+    <rect x="12" y="30" width="4" height="4" fill="#5EEAD4"/>
+    <rect x="56" y="30" width="4" height="4" fill="#5EEAD4"/>
+  </g>
+  
+  <!-- Icon 5: Tools (position x=340) -->
+  <g transform="translate(340, 12)">
+    <rect x="18" y="24" width="36" height="24" fill="#F59E0B"/>
+    <rect x="24" y="20" width="24" height="8" fill="#FBBF24"/>
+    <rect x="22" y="28" width="28" height="16" fill="#FCD34D"/>
+    <rect x="26" y="32" width="8" height="8" fill="#3A2A10"/>
+    <rect x="38" y="32" width="8" height="8" fill="#3A2A10"/>
+    <rect x="30" y="40" width="12" height="4" fill="#B45309"/>
+    <rect x="50" y="16" width="4" height="20" fill="#94A3B8"/>
+    <rect x="54" y="12" width="8" height="4" fill="#94A3B8"/>
+    <rect x="54" y="36" width="8" height="4" fill="#94A3B8"/>
+    <rect x="58" y="16" width="4" height="20" fill="#CBD5E1"/>
+  </g>
+  
+  <!-- Icon 6: Dev (position x=420) -->
+  <g transform="translate(420, 12)">
+    <rect x="16" y="18" width="40" height="32" fill="#D946EF"/>
+    <rect x="20" y="22" width="32" height="24" fill="#F5D0FE"/>
+    <rect x="24" y="28" width="8" height="4" fill="#4A044E"/>
+    <rect x="24" y="32" width="8" height="4" fill="#4A044E"/>
+    <rect x="40" y="28" width="8" height="4" fill="#4A044E"/>
+    <rect x="40" y="32" width="8" height="4" fill="#4A044E"/>
+    <rect x="30" y="38" width="12" height="4" fill="#A21CAF"/>
+    <rect x="20" y="50" width="12" height="4" fill="#C026D3"/>
+    <rect x="36" y="50" width="16" height="4" fill="#C026D3"/>
+    <rect x="56" y="20" width="4" height="4" fill="#FDE68A"/>
+    <rect x="60" y="24" width="4" height="4" fill="#FDE68A"/>
+  </g>
+</svg>
