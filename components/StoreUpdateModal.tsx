@@ -10,12 +10,13 @@ interface StoreUpdateModalProps {
   onClose: () => void;
 }
 
-type UpdateState = 'idle' | 'downloading' | 'ready' | 'installing' | 'error';
+type UpdateState = 'idle' | 'downloading' | 'ready' | 'installing' | 'error' | 'fallback-exporting' | 'fallback-ready';
 
 const StoreUpdateModal: React.FC<StoreUpdateModalProps> = ({ currentVersion, newVersion, downloadUrl, onClose }) => {
   const [state, setState] = useState<UpdateState>('idle');
   const [progress, setProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
+  const [exportPath, setExportPath] = useState<string>('');
   const downloadIdRef = useRef<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
@@ -72,9 +73,25 @@ const StoreUpdateModal: React.FC<StoreUpdateModalProps> = ({ currentVersion, new
       onClose();
     } catch (e: any) {
       setState('error');
-      setErrorMsg('Installation failed.');
+      setErrorMsg(e?.message || 'Installation could not be started.');
     }
   }, [newVersion, onClose]);
+
+  const handleFallbackExport = useCallback(async () => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      setState('fallback-exporting');
+      const fileName = `OrionStore_${newVersion}.apk`;
+      const result = await AppTracker.exportFile({ fileName });
+      // Best-effort cleanup of scoped-storage copy after exporting to Downloads
+      try { await AppTracker.deleteFile({ fileName }); } catch {}
+      setExportPath(result?.path || 'Downloads/' + fileName);
+      setState('fallback-ready');
+    } catch (e: any) {
+      setState('error');
+      setErrorMsg(e?.message || 'Could not export APK to Downloads.');
+    }
+  }, [newVersion]);
 
   useEffect(() => {
     return () => {
@@ -82,7 +99,7 @@ const StoreUpdateModal: React.FC<StoreUpdateModalProps> = ({ currentVersion, new
     };
   }, []);
 
-  const canClose = state === 'idle' || state === 'error';
+  const canClose = state === 'idle' || state === 'error' || state === 'fallback-ready';
 
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 animate-fade-in">
@@ -92,12 +109,12 @@ const StoreUpdateModal: React.FC<StoreUpdateModalProps> = ({ currentVersion, new
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-primary/20 to-transparent -z-10"></div>
         
         <div className="p-8 flex flex-col items-center text-center">
-            <div className={`w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-2xl shadow-primary/40 transform -rotate-3 ring-1 ring-white/10 ${state === 'downloading' ? 'bg-primary text-white animate-pulse' : state === 'ready' ? 'bg-acid text-black' : state === 'error' ? 'bg-red-500 text-white' : 'bg-primary text-white'}`}>
-                <i className={`fas ${state === 'downloading' ? 'fa-spinner fa-spin' : state === 'ready' ? 'fa-check' : state === 'error' ? 'fa-exclamation-triangle' : state === 'installing' ? 'fa-cog fa-spin' : 'fa-rocket'}`}></i>
+            <div className={`w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-2xl shadow-primary/40 transform -rotate-3 ring-1 ring-white/10 ${state === 'downloading' ? 'bg-primary text-white animate-pulse' : state === 'ready' ? 'bg-acid text-black' : state === 'error' ? 'bg-red-500 text-white' : state === 'fallback-ready' ? 'bg-amber-500 text-white' : state === 'fallback-exporting' ? 'bg-amber-500 text-white animate-pulse' : 'bg-primary text-white'}`}>
+                <i className={`fas ${state === 'downloading' ? 'fa-spinner fa-spin' : state === 'ready' ? 'fa-check' : state === 'error' ? 'fa-triangle-exclamation' : state === 'installing' ? 'fa-cog fa-spin' : state === 'fallback-exporting' ? 'fa-spinner fa-spin' : state === 'fallback-ready' ? 'fa-folder-open' : 'fa-rocket'}`}></i>
             </div>
             
             <h3 className="text-2xl font-black text-theme-text mb-2 tracking-tight">
-              {state === 'downloading' ? 'Downloading...' : state === 'ready' ? 'Ready to Install' : state === 'installing' ? 'Installing...' : state === 'error' ? 'Update Failed' : 'New Update Live!'}
+              {state === 'downloading' ? 'Downloading…' : state === 'ready' ? 'Ready to Install' : state === 'installing' ? 'Installing…' : state === 'error' ? 'Update Failed' : state === 'fallback-exporting' ? 'Exporting to Downloads…' : state === 'fallback-ready' ? 'Manual Reinstall Needed' : 'New Update Live!'}
             </h3>
             
             <div className="flex items-center gap-3 mb-4 bg-theme-element px-4 py-2 rounded-2xl border border-theme-border dusk:border-transparent dark:border-transparent">
@@ -116,7 +133,28 @@ const StoreUpdateModal: React.FC<StoreUpdateModalProps> = ({ currentVersion, new
             )}
 
             {state === 'error' && (
-              <p className="text-red-400 text-sm mb-4 font-medium">{errorMsg}</p>
+              <div className="w-full mb-4 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-left">
+                <p className="text-red-400 text-sm font-medium leading-snug">{errorMsg}</p>
+                <p className="text-theme-sub text-[11px] mt-2 leading-relaxed">
+                  Tip: If the system installer keeps rejecting it, export the APK to your Downloads folder, uninstall Orion Store from system settings, then reinstall the exported APK manually.
+                </p>
+              </div>
+            )}
+
+            {state === 'fallback-ready' && (
+              <div className="w-full mb-4 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-left space-y-2">
+                <p className="text-theme-text text-sm font-bold leading-snug">APK saved to Downloads.</p>
+                <p className="text-theme-sub text-[12px] leading-relaxed">
+                  1. Long-press <span className="font-bold text-theme-text">Orion Store</span> → <span className="font-bold text-theme-text">Uninstall</span>.
+                </p>
+                <p className="text-theme-sub text-[12px] leading-relaxed">
+                  2. Open <span className="font-bold text-theme-text">Files</span> → <span className="font-bold text-theme-text">Downloads</span> → tap <span className="font-mono text-[11px] text-primary">OrionStore_{newVersion}.apk</span>.
+                </p>
+                <p className="text-theme-sub text-[12px] leading-relaxed">
+                  3. Allow install from this source if prompted, then tap <span className="font-bold text-theme-text">Install</span>.
+                </p>
+                {exportPath && <p className="text-theme-sub text-[10px] font-mono opacity-60 break-all pt-1">{exportPath}</p>}
+              </div>
             )}
 
             {state === 'idle' && (
@@ -147,12 +185,31 @@ const StoreUpdateModal: React.FC<StoreUpdateModalProps> = ({ currentVersion, new
               )}
 
               {state === 'error' && (
-                <button 
-                    onClick={() => { setState('idle'); setErrorMsg(''); }}
+                <>
+                  <button
+                      onClick={handleFallbackExport}
+                      className="w-full py-4 rounded-2xl bg-amber-500 text-white font-bold shadow-xl shadow-amber-500/20 transition-colors hover:bg-amber-600 flex items-center justify-center gap-2"
+                  >
+                      <i className="fas fa-folder-arrow-down"></i>
+                      <span>Export APK to Downloads</span>
+                  </button>
+                  <button
+                      onClick={() => { setState('idle'); setErrorMsg(''); setProgress(0); }}
+                      className="w-full py-3 rounded-2xl bg-theme-element text-theme-text font-bold transition-colors hover:bg-theme-border flex items-center justify-center gap-2"
+                  >
+                      <i className="fas fa-redo"></i>
+                      <span>Try Again</span>
+                  </button>
+                </>
+              )}
+
+              {state === 'fallback-ready' && (
+                <button
+                    onClick={onClose}
                     className="w-full py-4 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 transition-colors hover:bg-primary/90 flex items-center justify-center gap-2"
                 >
-                    <i className="fas fa-redo"></i>
-                    <span>Try Again</span>
+                    <i className="fas fa-check"></i>
+                    <span>Got it</span>
                 </button>
               )}
                 

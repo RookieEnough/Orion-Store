@@ -59,9 +59,19 @@ const LeaderboardSubmitModal: React.FC<LeaderboardSubmitModalProps> = ({ onClose
   
   const [status, setStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
-  const [username, setUsername] = useState('');
+  // Auto-load saved profile if available (persists across submissions to prevent multiple aliases)
+  const savedProfile = settings.userProfile;
+  const [username, setUsername] = useState(savedProfile?.name || '');
   // Fix: Explicitly assert that CHARACTERS[0] exists to prevent undefined type
-  const [selectedChar, setSelectedChar] = useState(CHARACTERS[0]!);
+  const [selectedChar, setSelectedChar] = useState(() => {
+    if (savedProfile?.avatarId) {
+      const match = CHARACTERS.find(c => c.id === savedProfile.avatarId);
+      if (match) return match;
+    }
+    return CHARACTERS[0]!;
+  });
+  // Profile is locked the moment a user saves it — name + avatar are one-time identity per device
+  const isProfileLocked = !!savedProfile;
   
   // Store the full list here
   const [fullBlocklist, setFullBlocklist] = useState<string[]>(LOCAL_BANNED_TERMS);
@@ -230,6 +240,13 @@ const LeaderboardSubmitModal: React.FC<LeaderboardSubmitModalProps> = ({ onClose
 
           setStatus('success');
           settings.registerSubmission();
+          settings.registerLeaderboardSubmission();
+          // Persist the profile locally so future claims auto-use the same identity
+          settings.setUserProfile({
+            name: username.trim(),
+            avatarId: selectedChar.id,
+            avatarUrl: selectedChar.url,
+          });
 
       } catch (e: any) {
           setStatus('error');
@@ -277,35 +294,63 @@ const LeaderboardSubmitModal: React.FC<LeaderboardSubmitModalProps> = ({ onClose
                             </div>
                         </div>
 
-                        {/* Character Selector */}
-                        <div>
-                            <label className="block text-center text-xs font-bold text-theme-sub mb-3 uppercase tracking-wider">Choose Your Avatar</label>
-                            <div className="grid grid-cols-5 gap-3">
-                                {CHARACTERS.map((char) => (
-                                    <div 
-                                        key={char.id}
-                                        onClick={() => setSelectedChar(char)}
-                                        className={`aspect-square rounded-full p-1 cursor-pointer transition-all duration-300 ${selectedChar?.id === char.id ? 'bg-primary scale-110 shadow-lg shadow-primary/30' : 'bg-theme-element hover:bg-theme-hover'}`}
-                                    >
-                                        <img src={char.url} alt={char.name} className="w-full h-full rounded-full bg-white" />
+                        {/* When the user has already set a profile we show it read-only —
+                            no avatar grid, no name input. Identity is one-time on About tab. */}
+                        {isProfileLocked ? (
+                            <div className="rounded-3xl bg-gradient-to-br from-primary/10 to-neon/10 border border-primary/25 p-5 flex flex-col items-center gap-3">
+                                <div className="relative">
+                                    <div className="w-20 h-20 rounded-full bg-white/90 p-1 shadow-lg shadow-primary/20">
+                                        <img src={selectedChar?.url} alt="" className="w-full h-full rounded-full object-cover" />
                                     </div>
-                                ))}
+                                    <span className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center shadow-md border-2 border-surface">
+                                        <i className="fas fa-shield-halved text-[10px]"></i>
+                                    </span>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-theme-sub">Submitting As</p>
+                                    <p className="text-2xl font-black text-theme-text mt-0.5">{savedProfile?.name}</p>
+                                </div>
+                                <div className="mt-1 inline-flex flex-col items-center">
+                                    <div className="bg-primary/10 border border-primary/20 px-3 py-1.5 rounded-full flex items-center gap-2">
+                                        <i className="fas fa-lock text-[10px] text-primary"></i>
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-primary">Alias Secured</span>
+                                    </div>
+                                    <span className="mt-2 text-[9px] text-theme-sub uppercase tracking-wider font-bold">Forever locked to this device</span>
+                                </div>
                             </div>
-                            <p className="text-center text-[10px] font-bold text-theme-text mt-2 opacity-60">{selectedChar?.name}</p>
-                        </div>
+                        ) : (
+                            <>
+                                {/* Character Selector */}
+                                <div>
+                                    <label className="block text-center text-xs font-bold text-theme-sub mb-3 uppercase tracking-wider">Choose Your Avatar</label>
+                                    <div className="grid grid-cols-5 gap-3">
+                                        {CHARACTERS.map((char) => (
+                                            <div
+                                                key={char.id}
+                                                onClick={() => setSelectedChar(char)}
+                                                className={`aspect-square rounded-full p-1 cursor-pointer transition-all duration-300 ${selectedChar?.id === char.id ? 'bg-primary scale-110 shadow-lg shadow-primary/30' : 'bg-theme-element hover:bg-theme-hover'}`}
+                                            >
+                                                <img src={char.url} alt={char.name} className="w-full h-full rounded-full bg-white" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-center text-[10px] font-bold text-theme-text mt-2 opacity-60">{selectedChar?.name}</p>
+                                </div>
 
-                        {/* Name Input */}
-                        <div>
-                            <label className="block text-xs font-bold text-theme-sub mb-2 uppercase ml-1">Your Alias</label>
-                            <input 
-                                type="text" 
-                                className="w-full bg-theme-input border border-theme-border rounded-2xl px-5 py-4 text-center font-bold text-lg focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all placeholder-theme-sub/30"
-                                placeholder="Captain Code"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                maxLength={15}
-                            />
-                        </div>
+                                {/* Name Input */}
+                                <div>
+                                    <label className="block text-xs font-bold text-theme-sub mb-2 uppercase ml-1">Your Alias (locked after first save)</label>
+                                    <input
+                                        type="text"
+                                        className="w-full bg-theme-input border border-theme-border rounded-2xl px-5 py-4 text-center font-bold text-lg focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all placeholder-theme-sub/30"
+                                        placeholder="Captain Code"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        maxLength={15}
+                                    />
+                                </div>
+                            </>
+                        )}
 
                         {/* Action Button */}
                         <div className="space-y-3">

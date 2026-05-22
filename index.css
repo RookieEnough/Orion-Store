@@ -223,11 +223,19 @@ body.native-ui .shadow-2xl {
 .app-card-optimized {
     content-visibility: auto;
     contain-intrinsic-size: 0 120px;
+    contain: layout paint style;
 }
 
 header, nav, .modal-content {
     will-change: transform, opacity;
     transform: translateZ(0);
+}
+
+/* Carousels: keep paint contained so off-screen cards don't trigger repaints */
+.no-scrollbar {
+  contain: layout paint style;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -236,6 +244,12 @@ header, nav, .modal-content {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* GPU-accelerated images for crisp scroll */
+img {
+  image-rendering: -webkit-optimize-contrast;
+  backface-visibility: hidden;
 }
 
 .safe-area-pb {
@@ -291,6 +305,39 @@ header, nav, .modal-content {
 }
 .animate-pulse-slow {
   animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* --- Maintenance Screen Animations --- */
+@keyframes orion-orbit-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.orion-orbit-spin {
+  animation: orion-orbit-spin 14s linear infinite;
+  will-change: transform;
+}
+
+@keyframes orion-pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+.orion-pulse-dot {
+  animation: orion-pulse-dot 2.4s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes orion-ambient-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.55; }
+  50% { transform: translate3d(0, -6px, 0) scale(1.04); opacity: 0.8; }
+}
+.orion-ambient-drift {
+  animation: orion-ambient-drift 9s ease-in-out infinite;
 }
 
 /* --- Lightweight Module Particle FX --- */

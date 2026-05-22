@@ -16,7 +16,12 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
-    <!-- 3. SHIZUKU PERMISSION -->
+    <!-- 3. FOREGROUND SERVICE FOR BACKGROUND DOWNLOADS (v1.3.1) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- 4. SHIZUKU PERMISSION -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <application
@@ -50,6 +55,13 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- BACKGROUND DOWNLOADS FOREGROUND SERVICE (v1.3.1) -->
+        <service
+            android:name=".DownloadForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
 
         <!-- SHIZUKU PROVIDER (CRITICAL FOR SERVICE BINDING) -->
         <provider

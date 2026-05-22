@@ -52,6 +52,15 @@ interface SettingsState {
   packageOwners: Record<string, string>; // { packageName: appId } - Ownership for duplicate package entries
   ignoredUpdates: Record<string, { type: 'week' | 'version' | 'never', timestamp?: number, version?: string }>;
   hasSeenModernUITutorial: boolean;
+  userProfile: { name: string; avatarId: string; avatarUrl: string; createdAt: number } | null;
+  customBundles: Array<{ id: string; title: string; description: string; icon: string; appIds: string[]; createdAt: number; submittedAt?: number }>;
+  removedBundleApps: Record<string, string[]>; // { bundleId: [appId, ...] } - locally removed apps from official bundles
+  extraBundleApps: Record<string, string[]>; // { bundleId: [appId, ...] } - locally added apps
+  gameXP: number;
+  dinoHighScore: number;
+  unlockedBadges: string[];
+  showcasedBadges: string[];
+  localMaintenanceMode: boolean;
 
   // Actions
   setTheme: (theme: Theme) => void;
@@ -89,6 +98,21 @@ interface SettingsState {
   setIgnoredUpdate: (appId: string, type: 'week' | 'version' | 'never', version?: string) => void;
   clearIgnoredUpdate: (appId: string) => void;
   setHasSeenModernUITutorial: (seen: boolean) => void;
+  setUserProfile: (profile: { name: string; avatarId: string; avatarUrl: string } | null) => void;
+  addCustomBundle: (bundle: { id: string; title: string; description: string; icon: string; appIds: string[] }) => void;
+  updateCustomBundle: (id: string, updates: Partial<{ title: string; description: string; icon: string; appIds: string[]; submittedAt: number }>) => void;
+  removeCustomBundle: (id: string) => void;
+  toggleBundleAppRemoval: (bundleId: string, appId: string) => void;
+  addAppToBundle: (bundleId: string, appId: string) => void;
+  removeAppFromBundleExtras: (bundleId: string, appId: string) => void;
+  resetBundleCustomizations: (bundleId: string) => void;
+  addGameXP: (amount: number) => void;
+  updateDinoHighScore: (score: number) => void;
+  unlockBadge: (badgeId: string) => void;
+  toggleShowcasedBadge: (badgeId: string) => void;
+  setShowcasedBadgeAtIndex: (index: number, badgeId: string) => void;
+  clearShowcasedBadges: () => void;
+  toggleLocalMaintenance: () => void;
 }
 
 interface DataState {
@@ -178,6 +202,15 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   packageOwners: {},
   ignoredUpdates: {},
   hasSeenModernUITutorial: false,
+  userProfile: null,
+  customBundles: [],
+  removedBundleApps: {},
+  extraBundleApps: {},
+  gameXP: 0,
+  dinoHighScore: 0,
+  unlockedBadges: [],
+  showcasedBadges: [],
+  localMaintenanceMode: false,
 
   setTheme: (theme) => set({ theme }),
   setAppFont: (appFont) => set({ appFont }),
@@ -202,7 +235,10 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   toggleHighRefreshRate: () => set((state) => ({ highRefreshRate: !state.highRefreshRate })),
   toggleHaptic: () => set((state) => ({ hapticEnabled: !state.hapticEnabled })),
   toggleGlass: () => set((state) => ({ glassEffect: !state.glassEffect })),
-  setDevUnlocked: (val) => set({ isDevUnlocked: val }),
+  setDevUnlocked: (val) => set((state) => ({ 
+    isDevUnlocked: val,
+    localMaintenanceMode: val ? state.localMaintenanceMode : false
+  })),
   setIsLegend: (val) => set({ isLegend: val }),
   incrementAdWatch: () => set((state) => {
     const newCount = state.adWatchCount + 1;
@@ -253,6 +289,84 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
     return { ignoredUpdates: next };
   }),
   setHasSeenModernUITutorial: (seen) => set({ hasSeenModernUITutorial: seen }),
+  setUserProfile: (profile) => set((state) => ({
+    userProfile: profile ? {
+      name: profile.name,
+      avatarId: profile.avatarId,
+      avatarUrl: profile.avatarUrl,
+      createdAt: state.userProfile?.createdAt ?? Date.now()
+    } : null
+  })),
+  addCustomBundle: (bundle) => set((state) => ({
+    customBundles: [...state.customBundles, { ...bundle, createdAt: Date.now() }]
+  })),
+  updateCustomBundle: (id, updates) => set((state) => ({
+    customBundles: state.customBundles.map((b) => (b.id === id ? { ...b, ...updates } : b))
+  })),
+  removeCustomBundle: (id) => set((state) => ({
+    customBundles: state.customBundles.filter((b) => b.id !== id)
+  })),
+  toggleBundleAppRemoval: (bundleId, appId) => set((state) => {
+    const current = state.removedBundleApps[bundleId] || [];
+    const exists = current.includes(appId);
+    const next = exists ? current.filter((id) => id !== appId) : [...current, appId];
+    return { removedBundleApps: { ...state.removedBundleApps, [bundleId]: next } };
+  }),
+  addAppToBundle: (bundleId, appId) => set((state) => {
+    const current = state.extraBundleApps[bundleId] || [];
+    if (current.includes(appId)) return state;
+    return { extraBundleApps: { ...state.extraBundleApps, [bundleId]: [...current, appId] } };
+  }),
+  removeAppFromBundleExtras: (bundleId, appId) => set((state) => {
+    const current = state.extraBundleApps[bundleId] || [];
+    return { extraBundleApps: { ...state.extraBundleApps, [bundleId]: current.filter((id) => id !== appId) } };
+  }),
+  resetBundleCustomizations: (bundleId) => set((state) => {
+    const removed = { ...state.removedBundleApps };
+    const extras = { ...state.extraBundleApps };
+    delete removed[bundleId];
+    delete extras[bundleId];
+    return { removedBundleApps: removed, extraBundleApps: extras };
+  }),
+  addGameXP: (amount) => set((state) => {
+    // Simple anti-cheat: capping XP gain per call and total XP
+    const cappedAmount = Math.min(amount, 50); 
+    return { gameXP: state.gameXP + cappedAmount };
+  }),
+  updateDinoHighScore: (score) => set((state) => ({
+    dinoHighScore: Math.max(state.dinoHighScore, score)
+  })),
+  unlockBadge: (badgeId) => set((state) => {
+    if (state.unlockedBadges.includes(badgeId)) return state;
+    return { unlockedBadges: [...state.unlockedBadges, badgeId] };
+  }),
+  toggleShowcasedBadge: (badgeId) => set((state) => {
+    const exists = state.showcasedBadges.includes(badgeId);
+    if (exists) {
+      return { showcasedBadges: state.showcasedBadges.filter((id) => id !== badgeId) };
+    }
+    if (state.showcasedBadges.length >= 3) {
+      return state;
+    }
+    return { showcasedBadges: [...state.showcasedBadges, badgeId] };
+  }),
+  setShowcasedBadgeAtIndex: (index, badgeId) => set((state) => {
+    if (index < 0 || index > 2) return state;
+    if (state.showcasedBadges[index] === badgeId) return state;
+    if (state.showcasedBadges.includes(badgeId)) return state;
+
+    const next = [...state.showcasedBadges];
+    if (index >= next.length) {
+      if (next.length >= 3) return state;
+      next.push(badgeId);
+    } else {
+      next[index] = badgeId;
+    }
+
+    return { showcasedBadges: next.slice(0, 3) };
+  }),
+  clearShowcasedBadges: () => set({ showcasedBadges: [] }),
+  toggleLocalMaintenance: () => set((state) => ({ localMaintenanceMode: !state.localMaintenanceMode })),
 });
 
 export const useSettingsStore = create<SettingsState>()(
@@ -294,6 +408,15 @@ export const useSettingsStore = create<SettingsState>()(
         packageOwners: state.packageOwners,
         ignoredUpdates: state.ignoredUpdates,
         hasSeenModernUITutorial: state.hasSeenModernUITutorial,
+        userProfile: state.userProfile,
+        customBundles: state.customBundles,
+        removedBundleApps: state.removedBundleApps,
+        extraBundleApps: state.extraBundleApps,
+        gameXP: state.gameXP,
+        dinoHighScore: state.dinoHighScore,
+        unlockedBadges: state.unlockedBadges,
+        showcasedBadges: state.showcasedBadges,
+        localMaintenanceMode: state.localMaintenanceMode,
       })
     }
   )

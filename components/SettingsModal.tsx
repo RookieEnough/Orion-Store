@@ -36,13 +36,44 @@ const generateHash = async (message: string): Promise<string> => {
 };
 
 const Toggle = memo(({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
-    <button 
+    <button
         onClick={onChange}
         className={`w-12 h-7 rounded-full p-1 transition-colors duration-200 ${checked ? 'bg-primary' : 'bg-theme-element border border-theme-border'}`}
     >
         <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`}></div>
     </button>
 ));
+
+// --- Identity panel: backup / restore only. Profile editing lives on the About tab. ---
+interface IdentityPanelProps {
+    handleExportIdentity: () => void;
+    handleImportIdentity: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    fileInputRef: React.RefObject<HTMLInputElement>;
+    importStatus: { msg: string; type: 'success' | 'error' | 'neutral' };
+}
+
+const IdentityPanel: React.FC<IdentityPanelProps> = memo(({ handleExportIdentity, handleImportIdentity, fileInputRef, importStatus }) => {
+    return (
+        <div className="space-y-6 animate-slide-up">
+            {/* Backup / Restore */}
+            <div className="p-5 bg-gradient-to-br from-pink-500/10 to-rose-500/10 border border-pink-500/20 rounded-2xl flex flex-col items-center text-center relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-pink-500/10">
+                <div className="w-16 h-16 rounded-full bg-pink-500 text-white flex items-center justify-center text-2xl mb-3 shadow-lg shadow-pink-500/30"><i className="fas fa-fingerprint"></i></div>
+                <h4 className="font-black text-theme-text text-lg">Save Your Progress</h4>
+                <p className="text-xs text-theme-sub mt-2 leading-relaxed max-w-xs">Orion is serverless. Your badges, levels, and stats live on this device. Export your <b>Identity File (.osf)</b> to keep them safe.</p>
+            </div>
+            <div className="space-y-3">
+                <button onClick={handleExportIdentity} className="w-full py-4 rounded-2xl bg-card border border-theme-border flex items-center justify-between px-6 hover:bg-theme-element transition-all active:scale-95 group relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
+                    <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center"><i className="fas fa-file-export"></i></div><div className="text-left"><span className="block font-bold text-theme-text">Backup Identity</span><span className="text-[10px] text-theme-sub">Save .osf file</span></div></div><i className="fas fa-download text-theme-sub group-hover:text-primary"></i>
+                </button>
+                <button onClick={() => fileInputRef.current?.click()} className="w-full py-4 rounded-2xl bg-card border border-theme-border flex items-center justify-between px-6 hover:bg-theme-element transition-all active:scale-95 group relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
+                    <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center"><i className="fas fa-file-import"></i></div><div className="text-left"><span className="block font-bold text-theme-text">Restore Identity</span><span className="text-[10px] text-theme-sub">Load .osf file</span></div></div><i className="fas fa-upload text-theme-sub group-hover:text-primary"></i>
+                </button>
+                <input type="file" ref={fileInputRef} className="hidden" accept=".osf" onChange={handleImportIdentity} />
+            </div>
+            {importStatus.msg && (<div className={`p-4 rounded-xl border flex items-center gap-3 ${importStatus.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-600' : importStatus.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-theme-element border-theme-border text-theme-sub'}`}><i className={`fas ${importStatus.type === 'success' ? 'fa-check-circle' : importStatus.type === 'error' ? 'fa-exclamation-triangle' : 'fa-info-circle'}`}></i><span className="text-xs font-bold">{importStatus.msg}</span></div>)}
+        </div>
+    );
+});
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
@@ -73,7 +104,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const selectedFont = getAppFontDefinition(settings.appFont);
 
   const menuItems = [
-      { id: 'identity', icon: 'fa-id-card', color: 'text-pink-500', bg: 'bg-pink-500/10', title: 'Identity & Backup', desc: 'Save progress, Transfer profile' },
+      { id: 'identity', icon: 'fa-id-card', color: 'text-pink-500', bg: 'bg-pink-500/10', title: 'Backup & Restore', desc: 'Save progress, Transfer profile' },
       { id: 'network', icon: 'fa-wifi', color: 'text-blue-500', bg: 'bg-blue-500/10', title: 'Network & Updates', desc: 'WiFi only, Auto-discovery' },
       { id: 'installer', icon: 'fa-box-open', color: 'text-emerald-500', bg: 'bg-emerald-500/10', title: 'Orion Xtra', desc: 'Security Suite & Shizuku' },
       { id: 'storage', icon: 'fa-broom', color: 'text-orange-500', bg: 'bg-orange-500/10', title: 'Storage & Janitor', desc: 'Auto-cleanup, Space saving' },
@@ -92,13 +123,42 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           const state = useSettingsStore.getState();
           const dataState = useDataStore.getState();
           const exportData = {
+              // Progress & legend
               adWatchCount: state.adWatchCount,
               submissionCount: state.submissionCount,
+              lastSubmissionTime: state.lastSubmissionTime,
+              lastLeaderboardSubmissionTime: state.lastLeaderboardSubmissionTime,
               isLegend: state.isLegend,
               isContributor: state.isContributor,
               isDevUnlocked: state.isDevUnlocked,
+              // Visual preferences
               theme: state.theme,
               appFont: state.appFont,
+              storeLayout: state.storeLayout,
+              isOled: state.isOled,
+              hiddenTabs: state.hiddenTabs,
+              disableAnimations: state.disableAnimations,
+              compactMode: state.compactMode,
+              highRefreshRate: state.highRefreshRate,
+              hapticEnabled: state.hapticEnabled,
+              glassEffect: state.glassEffect,
+              // Network / installer
+              autoUpdateEnabled: state.autoUpdateEnabled,
+              wifiOnly: state.wifiOnly,
+              deleteApk: state.deleteApk,
+              useShizuku: state.useShizuku,
+              useRemoteJson: state.useRemoteJson,
+              loadLocalData: state.loadLocalData,
+              // App streams & ignored updates
+              appStreams: state.appStreams,
+              ignoredUpdates: state.ignoredUpdates,
+              // Profile
+              userProfile: state.userProfile,
+              // Bundles
+              customBundles: state.customBundles,
+              removedBundleApps: state.removedBundleApps,
+              extraBundleApps: state.extraBundleApps,
+              // Favorites
               favorites: dataState.favorites,
               timestamp: Date.now()
           };
@@ -106,8 +166,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           const jsonString = JSON.stringify(exportData);
           const signature = await generateHash(jsonString);
 
-          const finalPackage = { data: exportData, sig: signature, ver: "1.0" };
-          const rawContent = btoa(JSON.stringify(finalPackage));
+          const finalPackage = { data: exportData, sig: signature, ver: "1.1" };
+          const rawContent = btoa(unescape(encodeURIComponent(JSON.stringify(finalPackage))));
           const fileName = `orion_identity_${Date.now()}.osf`;
 
           if (Capacitor.isNativePlatform()) {
@@ -138,7 +198,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       reader.onload = async (event) => {
           try {
               const raw = event.target?.result as string;
-              const jsonStr = atob(raw);
+              let jsonStr: string;
+              try {
+                  jsonStr = decodeURIComponent(escape(atob(raw)));
+              } catch {
+                  jsonStr = atob(raw);
+              }
               const pkg = JSON.parse(jsonStr);
 
               if (!pkg.data || !pkg.sig) throw new Error("Invalid Save File");
@@ -149,19 +214,48 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   return;
               }
 
+              const d = pkg.data;
               const currentState = useSettingsStore.getState();
               useSettingsStore.setState({
                   ...currentState,
-                  adWatchCount: pkg.data.adWatchCount || 0,
-                  submissionCount: pkg.data.submissionCount || 0,
-                  isLegend: pkg.data.isLegend || false,
-                  isContributor: pkg.data.isContributor || false,
-                  isDevUnlocked: pkg.data.isDevUnlocked || false,
-                  theme: pkg.data.theme || 'light',
-                  appFont: pkg.data.appFont || settings.appFont
+                  // Progress & legend
+                  adWatchCount: d.adWatchCount ?? currentState.adWatchCount,
+                  submissionCount: d.submissionCount ?? currentState.submissionCount,
+                  lastSubmissionTime: d.lastSubmissionTime ?? currentState.lastSubmissionTime,
+                  lastLeaderboardSubmissionTime: d.lastLeaderboardSubmissionTime ?? currentState.lastLeaderboardSubmissionTime,
+                  isLegend: d.isLegend ?? currentState.isLegend,
+                  isContributor: d.isContributor ?? currentState.isContributor,
+                  isDevUnlocked: d.isDevUnlocked ?? currentState.isDevUnlocked,
+                  // Visual
+                  theme: d.theme ?? currentState.theme,
+                  appFont: d.appFont ?? currentState.appFont,
+                  storeLayout: d.storeLayout ?? currentState.storeLayout,
+                  isOled: d.isOled ?? currentState.isOled,
+                  hiddenTabs: Array.isArray(d.hiddenTabs) ? d.hiddenTabs : currentState.hiddenTabs,
+                  disableAnimations: d.disableAnimations ?? currentState.disableAnimations,
+                  compactMode: d.compactMode ?? currentState.compactMode,
+                  highRefreshRate: d.highRefreshRate ?? currentState.highRefreshRate,
+                  hapticEnabled: d.hapticEnabled ?? currentState.hapticEnabled,
+                  glassEffect: d.glassEffect ?? currentState.glassEffect,
+                  // Network/installer
+                  autoUpdateEnabled: d.autoUpdateEnabled ?? currentState.autoUpdateEnabled,
+                  wifiOnly: d.wifiOnly ?? currentState.wifiOnly,
+                  deleteApk: d.deleteApk ?? currentState.deleteApk,
+                  useShizuku: d.useShizuku ?? currentState.useShizuku,
+                  useRemoteJson: d.useRemoteJson ?? currentState.useRemoteJson,
+                  loadLocalData: d.loadLocalData ?? currentState.loadLocalData,
+                  // Streams / ignored updates
+                  appStreams: (d.appStreams && typeof d.appStreams === 'object') ? d.appStreams : currentState.appStreams,
+                  ignoredUpdates: (d.ignoredUpdates && typeof d.ignoredUpdates === 'object') ? d.ignoredUpdates : currentState.ignoredUpdates,
+                  // Profile
+                  userProfile: d.userProfile ?? currentState.userProfile,
+                  // Bundles
+                  customBundles: Array.isArray(d.customBundles) ? d.customBundles : currentState.customBundles,
+                  removedBundleApps: (d.removedBundleApps && typeof d.removedBundleApps === 'object') ? d.removedBundleApps : currentState.removedBundleApps,
+                  extraBundleApps: (d.extraBundleApps && typeof d.extraBundleApps === 'object') ? d.extraBundleApps : currentState.extraBundleApps,
               });
-              if (Array.isArray(pkg.data.favorites)) {
-                  useDataStore.setState({ favorites: pkg.data.favorites });
+              if (Array.isArray(d.favorites)) {
+                  useDataStore.setState({ favorites: d.favorites });
               }
 
               setImportStatus({ msg: 'Identity restored successfully!', type: 'success' });
@@ -197,25 +291,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       }
   };
 
-  const renderIdentitySettings = () => (
-      <div className="space-y-6 animate-slide-up">
-          <div className="p-5 bg-gradient-to-br from-pink-500/10 to-rose-500/10 border border-pink-500/20 rounded-2xl flex flex-col items-center text-center relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-pink-500/10">
-              <div className="w-16 h-16 rounded-full bg-pink-500 text-white flex items-center justify-center text-2xl mb-3 shadow-lg shadow-pink-500/30"><i className="fas fa-fingerprint"></i></div>
-              <h4 className="font-black text-theme-text text-lg">Save Your Progress</h4>
-              <p className="text-xs text-theme-sub mt-2 leading-relaxed max-w-xs">Orion is serverless. Your badges, levels, and stats live on this device. Export your <b>Identity File (.osf)</b> to keep them safe.</p>
-          </div>
-          <div className="space-y-3">
-              <button onClick={handleExportIdentity} className="w-full py-4 rounded-2xl bg-card border border-theme-border flex items-center justify-between px-6 hover:bg-theme-element transition-all active:scale-95 group relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
-                  <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center"><i className="fas fa-file-export"></i></div><div className="text-left"><span className="block font-bold text-theme-text">Backup Identity</span><span className="text-[10px] text-theme-sub">Save .osf file</span></div></div><i className="fas fa-download text-theme-sub group-hover:text-primary"></i>
-              </button>
-              <button onClick={() => fileInputRef.current?.click()} className="w-full py-4 rounded-2xl bg-card border border-theme-border flex items-center justify-between px-6 hover:bg-theme-element transition-all active:scale-95 group relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
-                  <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center"><i className="fas fa-file-import"></i></div><div className="text-left"><span className="block font-bold text-theme-text">Restore Identity</span><span className="text-[10px] text-theme-sub">Load .osf file</span></div></div><i className="fas fa-upload text-theme-sub group-hover:text-primary"></i>
-              </button>
-              <input type="file" ref={fileInputRef} className="hidden" accept=".osf" onChange={handleImportIdentity} />
-          </div>
-          {importStatus.msg && (<div className={`p-4 rounded-xl border flex items-center gap-3 ${importStatus.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-600' : importStatus.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-theme-element border-theme-border text-theme-sub'}`}><i className={`fas ${importStatus.type === 'success' ? 'fa-check-circle' : importStatus.type === 'error' ? 'fa-exclamation-triangle' : 'fa-info-circle'}`}></i><span className="text-xs font-bold">{importStatus.msg}</span></div>)}
-      </div>
-  );
+  const renderIdentitySettings = () => <IdentityPanel
+      handleExportIdentity={handleExportIdentity}
+      handleImportIdentity={handleImportIdentity}
+      fileInputRef={fileInputRef}
+      importStatus={importStatus}
+  />;
 
   const renderNetworkSettings = () => (
       <div className="space-y-4 animate-slide-up">
@@ -441,6 +522,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
               <div><h4 className="font-bold text-theme-text">Enable Built-in Data</h4><p className="text-[10px] text-theme-sub mt-1">Allows loading local data gracefully before fetching remote.</p></div>
               <Toggle checked={settings.loadLocalData} onChange={settings.toggleLoadLocalData} />
+          </div>
+          <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
+              <div><h4 className="font-bold text-theme-text font-mono text-primary">Local Maintenance Mode</h4><p className="text-[10px] text-theme-sub mt-1">Force trigger the maintenance UI & game locally.</p></div>
+              <Toggle checked={settings.localMaintenanceMode} onChange={settings.toggleLocalMaintenance} />
           </div>
           <div className="bg-card border border-theme-border rounded-2xl p-4 flex items-center justify-between shadow-sm relative isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-black/5">
               <div><h4 className="font-bold text-theme-text">Simulate Network Delay</h4><p className="text-[10px] text-theme-sub mt-1">Mock slow 2G connections.</p></div>

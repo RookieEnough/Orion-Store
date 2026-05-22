@@ -260,6 +260,9 @@ const RecommendationBundlesModule: React.FC<{
 }> = ({ collection, onBundleClick }) => {
     const bundles = collection.bundles || [];
     const motionEnabled = useMotionEnabled();
+    // Per-bundle customizations so the badge count matches what users will actually see in the preview.
+    const removedBundleApps = useSettingsStore((s) => s.removedBundleApps);
+    const extraBundleApps = useSettingsStore((s) => s.extraBundleApps);
     if (bundles.length === 0) return null;
 
     return (
@@ -272,8 +275,15 @@ const RecommendationBundlesModule: React.FC<{
 
             <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto -mx-3 px-4 py-2 no-scrollbar [scroll-padding-inline:1rem]">
                 {bundles.map((bundle, index) => {
-                    const apps = bundle.apps || [];
-                    if (apps.length === 0) return null;
+                    const baseApps = bundle.apps || [];
+                    const removed = removedBundleApps[bundle.id] || [];
+                    const extras = extraBundleApps[bundle.id] || [];
+                    // Effective count = base apps minus locally-removed plus locally-added (all unique).
+                    const visibleIds = new Set<string>();
+                    baseApps.forEach((a) => { if (!removed.includes(a.id)) visibleIds.add(a.id); });
+                    extras.forEach((id) => visibleIds.add(id));
+                    const effectiveCount = visibleIds.size;
+                    if (effectiveCount === 0) return null;
 
                     return (
                         <motion.div
@@ -311,7 +321,7 @@ const RecommendationBundlesModule: React.FC<{
 
                                     <div className="mt-auto flex items-center justify-between gap-3">
                                         <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white">
-                                            {apps.length} Apps Bundled
+                                            {effectiveCount} Apps Bundled
                                         </span>
                                         <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/10 text-white/90">
                                             <i className="fas fa-arrow-right text-xs"></i>
@@ -322,6 +332,24 @@ const RecommendationBundlesModule: React.FC<{
                         </motion.div>
                     );
                 })}
+
+                <motion.button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new Event('orion:open-custom-bundle'))}
+                    initial={motionEnabled ? { opacity: 0, y: 14 } : undefined}
+                    whileInView={motionEnabled ? { opacity: 1, y: 0 } : undefined}
+                    viewport={{ once: true }}
+                    whileTap={motionEnabled ? { scale: 0.97 } : undefined}
+                    className="relative flex h-[11.4rem] w-[14.85rem] shrink-0 snap-start flex-col items-center justify-center gap-3 rounded-[2rem] border-2 border-dashed border-theme-border bg-theme-card/40 px-4 text-center text-theme-text transition-colors hover:border-theme-accent/60 hover:bg-theme-card/60"
+                >
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-theme-accent/10 text-theme-accent">
+                        <i className="fas fa-plus text-lg"></i>
+                    </span>
+                    <span className="flex flex-col gap-1">
+                        <span className="text-sm font-black tracking-tight">Create Your Bundle</span>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-theme-sub">Submit to community</span>
+                    </span>
+                </motion.button>
             </div>
         </section>
     );
