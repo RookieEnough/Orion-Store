@@ -20,6 +20,9 @@ interface StoreFiltersProps {
   showFavorites?: boolean;
   onToggleFavorites?: () => void;
   variant?: 'classic' | 'modern';
+  onProfileClick?: () => void;
+  profileAvatarUrl?: string;
+  profileInitial?: string;
 }
 
 const getModernCategoryTag = (selectedCategory: string) => (
@@ -54,7 +57,10 @@ const StoreFilters: React.FC<StoreFiltersProps> = ({
   count,
   showFavorites,
   onToggleFavorites,
-  variant = 'classic'
+  variant = 'classic',
+  onProfileClick,
+  profileAvatarUrl,
+  profileInitial,
 }) => {
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
@@ -170,6 +176,21 @@ const StoreFilters: React.FC<StoreFiltersProps> = ({
               </div>
             </div>
             
+            {/* Profile Circle */}
+            {onProfileClick && (
+              <button
+                onClick={onProfileClick}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-acid overflow-hidden shadow-sm shadow-primary/20 transition-all active:scale-90 hover:scale-105"
+                title="Profile"
+              >
+                {profileAvatarUrl ? (
+                  <img src={profileAvatarUrl} alt="" className="h-full w-full rounded-full object-cover bg-white" />
+                ) : (
+                  <span className="text-[11px] font-black text-white">{profileInitial || 'U'}</span>
+                )}
+              </button>
+            )}
+
             {/* Modern Sort Button */}
             <div className="relative shrink-0" ref={sortRef}>
               <button
@@ -303,6 +324,21 @@ const StoreFilters: React.FC<StoreFiltersProps> = ({
               </div>
             </div>
 
+            {/* Profile Circle */}
+            {onProfileClick && (
+              <button
+                onClick={onProfileClick}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-acid overflow-hidden shadow-sm shadow-primary/20 transition-all active:scale-90 hover:scale-105"
+                title="Profile"
+              >
+                {profileAvatarUrl ? (
+                  <img src={profileAvatarUrl} alt="" className="h-full w-full rounded-full object-cover bg-white" />
+                ) : (
+                  <span className="text-[11px] font-black text-white">{profileInitial || 'U'}</span>
+                )}
+              </button>
+            )}
+
             {/* Modern Sort Button */}
             <div className="relative shrink-0" ref={sortRef}>
               <button
@@ -421,6 +457,21 @@ const StoreFilters: React.FC<StoreFiltersProps> = ({
       {!isModern && (
         <div className="mx-auto flex min-w-0 w-full max-w-[56rem] items-center gap-2 px-1 sm:px-2">
           
+          {/* Profile Circle */}
+          {onProfileClick && (
+            <button
+              onClick={onProfileClick}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-acid overflow-hidden shadow-sm shadow-primary/20 transition-all active:scale-90 hover:scale-105"
+              title="Profile"
+            >
+              {profileAvatarUrl ? (
+                <img src={profileAvatarUrl} alt="" className="h-full w-full rounded-full object-cover bg-white" />
+              ) : (
+                <span className="text-[11px] font-black text-white">{profileInitial || 'U'}</span>
+              )}
+            </button>
+          )}
+
           {/* Sort Dropdown (Fixed Position) */}
           <div className="relative shrink-0" ref={sortRef}>
               <button

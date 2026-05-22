@@ -57,7 +57,7 @@ const ModernUITutorial: React.FC<ModernUITutorialProps> = ({ onOpenSettings, onC
 
   return (
     <div className="fixed inset-0 z-[160] flex items-center justify-center p-6 animate-fade-in">
-      <div className="backdrop-scrim absolute inset-0 bg-black/60 backdrop-blur-md" onClick={handleDismiss}></div>
+      <div className="backdrop-scrim absolute inset-0 bg-black/60 backdrop-blur-md"></div>
 
       <div className="relative bg-surface w-full max-w-xs rounded-[2.5rem] shadow-2xl overflow-hidden animate-slide-up flex flex-col">
         <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-primary/15 to-transparent -z-10"></div>

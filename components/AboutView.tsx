@@ -19,7 +19,7 @@ interface AboutViewProps {
   adWatchCount: number;
   profileImgError: boolean;
   setProfileImgError: (hasError: boolean) => void;
-  handleProfileClick: () => void;
+  handleProfileClick: (view?: 'profile' | 'badges', badgeIndex?: number) => void;
   setShowFAQ: (show: boolean) => void;
   onOpenAdDonation: () => void; 
   isDevUnlocked: boolean;
@@ -42,6 +42,7 @@ interface AboutViewProps {
   onTriggerDebugToast: (type: 'install' | 'error' | 'cleanup') => void;
   setDevUnlocked: (isUnlocked: boolean) => void;
   onTriggerModernUITutorial: () => void;
+  unlockedBadges: string[];
 }
 
 const WORKER_URL = "https://orion-relay.sarthaksinha5088.workers.dev/";
@@ -83,9 +84,11 @@ const AboutView: React.FC<AboutViewProps> = ({
   mirrorSource,
   onTriggerDebugToast,
   setDevUnlocked,
-  onTriggerModernUITutorial
+  onTriggerModernUITutorial,
+  unlockedBadges
 }) => {
   const hapticEnabled = useSettingsStore((state) => state.hapticEnabled); 
+  const userProfile = useSettingsStore((state) => state.userProfile);
   
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showSubmitRank, setShowSubmitRank] = useState(false);
@@ -111,6 +114,9 @@ const AboutView: React.FC<AboutViewProps> = ({
   const [pkgResult, setPkgResult] = useState<string>('');
   const [showJson, setShowJson] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<any>(null);
+  const showcasedBadges = useSettingsStore((s) => s.showcasedBadges);
+  const showcasedBadgeSlots = showcasedBadges.slice(0, 3);
+  const canSwapShowcasedBadges = showcasedBadgeSlots.length === 3;
   
   // --- AUTO FLIP BACK LOGIC ---
   useEffect(() => {
@@ -192,6 +198,12 @@ const AboutView: React.FC<AboutViewProps> = ({
         <div 
             className="w-32 h-32 mb-4 relative cursor-pointer perspective-1000"
             onClick={() => {
+                if (!userProfile) {
+                    setShowSubmitRank(true);
+                    if(hapticEnabled) Haptics.impact({ style: ImpactStyle.Medium });
+                    return;
+                }
+                
                 if (isAvatarFlipped) {
                     setShowLeaderboard(true);
                     if(hapticEnabled) Haptics.impact({ style: ImpactStyle.Medium });
@@ -244,46 +256,80 @@ const AboutView: React.FC<AboutViewProps> = ({
         <div className="relative z-0 flex flex-col items-center w-full">
             <h2 className="text-3xl font-black text-theme-text mb-1">{devProfile.name}</h2>
             
-            {(isLegend || hasBackerBadge || isDevUnlocked) && (
-                <div className="flex flex-wrap justify-center gap-2 mb-4 animate-fade-in max-w-sm">
-                    {isLegend && (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.15)] backdrop-blur-sm">
-                            <i className="fas fa-crown text-[10px] animate-bounce"></i>
-                            <span className="text-[9px] font-black tracking-widest uppercase">Legend</span>
-                        </div>
-                    )}
-                    {hasCosmicBadge && (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-red-500/10 via-orange-500/10 to-red-500/10 dark:from-red-500/20 dark:via-orange-500/20 dark:to-red-500/20 border border-red-500/30 dark:border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)] dark:shadow-[0_0_15px_rgba(239,68,68,0.4)] backdrop-blur-md animate-pulse">
-                            <SwordIcon className="w-3 h-3 text-red-600 dark:text-red-400" />
-                            <span className="text-[9px] font-black tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600 dark:from-red-400 dark:to-orange-400">Guardian</span>
-                        </div>
-                    )}
-                    {hasVoidBadge && !hasCosmicBadge && (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)] backdrop-blur-sm">
-                            <i className="fas fa-dragon text-[10px]"></i>
-                            <span className="text-[9px] font-black tracking-widest uppercase">Void Walker</span>
-                        </div>
-                    )}
-                    {hasSupernovaBadge && !hasVoidBadge && (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-pink-500/10 to-rose-500/10 border border-pink-500/30 text-pink-600 dark:text-pink-400 shadow-[0_0_15px_rgba(236,72,153,0.2)] backdrop-blur-sm animate-pulse">
-                            <i className="fas fa-meteor text-[10px]"></i>
-                            <span className="text-[9px] font-black tracking-widest uppercase">Supernova</span>
-                        </div>
-                    )}
-                    {hasBackerBadge && !hasSupernovaBadge && (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)] backdrop-blur-sm">
-                            <i className="fas fa-gem text-[10px] animate-pulse"></i>
-                            <span className="text-[9px] font-black tracking-widest uppercase">Backer</span>
-                        </div>
-                    )}
-                    {isDevUnlocked && (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-fuchsia-500/10 to-pink-500/10 border border-fuchsia-500/30 text-fuchsia-600 dark:text-fuchsia-400 shadow-[0_0_10px_rgba(217,70,239,0.15)] backdrop-blur-sm">
-                            <i className="fas fa-terminal text-[10px]"></i>
-                            <span className="text-[9px] font-black tracking-widest uppercase">Dev Mode</span>
-                        </div>
-                    )}
-                </div>
-            )}
+            {/* Badge Showcase (Max 3) */}
+            <div className="flex flex-wrap justify-center gap-2 mb-4 animate-fade-in max-w-sm">
+                {showcasedBadgeSlots.map((badgeId, index) => {
+                    switch (badgeId) {
+                        case 'Legend': return (
+                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                <i className="fas fa-crown text-[10px] animate-bounce"></i>
+                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                            </button>
+                        );
+                        case 'Guardian': return (
+                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-red-500/10 via-orange-500/10 to-red-500/10 dark:from-red-500/20 dark:via-orange-500/20 dark:to-red-500/20 border border-red-500/30 dark:border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)] dark:shadow-[0_0_15px_rgba(239,68,68,0.4)] backdrop-blur-md animate-pulse ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                <SwordIcon className="w-3 h-3 text-red-600 dark:text-red-400" />
+                                <span className="text-[9px] font-black tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600 dark:from-red-400 dark:to-orange-400">{badgeId}</span>
+                            </button>
+                        );
+                        case 'Void Walker': return (
+                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                <i className="fas fa-dragon text-[10px]"></i>
+                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                            </button>
+                        );
+                        case 'Supernova': return (
+                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-pink-500/10 to-rose-500/10 border border-pink-500/30 text-pink-600 dark:text-pink-400 shadow-[0_0_15px_rgba(236,72,153,0.2)] backdrop-blur-sm animate-pulse ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                <i className="fas fa-meteor text-[10px]"></i>
+                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                            </button>
+                        );
+                        case 'Backer': return (
+                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                <i className="fas fa-gem text-[10px] animate-pulse"></i>
+                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                            </button>
+                        );
+                        case 'Dev Mode': return (
+                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-fuchsia-500/10 to-pink-500/10 border border-fuchsia-500/30 text-fuchsia-600 dark:text-fuchsia-400 shadow-[0_0_10px_rgba(217,70,239,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                <i className="fas fa-terminal text-[10px]"></i>
+                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                            </button>
+                        );
+                        case 'Dino Rookie': return (
+                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                <i className="fas fa-egg text-[10px]"></i>
+                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                            </button>
+                        );
+                        case 'Dino Master': return (
+                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                <i className="fas fa-bolt text-[10px]"></i>
+                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                            </button>
+                        );
+                        case 'Dino Legend': return (
+                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary shadow-[0_0_15px_rgba(99,102,241,0.2)] backdrop-blur-md animate-pulse ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                <i className="fas fa-fire text-[10px]"></i>
+                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                            </button>
+                        );
+                        default: return null;
+                    }
+                })}
+                {showcasedBadgeSlots.length < 3 && (
+                    <button
+                        type="button"
+                        onClick={() => handleProfileClick('badges', showcasedBadgeSlots.length)}
+                        className="inline-flex items-center gap-1.5 rounded-full border-2 border-dashed border-purple-300 dark:border-purple-700 bg-[linear-gradient(135deg,rgba(129,140,248,0.16),rgba(192,132,252,0.14))] px-2.5 py-1 text-theme-text shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_0_18px_rgba(129,140,248,0.22)] transition-all hover:scale-[1.03] hover:border-primary/70 hover:shadow-[0_0_24px_rgba(129,140,248,0.34)]"
+                    >
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-primary shadow-[0_0_10px_rgba(99,102,241,0.25)]">
+                            <i className="fas fa-plus text-[9px]"></i>
+                        </span>
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-theme-text">Add Badge</span>
+                    </button>
+                )}
+            </div>
 
             <p className="text-theme-sub max-w-md mb-5 text-lg">
                 {devProfile.bio}
@@ -590,7 +636,7 @@ const AboutView: React.FC<AboutViewProps> = ({
                 </div>
                 {/* EASTER EGG TARGET */}
                 <span 
-                    onClick={handleProfileClick}
+                    onClick={() => handleProfileClick()}
                     className="text-xs font-mono text-theme-sub opacity-40 hover:opacity-100 cursor-pointer active:scale-95 transition-all select-none"
                 >
                     Made with 💜 for Geeks

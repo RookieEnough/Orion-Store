@@ -16,6 +16,7 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import StoreFilters from './components/StoreFilters';
 import ModernUITutorial from './components/ModernUITutorial';
+import MaintenanceMode from './components/MaintenanceMode';
 import AppTracker, { AppInfoResult } from './plugins/AppTracker';
 import { useSettingsStore, useDataStore, CleanupEntry, Theme, TabViewState } from './store/useAppStore';
 import { getAvailableFilterCategories } from './utils/discovery';
@@ -30,14 +31,16 @@ const AdDonationModal = lazy(() => import('./components/AdDonationModal'));
 const AboutTabContainer = lazy(() => import('./components/AboutTabContainer'));
 const SelectedAppModalContainer = lazy(() => import('./components/SelectedAppModalContainer'));
 const SubmissionModal = lazy(() => import('./components/SubmissionModal'));
+const CustomBundleModal = lazy(() => import('./components/CustomBundleModal'));
 const SettingsModal = lazy(() => import('./components/SettingsModal'));
 const StoreUpdateModal = lazy(() => import('./components/StoreUpdateModal'));
 const NoticeModal = lazy(() => import('./components/NoticeModal'));
 const SplashScreenPreview = lazy(() => import('./components/SplashScreenPreview'));
 const ReleaseNotesModal = lazy(() => import('./components/ReleaseNotesModal'));
 const BundlePreviewModal = lazy(() => import('./components/BundlePreviewModal'));
+const ProfileStatsModal = lazy(() => import('./components/ProfileStatsModal'));
 
-const CURRENT_STORE_VERSION = '1.3.0';
+const CURRENT_STORE_VERSION = '1.3.1';
 const UNITY_GAME_ID = '5996387';
 const ADS_TEST_MODE = false;
 
@@ -321,6 +324,8 @@ const App: React.FC = () => {
         loadLocalData: state.loadLocalData,
         storeLayout: state.storeLayout,
         hasSeenModernUITutorial: state.hasSeenModernUITutorial,
+        customBundles: state.customBundles,
+        localMaintenanceMode: state.localMaintenanceMode,
         setTheme: state.setTheme,
         setAppStream: state.setAppStream,
         setInstalledVersions: state.setInstalledVersions,
@@ -333,7 +338,8 @@ const App: React.FC = () => {
         incrementAdWatch: state.incrementAdWatch,
         setIsLegend: state.setIsLegend,
         registerSubmission: state.registerSubmission,
-        setHasSeenModernUITutorial: state.setHasSeenModernUITutorial
+        setHasSeenModernUITutorial: state.setHasSeenModernUITutorial,
+        userProfile: state.userProfile
     }), shallow);
     const data = useDataStore((state) => ({
         apps: state.apps,
@@ -372,6 +378,7 @@ const App: React.FC = () => {
     const [showFAQ, setShowFAQ] = useState(false);
     const [showAdDonation, setShowAdDonation] = useState(false);
     const [showSubmissionModal, setShowSubmissionModal] = useState(false);
+    const [showCustomBundleModal, setShowCustomBundleModal] = useState(false);
     const [submissionCooldown, setSubmissionCooldown] = useState<string | null>(null);
     const [storeUpdateAvailable, setStoreUpdateAvailable] = useState(false);
     const [showStoreUpdateModal, setShowStoreUpdateModal] = useState(false);
@@ -390,6 +397,9 @@ const App: React.FC = () => {
     const [showNotice, setShowNotice] = useState(false);
     const [showReleaseNotes, setShowReleaseNotes] = useState(false);
     const [showModernUITutorial, setShowModernUITutorial] = useState(false);
+    const [showProfileStats, setShowProfileStats] = useState(false);
+    const [profileStatsInitialView, setProfileStatsInitialView] = useState<'profile' | 'badges'>('profile');
+    const [profileBadgeSelectionIndex, setProfileBadgeSelectionIndex] = useState<number | null>(null);
     const [showAllSorted, setShowAllSorted] = useState(false);
     const [visibleApps, setVisibleApps] = useState<AppItem[]>([]);
     const [storeCollections, setStoreCollections] = useState<StoreCollection[]>([]);
@@ -405,6 +415,7 @@ const App: React.FC = () => {
     const lastViewStateKey = useRef<string | null>(null);
     const lastRequestedSortRef = useRef<SortOption>(SortOption.NEWEST);
     const lastRequestedCategoryRef = useRef<string>('All');
+    const lastRequestedTabRef = useRef<Tab>('android');
     const pendingSortTransitionRef = useRef<{ active: boolean; startedAt: number }>({ active: false, startedAt: 0 });
     const sortTransitionTimerRef = useRef<number | null>(null);
     const scrollBoostTimerRef = useRef<number | null>(null);
@@ -427,6 +438,24 @@ const App: React.FC = () => {
             return () => clearTimeout(timer);
         }
     }, [showSplashPreview]);
+
+    // One-time Modern UI tutorial for classic users updating to 1.3.1
+    useEffect(() => {
+        const tutorialKey = `orion_tutorial_shown_${CURRENT_STORE_VERSION}`;
+        if (
+            settings.storeLayout === 'classic' &&
+            !settings.hasSeenModernUITutorial &&
+            !localStorage.getItem(tutorialKey)
+        ) {
+            const timer = setTimeout(() => {
+                if (isMounted.current) {
+                    localStorage.setItem(tutorialKey, '1');
+                    setShowModernUITutorial(true);
+                }
+            }, 2500);
+            return () => clearTimeout(timer);
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const currentTabState = useDataStore(
         useCallback((state) => state.tabs[activeTab] || FALLBACK_TAB_STATE, [activeTab]),
@@ -907,12 +936,14 @@ const App: React.FC = () => {
         if (workerRef.current && (data.apps.length > 0 || data.importedApps.length > 0)) {
             const sortChanged = lastRequestedSortRef.current !== effectiveSort;
             const categoryChanged = lastRequestedCategoryRef.current !== currentTabState.category;
-            if ((sortChanged || categoryChanged) && !isLoading) {
+            const tabChanged = lastRequestedTabRef.current !== activeTab;
+            if ((sortChanged || categoryChanged || tabChanged) && !isLoading) {
                 pendingSortTransitionRef.current = { active: true, startedAt: performance.now() };
                 setIsSortTransitioning(true);
             }
             lastRequestedSortRef.current = effectiveSort;
             lastRequestedCategoryRef.current = currentTabState.category;
+            lastRequestedTabRef.current = activeTab;
             const platformTarget = activeTab === 'pc' ? Platform.PC : activeTab === 'tv' ? Platform.TV : Platform.ANDROID;
             workerRef.current.postMessage({
                 type: 'FILTER',
@@ -1208,6 +1239,7 @@ const App: React.FC = () => {
             } catch (e) { }
         };
 
+        let pendingRetryTimer: number | null = null;
         const resumeListener = CapacitorApp.addListener('resume', () => {
             syncDownloads();
             syncInstalledAppsRef.current();
@@ -1221,29 +1253,44 @@ const App: React.FC = () => {
                 if (app) startVerificationLoop(app);
             }
             if (pendingInstallRetry) {
-                setTimeout(() => {
-                    handleInstallFile(pendingInstallRetry.app, pendingInstallRetry.file);
-                    setPendingInstallRetry(null);
+                // Capture by value & clear immediately to prevent double-install
+                const retryTarget = pendingInstallRetry;
+                setPendingInstallRetry(null);
+                if (pendingRetryTimer !== null) window.clearTimeout(pendingRetryTimer);
+                pendingRetryTimer = window.setTimeout(() => {
+                    if (isMounted.current) {
+                        handleInstallFile(retryTarget.app, retryTarget.file);
+                    }
+                    pendingRetryTimer = null;
                 }, 500);
             }
         });
         syncDownloads();
-        return () => { resumeListener.then(h => h.remove()); };
+        return () => {
+            if (pendingRetryTimer !== null) window.clearTimeout(pendingRetryTimer);
+            resumeListener.then(h => h.remove());
+        };
     }, [appLookup, data.activeDownloads, pendingInstallRetry, startVerificationLoop]);
 
     useEffect(() => {
         const root = document.getElementById('root');
         if (!root) return;
         let rafId = 0;
+        let isBoosted = false;
         const handleScroll = () => {
-            document.body.classList.add('scroll-boost');
+            // Only toggle classList when needed (avoid touching DOM on every scroll event)
+            if (!isBoosted) {
+                document.body.classList.add('scroll-boost');
+                isBoosted = true;
+            }
             if (scrollBoostTimerRef.current) {
                 window.clearTimeout(scrollBoostTimerRef.current);
             }
             scrollBoostTimerRef.current = window.setTimeout(() => {
                 document.body.classList.remove('scroll-boost');
+                isBoosted = false;
                 scrollBoostTimerRef.current = null;
-            }, 140);
+            }, 160);
             if (rafId) return;
             rafId = requestAnimationFrame(() => {
                 setShowScrollTop(root.scrollTop > 300);
@@ -1675,29 +1722,62 @@ const App: React.FC = () => {
     };
 
     const handleBundleDownload = useCallback(async (bundle: BundleItem) => {
-        const bundleApps = (bundle.apps || []).filter((app, index, source) => source.findIndex((entry) => entry.id === app.id) === index);
+        const settingsSnapshot = useSettingsStore.getState();
+        const removedIds = new Set(settingsSnapshot.removedBundleApps[bundle.id] || []);
+        const extraIds = settingsSnapshot.extraBundleApps[bundle.id] || [];
+        const extraApps = extraIds
+            .map((id) => allKnownApps.find((a) => a.id === id))
+            .filter((a): a is AppItem => !!a);
+        const baseApps = (bundle.apps || []).filter((app) => !removedIds.has(app.id));
+        const merged = [...baseApps, ...extraApps];
+        const bundleApps = merged.filter((app, index, source) => source.findIndex((entry) => entry.id === app.id) === index);
         if (bundleApps.length === 0) return;
 
         triggerHaptic('impact', ImpactStyle.Medium);
-        setDevToast(`Queueing ${bundleApps.length} apps from ${bundle.title}...`);
+
+        // Filter out already installed apps (FIX: skip installed apps in bundle download)
+        const installedVersionsSnapshot = settingsSnapshot.installedVersions;
+        const eligibleApps = bundleApps.filter((app) => {
+            if (installedVersionsSnapshot[app.id]) {
+                return false;
+            }
+            return true;
+        });
+
+        if (eligibleApps.length === 0) {
+            setDevToast(`All apps from ${bundle.title} are already installed.`);
+            return;
+        }
+
+        setDevToast(`Queueing ${eligibleApps.length} apps from ${bundle.title}...`);
 
         let queuedCount = 0;
-        for (const app of bundleApps) {
+        let skippedCount = bundleApps.length - eligibleApps.length;
+        for (const app of eligibleApps) {
+            if (!isMounted.current) break;
             const latestData = useDataStore.getState();
             if (latestData.activeDownloads[app.id] || latestData.readyToInstall[app.id] || initializingDownloads.current.has(app.id)) {
+                skippedCount++;
                 continue;
             }
 
-            await handleDownloadAction(app, undefined, true);
-            queuedCount++;
+            try {
+                await handleDownloadAction(app, undefined, true);
+                queuedCount++;
+            } catch (err) {
+                console.warn('[bundle] Failed to queue', app.id, err);
+            }
             await new Promise((resolve) => setTimeout(resolve, 180));
         }
 
-        setDevToast(queuedCount > 0 ? `Queued ${queuedCount} apps from ${bundle.title}.` : `Everything in ${bundle.title} is already queued.`);
         if (queuedCount > 0) {
+            const skipNote = skippedCount > 0 ? ` (${skippedCount} skipped)` : '';
+            setDevToast(`Queued ${queuedCount} apps from ${bundle.title}${skipNote}.`);
             triggerHaptic('notification', undefined, NotificationType.Success);
+        } else {
+            setDevToast(`Everything in ${bundle.title} is already queued or installed.`);
         }
-    }, [handleDownloadAction, triggerHaptic]);
+    }, [handleDownloadAction, triggerHaptic, allKnownApps]);
 
     const handleDownloadComplete = useCallback((appId: string, success: boolean) => {
         // Read fresh state to avoid stale closure over activeDownloads / apps
@@ -1946,15 +2026,79 @@ const App: React.FC = () => {
             ? buildUpdatesAvailableCollection(availableUpdatesForTab)
             : null
     ), [activeTab, availableUpdatesForTab, settings.storeLayout]);
+    // Hydrate the user's locally-saved custom bundles into BundleItems so they
+    // can be merged INTO the curated remote 'recommendation_bundles' shelf.
+    // Apps are hydrated against the current platform so cross-platform IDs are
+    // filtered out automatically.
+    //
+    // Badge ownership convention:
+    //   • "Rookie Approved"  → developer-curated bundles in config.json (remote)
+    //   • "Community Shared" → community submissions the developer approved
+    //                          and merged into config.json (remote)
+    //   • "Local"            → bundles the user keeps only on this device
+    //                          (NEVER overwrites a remote bundle's badge)
+    //
+    // Both "Rookie Approved" and "Community Shared" are therefore set in the
+    // upstream Orion-Data config.json by the maintainer — never on-device. The
+    // only badge we attach client-side is "Local" for the user's own creations
+    // (whether or not they later submitted them as a GitHub issue).
+    const customLocalBundles = useMemo<BundleItem[]>(() => {
+        const list = settings.customBundles || [];
+        if (list.length === 0) return [];
+        const platformAppMap = new Map<string, AppItem>();
+        for (const app of allKnownApps) {
+            if (app.platform === targetPlatform) platformAppMap.set(app.id, app);
+        }
+        return list.map((cb) => {
+            const apps = cb.appIds.map((id) => platformAppMap.get(id)).filter(Boolean) as AppItem[];
+            return {
+                id: cb.id,
+                title: cb.title,
+                description: cb.description,
+                icon: cb.icon,
+                appIds: cb.appIds,
+                apps,
+                badge: 'Local',
+            };
+        }).filter((b) => b.apps && b.apps.length > 0);
+    }, [settings.customBundles, allKnownApps, targetPlatform]);
+
     const activeModernCollections = useMemo(() => {
         if (!shouldShowModernHome) return [];
 
         if (effectiveSort === SortOption.HOME) {
-            return injectCollectionAfterHero(storeCollections, updatesAvailableCollection);
+            const withUpdates = injectCollectionAfterHero(storeCollections, updatesAvailableCollection);
+            if (customLocalBundles.length === 0) return withUpdates;
+            // Merge local bundles into the existing remote recommendation_bundles
+            // shelf (after the curated remote bundles). If the remote shelf is
+            // missing for this platform, synthesize a minimal one so users still
+            // see their bundles surfaced.
+            const remoteIdx = withUpdates.findIndex((c) => c.type === 'recommendation_bundles');
+            if (remoteIdx === -1) {
+                const synthetic: StoreCollection = {
+                    id: 'recommendation_bundles_local',
+                    title: 'Recommended app bundles',
+                    subtitle: 'Curated picks for your platform',
+                    type: 'recommendation_bundles',
+                    bundles: customLocalBundles,
+                };
+                return injectCollectionAfterHero(withUpdates, synthetic);
+            }
+            const merged = [...withUpdates];
+            const target = merged[remoteIdx]!;
+            const remoteBundles = target.bundles ?? [];
+            // Dedupe by id — remote always wins.
+            const remoteIds = new Set(remoteBundles.map((b) => b.id));
+            const localOnly = customLocalBundles.filter((b) => !remoteIds.has(b.id));
+            merged[remoteIdx] = {
+                ...target,
+                bundles: [...remoteBundles, ...localOnly],
+            };
+            return merged;
         }
 
         return buildSortedModernCollections(visibleAppsForTab, effectiveSort);
-    }, [shouldShowModernHome, effectiveSort, storeCollections, updatesAvailableCollection, visibleAppsForTab]);
+    }, [shouldShowModernHome, effectiveSort, storeCollections, updatesAvailableCollection, visibleAppsForTab, customLocalBundles]);
 
     const updateCount = availableUpdates.length;
 
@@ -2070,7 +2214,16 @@ const App: React.FC = () => {
         }
     }, [devClickCount, settings.isDevUnlocked, settings.setDevUnlocked, triggerHaptic]);
 
-    const handleAboutProfileClick = useCallback(() => {
+    const handleAboutProfileClick = useCallback((view?: 'profile' | 'badges', badgeIndex?: number) => {
+        if (view === 'badges') {
+            setProfileStatsInitialView('badges');
+            setProfileBadgeSelectionIndex(badgeIndex ?? null);
+            setShowProfileStats(true);
+            triggerHaptic('impact', ImpactStyle.Light);
+            return;
+        }
+
+        setProfileBadgeSelectionIndex(null);
         const newCount = easterEggCount + 1;
         setEasterEggCount(newCount);
         if (newCount >= 7) {
@@ -2132,6 +2285,12 @@ const App: React.FC = () => {
 
     const handleOpenSubmissionModal = useCallback(() => {
         setShowSubmissionModal(true);
+    }, []);
+
+    useEffect(() => {
+        const handler = () => setShowCustomBundleModal(true);
+        window.addEventListener('orion:open-custom-bundle' as any, handler);
+        return () => window.removeEventListener('orion:open-custom-bundle' as any, handler);
     }, []);
 
     const handleShowAllSorted = useCallback(() => {
@@ -2197,6 +2356,13 @@ const App: React.FC = () => {
                     showFavorites={currentTabState.filterFavorites}
                     onToggleFavorites={handleToggleFavorites}
                     variant={settings.storeLayout === 'modern' ? 'modern' : 'classic'}
+                    onProfileClick={() => {
+                        setProfileStatsInitialView('profile');
+                        setProfileBadgeSelectionIndex(null);
+                        setShowProfileStats(true);
+                    }}
+                    profileAvatarUrl={settings.userProfile?.avatarUrl}
+                    profileInitial={settings.userProfile?.name?.[0] || 'U'}
                 />
                 {isLoading || isSortTransitioning ? (
                     shouldShowModernHome ? (
@@ -2250,42 +2416,15 @@ const App: React.FC = () => {
         );
     };
 
-    if (remoteConfig?.maintenanceMode && !bypassMaintenance) {
+    if ((remoteConfig?.maintenanceMode || settings.localMaintenanceMode) && !bypassMaintenance) {
         return (
-            <div className="min-h-screen w-full flex items-center justify-center p-6 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-gray-900 dark:to-black relative overflow-hidden transition-colors duration-500">
-                <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-                    <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/20 rounded-full blur-[120px] animate-pulse-slow"></div>
-                    <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-acid/20 rounded-full blur-[120px] animate-pulse-slow" style={{ animationDelay: '1s' }}></div>
-                </div>
-                <div className="relative z-10 bg-surface/60 dark:bg-surface/40 backdrop-blur-2xl border border-white/40 dark:border-transparent p-10 rounded-[2.5rem] shadow-2xl flex flex-col items-center text-center max-w-sm w-full animate-slide-up ring-1 ring-black/5 dark:ring-transparent">
-                    <div className="mb-8 relative">
-                        <div className="absolute inset-0 rounded-[2rem] bg-primary/20 blur-2xl"></div>
-                        <div className="w-24 h-24 bg-gradient-to-tr from-primary to-primary-light rounded-3xl flex items-center justify-center shadow-xl shadow-primary/30 transform -rotate-6 relative z-10 ring-1 ring-white/20">
-                            <i className="fas fa-wrench text-4xl text-white"></i>
-                        </div>
-                    </div>
-                    <h1 className="text-3xl font-black text-theme-text mb-3 tracking-tight">Under Maintenance</h1>
-                    <p className="text-theme-sub text-base font-medium leading-relaxed mb-8">{remoteConfig.maintenanceMessage || "We're currently tuning the engine to bring you a better experience. Orion Store will be back online shortly."}</p>
-                    <div className="flex w-full flex-col gap-3">
-                        {socialLinks.discord && (
-                            <button
-                                onClick={() => window.open(socialLinks.discord, '_blank')}
-                                className="w-full rounded-2xl bg-[#5865F2] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#5865F2]/25 transition-colors hover:bg-[#4b57d9]"
-                            >
-                                Join Discord for Status Updates
-                            </button>
-                        )}
-                        {settings.isDevUnlocked && (
-                            <button
-                                onClick={() => { setBypassMaintenance(true); triggerHaptic('notification', undefined, NotificationType.Success); }}
-                                className="w-full rounded-2xl bg-theme-element/80 px-5 py-3 text-xs font-bold uppercase tracking-widest text-theme-sub transition-colors hover:bg-theme-element hover:text-primary"
-                            >
-                                Developer Bypass
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <MaintenanceMode
+                maintenanceMessage={remoteConfig?.maintenanceMessage}
+                socialLinks={socialLinks}
+                onBypass={() => { setBypassMaintenance(true); triggerHaptic('notification', undefined, NotificationType.Success); }}
+                triggerHaptic={triggerHaptic}
+                version={CURRENT_STORE_VERSION}
+            />
         );
     }
 
@@ -2398,6 +2537,8 @@ const App: React.FC = () => {
                                     if (app.packageName && Capacitor.isNativePlatform()) syncSpecificApp(app);
                                 }}
                                 onDownloadAll={handleBundleDownload}
+                                allApps={allKnownApps}
+                                platform={targetPlatform}
                             />
                         )}
                         {selectedApp && (
@@ -2433,7 +2574,19 @@ const App: React.FC = () => {
                             />
                         )}
                         {showSubmissionModal && <SubmissionModal onClose={() => setShowSubmissionModal(false)} currentStoreVersion={CURRENT_STORE_VERSION} onSuccess={settings.registerSubmission} submissionCount={settings.submissionCount} activeTab={activeTab} />}
+                        {showCustomBundleModal && <CustomBundleModal onClose={() => setShowCustomBundleModal(false)} allApps={allKnownApps} platform={targetPlatform} />}
                         {showAdDonation && <AdDonationModal onClose={() => setShowAdDonation(false)} onSuccess={settings.incrementAdWatch} currentStreak={settings.adWatchCount} />}
+                        {showProfileStats && (
+                            <ProfileStatsModal
+                                onClose={() => {
+                                    setShowProfileStats(false);
+                                    setProfileBadgeSelectionIndex(null);
+                                }}
+                                initialView={profileStatsInitialView}
+                                badgeActionMode={profileStatsInitialView === 'badges' ? 'select' : 'browse'}
+                                selectionIndex={profileBadgeSelectionIndex}
+                            />
+                        )}
                         {isStartupUiReady && showStoreUpdateModal && (isTestingUpdate || (remoteConfig?.latestStoreVersion)) && <StoreUpdateModal currentVersion={CURRENT_STORE_VERSION} newVersion={isTestingUpdate ? "9.9.9" : (remoteConfig?.latestStoreVersion || "Unknown")} downloadUrl={isTestingUpdate ? "#" : storeUpdateUrl} onClose={() => { setShowStoreUpdateModal(false); setIsTestingUpdate(false); }} />}
                     </Suspense>
                 </>

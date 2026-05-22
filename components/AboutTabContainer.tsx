@@ -10,7 +10,7 @@ interface AboutTabContainerProps {
   faqs: FAQItem[];
   profileImgError: boolean;
   setProfileImgError: (hasError: boolean) => void;
-  handleProfileClick: () => void;
+  handleProfileClick: (view?: 'profile' | 'badges', badgeIndex?: number) => void;
   setShowFAQ: (show: boolean) => void;
   onOpenAdDonation: () => void;
   currentStoreVersion: string;
@@ -57,7 +57,8 @@ const AboutTabContainer: React.FC<AboutTabContainerProps> = ({
     toggleHiddenTab,
     toggleAutoUpdate,
     setUseRemoteJson,
-    setGithubToken
+    setGithubToken,
+    unlockedBadges
   } = useSettingsStore((state) => ({
     isLegend: state.isLegend,
     isContributor: state.isContributor,
@@ -71,7 +72,8 @@ const AboutTabContainer: React.FC<AboutTabContainerProps> = ({
     toggleHiddenTab: state.toggleHiddenTab,
     toggleAutoUpdate: state.toggleAutoUpdate,
     setUseRemoteJson: state.setUseRemoteJson,
-    setGithubToken: state.setGithubToken
+    setGithubToken: state.setGithubToken,
+    unlockedBadges: state.unlockedBadges
   }), shallow);
 
   const handleToggleSourceMode = useCallback(() => {
@@ -117,6 +119,7 @@ const AboutTabContainer: React.FC<AboutTabContainerProps> = ({
       onTriggerDebugToast={onTriggerDebugToast}
       setDevUnlocked={setDevUnlocked}
       onTriggerModernUITutorial={onTriggerModernUITutorial}
+      unlockedBadges={unlockedBadges}
     />
   );
 };

@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dino</title>
+    <link rel="stylesheet" href="index.css">
+    <script src="index.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { overflow: hidden; touch-action: none; -webkit-tap-highlight-color: transparent; }
+        /* Hide the "Press Space" overlay */
+        #messageBox { display: none !important; }
+    </style>
+</head>
+<body id="t" class="offline">
+    <div id="main-frame-error" class="interstitial-wrapper">
+        <div id="main-content">
+            <div class="icon icon-offline" alt=""></div>
+        </div>
+        <div id="offline-resources">
+            <img id="offline-resources-1x" src="assets/default_100_percent/100-offline-sprite.png">
+            <img id="offline-resources-2x" src="assets/default_200_percent/200-offline-sprite.png">
+            <template id="audio-resources">
+                <audio id="offline-sound-press" src=""></audio>
+                <audio id="offline-sound-hit" src=""></audio>
+                <audio id="offline-sound-reached" src=""></audio>
+            </template>
+        </div>
+    </div>
+    <script>
+        // Post score to parent window for XP/badge tracking
+        // Use actual displayed score (distanceRan * COEFFICIENT 0.025), matching the in-game HI counter
+        (function() {
+            var lastCrashed = false;
+            var COEFFICIENT = 0.025;
+            function getDisplayScore(runner) {
+                if (runner.distanceMeter && typeof runner.distanceMeter.getActualDistance === 'function') {
+                    return runner.distanceMeter.getActualDistance(runner.distanceRan);
+                }
+                return Math.ceil(runner.distanceRan * COEFFICIENT);
+            }
+            setInterval(function() {
+                var runner = window.Runner && window.Runner.instance_;
+                if (!runner) return;
+                if (runner.crashed && !lastCrashed) {
+                    window.parent.postMessage({ type: 'dino-game-over', score: getDisplayScore(runner) }, '*');
+                }
+                lastCrashed = runner.crashed;
+                if (runner.playing && !runner.crashed) {
+                    window.parent.postMessage({ type: 'dino-score', score: getDisplayScore(runner) }, '*');
+                }
+            }, 100);
+        })();
+    </script>
+</body>
+</html>

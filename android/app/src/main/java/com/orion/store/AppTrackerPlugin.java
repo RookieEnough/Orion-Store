@@ -299,8 +299,34 @@ public class AppTrackerPlugin extends Plugin {
         DownloadTask t = new DownloadTask(url, fileName);
         activeTasks.put(fileName, t);
         executorService.execute(t);
+        // Spin up the foreground service so this download survives backgrounding.
+        try {
+            DownloadForegroundService.start(getContext(), activeTasks.size(), computeAverageProgress());
+        } catch (Exception ignored) {}
         JSObject r = new JSObject(); r.put("downloadId", fileName);
         call.resolve(r);
+    }
+
+    private int computeAverageProgress() {
+        if (activeTasks.isEmpty()) return 0;
+        int total = 0;
+        int count = 0;
+        for (DownloadTask t : activeTasks.values()) {
+            total += Math.max(0, Math.min(100, t.progress));
+            count++;
+        }
+        return count == 0 ? 0 : total / count;
+    }
+
+    private void refreshForegroundNotification() {
+        try {
+            int active = activeTasks.size();
+            if (active <= 0) {
+                DownloadForegroundService.stop(getContext());
+            } else {
+                DownloadForegroundService.update(getContext(), active, computeAverageProgress());
+            }
+        } catch (Exception ignored) {}
     }
 
     @PluginMethod
@@ -324,8 +350,9 @@ public class AppTrackerPlugin extends Plugin {
     @PluginMethod
     public void cancelDownload(PluginCall call) {
         String id = call.getString("downloadId");
-        DownloadTask t = activeTasks.get(id);
+        DownloadTask t = activeTasks.remove(id);
         if (t != null) t.cancel();
+        refreshForegroundNotification();
         if (activeTasks.isEmpty() && wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         call.resolve();
     }
@@ -1032,6 +1059,9 @@ public class AppTrackerPlugin extends Plugin {
             }
             activeTasks.remove(fileName);
             clearNotification();
+            // Update / dismiss the persistent foreground notification now that
+            // this task is gone from the active set.
+            refreshForegroundNotification();
             if (activeTasks.isEmpty() && wakeLock != null && wakeLock.isHeld()) try { wakeLock.release(); } catch(Exception e){}
         }
 
@@ -1082,7 +1112,12 @@ public class AppTrackerPlugin extends Plugin {
                         dl += count;
                         if (total > 0) progress = (int) (dl * 100 / total); else progress = (int) (dl % 100);
                         long now = System.currentTimeMillis();
-                        if (now - lastUpdate > 500) { updateNotification(progress, total <= 0); lastUpdate = now; }
+                        if (now - lastUpdate > 500) {
+                            updateNotification(progress, total <= 0);
+                            // Refresh aggregate background notification once per ~500ms cadence
+                            refreshForegroundNotification();
+                            lastUpdate = now;
+                        }
                     }
                     out.getFD().sync();
                     try { out.close(); out = null; } catch (Exception e) {}
