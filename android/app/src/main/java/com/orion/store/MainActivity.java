@@ -477,7 +477,10 @@ public class MainActivity extends BridgeActivity {
             float cx = w / 2f;
             float top = h * 0.16f;
             boolean blink = refreshing && ((System.currentTimeMillis() - refreshStartedAt) / 180) % 6 == 0;
-            float bob = refreshing ? (float) Math.sin((System.currentTimeMillis() - refreshStartedAt) / 110f) * px * 0.55f : 0f;
+            boolean showClosedEyes = !refreshing && pullProgress > 0.08f;
+            float bob = refreshing
+                ? (float) Math.sin((System.currentTimeMillis() - refreshStartedAt) / 110f) * px * 0.55f
+                : 0f;
 
             canvas.save();
             canvas.translate(0, bob);
@@ -510,7 +513,10 @@ public class MainActivity extends BridgeActivity {
 
             // Eyes blink while refreshing.
             paint.setColor(Color.rgb(17, 24, 39));
-            if (blink) {
+            if (showClosedEyes) {
+                drawPixel(canvas, cx - 4 * px, top + 8 * px, 3, 1, px);
+                drawPixel(canvas, cx + 1 * px, top + 8 * px, 3, 1, px);
+            } else if (blink) {
                 drawPixel(canvas, cx - 4 * px, top + 8 * px, 3, 1, px);
                 drawPixel(canvas, cx + 1 * px, top + 8 * px, 3, 1, px);
             } else {
