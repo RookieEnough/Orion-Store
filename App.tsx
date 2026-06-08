@@ -24,6 +24,7 @@ import { compareVersions, getPreferredVersion, isComparableVersion, isSameVersio
 import useAvailableUpdates from './hooks/useAvailableUpdates';
 
 import { useScrollLock } from './hooks/useScrollLock';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
 import CoreWorker from './workers/core.worker?worker';
 
 const FAQModal = lazy(() => import('./components/FAQModal'));
@@ -33,6 +34,16 @@ const SelectedAppModalContainer = lazy(() => import('./components/SelectedAppMod
 const SubmissionModal = lazy(() => import('./components/SubmissionModal'));
 const CustomBundleModal = lazy(() => import('./components/CustomBundleModal'));
 const SettingsModal = lazy(() => import('./components/SettingsModal'));
+// Preload-on-press cache: triggered on pointerdown of the settings icon so the
+// chunk is already coming in by the time the click event fires, making the
+// modal open with zero perceived delay.
+let settingsModalPreloadPromise: Promise<unknown> | null = null;
+const preloadSettingsModal = () => {
+    if (!settingsModalPreloadPromise) {
+        settingsModalPreloadPromise = import('./components/SettingsModal').catch(() => {});
+    }
+    return settingsModalPreloadPromise;
+};
 const StoreUpdateModal = lazy(() => import('./components/StoreUpdateModal'));
 const NoticeModal = lazy(() => import('./components/NoticeModal'));
 const SplashScreenPreview = lazy(() => import('./components/SplashScreenPreview'));
@@ -169,21 +180,21 @@ const getModernSortSectionTitle = (sort: SortOption) => {
     }
 };
 
-const buildSortedModernCollections = (apps: AppItem[], sort: SortOption): StoreCollection[] => {
+const buildSortedModernCollections = (apps: AppItem[], sort: SortOption, showAll = false): StoreCollection[] => {
     if (apps.length === 0) return [];
 
     const { title } = getModernSortSectionTitle(sort);
-    const previewCount = 12;
+    const previewCount = showAll ? apps.length : 12;
 
     const collections: StoreCollection[] = [
         {
-            id: `sorted-hero-${sort}`,
+            id: `sorted-hero-${sort}${showAll ? '-all' : ''}`,
             title,
             type: 'hero',
             apps: apps.slice(0, 5)
         },
         {
-            id: `sorted-grid-${sort}`,
+            id: `sorted-grid-${sort}${showAll ? '-all' : ''}`,
             title,
             type: 'sorted_grid',
             apps: apps.slice(0, previewCount),
@@ -219,7 +230,8 @@ const buildUpdatesAvailableCollection = (apps: AppItem[]): StoreCollection | nul
         id: 'updates-available',
         title: 'Updates Available',
         type: 'swimlane',
-        apps: apps.slice(0, 12)
+        apps: apps.slice(0, 12),
+        totalAppCount: apps.length
     };
 };
 
@@ -316,6 +328,8 @@ const App: React.FC = () => {
         hapticEnabled: state.hapticEnabled,
         glassEffect: state.glassEffect,
         useShizuku: state.useShizuku,
+        installerPreference: state.installerPreference,
+        installerPackage: state.installerPackage,
         isDevUnlocked: state.isDevUnlocked,
         adWatchCount: state.adWatchCount,
         submissionCount: state.submissionCount,
@@ -401,6 +415,7 @@ const App: React.FC = () => {
     const [profileStatsInitialView, setProfileStatsInitialView] = useState<'profile' | 'badges'>('profile');
     const [profileBadgeSelectionIndex, setProfileBadgeSelectionIndex] = useState<number | null>(null);
     const [showAllSorted, setShowAllSorted] = useState(false);
+    const [viewAllApps, setViewAllApps] = useState<AppItem[] | null>(null);
     const [visibleApps, setVisibleApps] = useState<AppItem[]>([]);
     const [storeCollections, setStoreCollections] = useState<StoreCollection[]>([]);
     const [bypassMaintenance, setBypassMaintenance] = useState(false);
@@ -423,6 +438,10 @@ const App: React.FC = () => {
     const loadGenerationRef = useRef(0);
     const backgroundTaskCleanupRef = useRef<(() => void) | null>(null);
     const pendingInstallExpectationsRef = useRef<Record<string, { appId: string; version?: string }>>({});
+    const appListScrollRef = useRef<HTMLDivElement | null>(null);
+    // Pull-to-refresh is only enabled on the app data tabs (Android / PC / TV).
+    // The About tab is excluded so that pulling on it is a no-op.
+    const isAppDataTab = activeTab === 'android' || activeTab === 'pc' || activeTab === 'tv';
     const syncInstalledAppsRef = useRef<() => Promise<void>>(async () => {});
 
     const pendingCleanupCount = useMemo(() => Object.keys(data.pendingCleanup).length, [data.pendingCleanup]);
@@ -1368,6 +1387,17 @@ const App: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        const root = document.documentElement;
+        root.dataset.orionActiveTab = activeTab;
+        root.dataset.orionRefreshEligible = String(isAppDataTab && !isAnyModalOpen);
+
+        return () => {
+            delete root.dataset.orionActiveTab;
+            delete root.dataset.orionRefreshEligible;
+        };
+    }, [activeTab, isAppDataTab, isAnyModalOpen]);
+
+    useEffect(() => {
         const nav = navigator as Navigator & { deviceMemory?: number };
         const isLowMemoryDevice = Capacitor.isNativePlatform() && typeof nav.deviceMemory === 'number' && nav.deviceMemory <= 4;
         if (isLowMemoryDevice) {
@@ -1477,6 +1507,7 @@ const App: React.FC = () => {
                 window.dispatchEvent(new Event('orion-close-lightbox'));
                 return;
             }
+            if (showAllSorted) { setShowAllSorted(false); setViewAllApps(null); return; }
             if (selectedApp) setSelectedApp(null);
             else if (selectedBundle) setSelectedBundle(null);
             else if (showSettingsModal) setShowSettingsModal(false);
@@ -1492,7 +1523,7 @@ const App: React.FC = () => {
         };
         const backListener = CapacitorApp.addListener('backButton', handleBack);
         return () => { backListener.then(h => h.remove()); };
-    }, [selectedApp, selectedBundle, showSettingsModal, showFAQ, showSubmissionModal, showAdDonation, activeTab, showStoreUpdateModal, showNotice, showReleaseNotes, canResetCurrentBrowseState, restorePrimaryBrowseState]);
+    }, [selectedApp, selectedBundle, showSettingsModal, showFAQ, showSubmissionModal, showAdDonation, activeTab, showStoreUpdateModal, showNotice, showReleaseNotes, canResetCurrentBrowseState, restorePrimaryBrowseState, showAllSorted]);
 
     const handleDownloadStart = useCallback((appId: string, downloadId: string, fileName: string) => {
         data.startDownload(appId, downloadId, fileName);
@@ -1576,7 +1607,11 @@ const App: React.FC = () => {
                 startVerificationLoop(app);
             } else {
                 waitingForResumeId.current = app.id;
-                await AppTracker.installPackage({ fileName });
+                await AppTracker.installPackage({
+                    fileName,
+                    installerPreference: settings.installerPreference,
+                    installerPackage: settings.installerPreference === 'package' ? settings.installerPackage : undefined
+                });
                 setShowInstallToast(null);
                 // Do NOT optimistically mark as installed here — the resume listener + 
                 // verification loop will detect actual installation status when the user 
@@ -1986,9 +2021,11 @@ const App: React.FC = () => {
 
     // Preload SettingsModal chunk after initial render so it opens instantly on Android
     useEffect(() => {
+        // Fire as soon as the main thread is free — this is the warm-up path
+        // for users who tap Settings before the per-press preload triggers.
         const cancelPreload = scheduleBackgroundTask(() => {
-            import('./components/SettingsModal').catch(() => {});
-        }, 5000);
+            preloadSettingsModal();
+        }, 300);
         return () => cancelPreload();
     }, []);
 
@@ -2064,6 +2101,12 @@ const App: React.FC = () => {
     }, [settings.customBundles, allKnownApps, targetPlatform]);
 
     const activeModernCollections = useMemo(() => {
+        // View All: render specific collection apps as a sorted_grid for Modern UI
+        if (showAllSorted) {
+            const appsToShow = viewAllApps || visibleAppsForTab;
+            return buildSortedModernCollections(appsToShow, SortOption.NEWEST, true);
+        }
+
         if (!shouldShowModernHome) return [];
 
         if (effectiveSort === SortOption.HOME) {
@@ -2098,7 +2141,7 @@ const App: React.FC = () => {
         }
 
         return buildSortedModernCollections(visibleAppsForTab, effectiveSort);
-    }, [shouldShowModernHome, effectiveSort, storeCollections, updatesAvailableCollection, visibleAppsForTab, customLocalBundles]);
+    }, [shouldShowModernHome, showAllSorted, viewAllApps, effectiveSort, storeCollections, updatesAvailableCollection, visibleAppsForTab, customLocalBundles]);
 
     const updateCount = availableUpdates.length;
 
@@ -2166,6 +2209,12 @@ const App: React.FC = () => {
     const handleOpenSettings = useCallback(() => {
         setSettingsInitialMenu('none');
         setShowSettingsModal(true);
+    }, []);
+
+    // Fire-and-forget preload; pointerdown calls this so the chunk is already
+    // resolved by the time the click event flips the modal visible.
+    const handleOpenSettingsPreload = useCallback(() => {
+        preloadSettingsModal();
     }, []);
 
     const handleOpenReleaseNotes = useCallback(() => {
@@ -2260,6 +2309,13 @@ const App: React.FC = () => {
         loadApps(true);
     }, [loadApps]);
 
+    // Pull-to-refresh is only enabled on the app data tabs (Android / PC / TV).
+    // The About tab is excluded so that pulling on it is a no-op.
+    usePullToRefresh({
+        onRefresh: handleReloadApps,
+        disabled: Capacitor.isNativePlatform() || isRefreshing || !isAppDataTab
+    });
+
     const handleSearchQueryChange = useCallback((query: string) => {
         startTransition(() => data.setSearchQuery(activeTab, query));
     }, [activeTab, data.setSearchQuery]);
@@ -2297,6 +2353,25 @@ const App: React.FC = () => {
         setShowAllSorted(true);
     }, []);
 
+    const handleShowCollectionAll = useCallback((collection: StoreCollection) => {
+        let appsIdToShow: AppItem[] = [];
+        if (collection.id === 'updates-available') {
+            appsIdToShow = availableUpdatesForTab;
+        } else if (collection.id === 'new_updated') {
+            appsIdToShow = [...allKnownApps].filter(a => a.platform === targetPlatform).reverse().slice(0, 18);
+        } else {
+            appsIdToShow = collection.apps || [];
+        }
+        
+        setViewAllApps(appsIdToShow);
+        setShowAllSorted(true);
+        
+        // Asynchronous scroll to prevent layout collision glitch during unmount
+        setTimeout(() => {
+            document.getElementById('root')?.scrollTo({ top: 0, behavior: 'instant' });
+        }, 10);
+    }, [allKnownApps, availableUpdatesForTab, targetPlatform]);
+
     const renderModernSuspenseFallback = () => (
         <div className="relative flex w-full flex-col animate-fade-in pb-12 lg:pb-16">
             <div className="pointer-events-none relative z-20 mb-3 mt-1 w-full">
@@ -2329,8 +2404,7 @@ const App: React.FC = () => {
 
     const renderAppGrid = (platform: Platform) => {
         const isFullBleedModernHome = settings.storeLayout === 'modern'
-            && shouldShowModernHome
-            && !showAllSorted;
+            && (shouldShowModernHome || showAllSorted);
         const shellClassName = isFullBleedModernHome
             ? 'w-full'
             : 'mx-auto w-full max-w-[34rem] px-4 sm:max-w-[48rem] sm:px-6 lg:max-w-[82rem] lg:px-8 2xl:max-w-[94rem]';
@@ -2394,7 +2468,7 @@ const App: React.FC = () => {
                         <p className="text-lg font-bold">{currentTabState.filterFavorites ? 'No favorites found' : `No ${platform} apps found`}</p>
                         {currentTabState.filterFavorites && <p className="text-xs mt-2 opacity-50">Tap the heart on any app card to add it here.</p>}
                     </div>
-                ) : shouldShowModernHome && activeModernCollections.length > 0 && !showAllSorted ? (
+                ) : settings.storeLayout === 'modern' && activeModernCollections.length > 0 && (shouldShowModernHome || showAllSorted) ? (
                     <Suspense fallback={renderModernSuspenseFallback()}>
                         <ModernAppList 
                             collections={activeModernCollections} 
@@ -2402,6 +2476,7 @@ const App: React.FC = () => {
                             onSeeAllCategory={handleCategoryNavigate}
                             onBundleClick={setSelectedBundle}
                             onShowAll={handleShowAllSorted}
+                            onShowCollectionAll={handleShowCollectionAll}
                         />
                     </Suspense>
                 ) : (
@@ -2429,7 +2504,7 @@ const App: React.FC = () => {
     }
 
     return (
-        <div className="app-shell relative min-h-[100dvh] overflow-x-hidden bg-surface font-sans text-theme-text transition-colors duration-300 selection:bg-primary/30">
+        <div className="app-shell relative min-h-[100dvh] overflow-x-hidden bg-surface font-sans text-theme-text selection:bg-primary/30">
             <Suspense fallback={null}>
                 {showSplashPreview && <SplashScreenPreview />}
             </Suspense>
@@ -2470,6 +2545,7 @@ const App: React.FC = () => {
                         toggleTheme={toggleTheme}
                         activeTab={activeTab}
                         onOpenSettings={handleOpenSettings}
+                        onOpenSettingsPreload={handleOpenSettingsPreload}
                         onOpenReleaseNotes={handleOpenReleaseNotes}
                         updateCount={updateCount}
                         activeDownloadCount={activeDownloadCount}
@@ -2486,7 +2562,14 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    <main className="w-full min-h-[50vh] pb-[calc(env(safe-area-inset-bottom)+5.35rem)]">
+                    <main ref={appListScrollRef} className="relative w-full min-h-[50vh] pb-[calc(env(safe-area-inset-bottom)+5.35rem)]">
+                        {isAppDataTab && isRefreshing && (
+                            <div className="pointer-events-none sticky top-0 z-10 flex justify-end pr-3">
+                                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-card/90 text-primary shadow-md ring-1 ring-theme-border backdrop-blur">
+                                    <i className="fas fa-circle-notch fa-spin text-sm"></i>
+                                </div>
+                            </div>
+                        )}
                         <div key={activeTab} className="animate-tab-enter">
                             {activeTab === 'android' && renderAppGrid(Platform.ANDROID)}
                             {activeTab === 'pc' && renderAppGrid(Platform.PC)}
@@ -2525,7 +2608,7 @@ const App: React.FC = () => {
                         </svg>
                     </button>
 
-                    <BottomNav activeTab={activeTab} onTabChange={handleBottomNavChange} hiddenTabs={settings.hiddenTabs} />
+                    <BottomNav activeTab={activeTab} onTabChange={handleBottomNavChange} hiddenTabs={settings.hiddenTabs} glassEffect={settings.glassEffect} />
 
                     <Suspense fallback={null}>
                         {selectedBundle && (
@@ -2557,7 +2640,7 @@ const App: React.FC = () => {
                         )}
                         {showFAQ && <FAQModal onClose={() => setShowFAQ(false)} items={faqs} />}
                         {showNotice && remoteConfig?.notice && <NoticeModal title={remoteConfig.notice.title} message={remoteConfig.notice.message} onClose={handleDismissNotice} />}
-                        {showModernUITutorial && <ModernUITutorial onOpenSettings={() => setShowSettingsModal(true)} onClose={() => setShowModernUITutorial(false)} />}
+                        {showModernUITutorial && <ModernUITutorial onOpenSettings={() => { preloadSettingsModal(); setShowSettingsModal(true); }} onClose={() => setShowModernUITutorial(false)} />}
                         {showReleaseNotes && <ReleaseNotesModal onClose={() => setShowReleaseNotes(false)} />}
                         {showSettingsModal && (
                             <SettingsModal
