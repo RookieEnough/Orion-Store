@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { useSettingsStore } from '../store/useAppStore';
 import { createPortal } from 'react-dom';
 import { Haptics, NotificationType } from '@capacitor/haptics';
 import { Capacitor } from '@capacitor/core';
@@ -217,7 +218,7 @@ const SentinelModal: React.FC<SentinelModalProps> = ({ onClose }) => {
                 break;
             case 'DB_UPDATE_COMPLETE':
                 setDbStatus('ready');
-                Haptics.notification({ type: NotificationType.Success });
+                if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success });
                 break;
             case 'SIGNATURE_COUNT_READY':
                  setSignatureCount(payload.count);
@@ -227,7 +228,7 @@ const SentinelModal: React.FC<SentinelModalProps> = ({ onClose }) => {
                 setTimeout(() => {
                     setThreats(payload);
                     setView('results');
-                    Haptics.notification({ type: payload.length > 0 ? NotificationType.Error : NotificationType.Success });
+                    if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: payload.length > 0 ? NotificationType.Error : NotificationType.Success });
                 }, 500);
                 break;
             case 'RAPID_SCAN_COMPLETE':
@@ -235,7 +236,7 @@ const SentinelModal: React.FC<SentinelModalProps> = ({ onClose }) => {
                  setTimeout(() => {
                     setRapidScanResults(payload.threats);
                     setView('results');
-                    Haptics.notification({ type: payload.threats.length > 0 ? NotificationType.Error : NotificationType.Success });
+                    if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: payload.threats.length > 0 ? NotificationType.Error : NotificationType.Success });
                  }, 500);
                  break;
         }
@@ -496,7 +497,7 @@ const SentinelModal: React.FC<SentinelModalProps> = ({ onClose }) => {
           {(threats.length === 0 && rapidScanResults.length === 0) ? (
               <div className="flex flex-col items-center flex-1 justify-center"><div className="w-36 h-36 rounded-full flex items-center justify-center mb-8 bg-theme-element"><i className="fas fa-shield-check text-5xl text-emerald-500"></i></div><h2 className="text-2xl font-black text-theme-text mb-2 tracking-tight">System Clean</h2><p className="text-theme-sub text-xs text-center max-w-xs font-medium">No threats detected.</p></div>
           ) : (
-              <div className="w-full flex-1 overflow-y-auto no-scrollbar pb-4">
+              <div className="w-full pb-4">
                   <ThreatVerificationAdvisory />
                   <h3 className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em] mb-4 text-center">Threat Report</h3>
                   <div className="space-y-3">
@@ -587,8 +588,8 @@ const SentinelModal: React.FC<SentinelModalProps> = ({ onClose }) => {
     const dns = getDnsInfo(networkStatus.dnsServers);
 
     return (
-        <div className="w-full max-w-sm animate-fade-in h-full flex flex-col">
-            <div className="w-full flex-1 overflow-y-auto no-scrollbar pt-8 pb-4 space-y-3 relative">
+        <div className="w-full max-w-sm animate-fade-in">
+            <div className="w-full pt-8 pb-4 space-y-3 relative">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.03] dark:opacity-[0.02] pointer-events-none -z-10">
                     <svg width="300" height="300" viewBox="0 0 24 24" fill="currentColor" className="text-primary">
                         <path d="M12 2L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-3z"></path>
@@ -613,15 +614,16 @@ const SentinelModal: React.FC<SentinelModalProps> = ({ onClose }) => {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] bg-surface flex flex-col animate-fade-in">
-        <div className="pt-6 px-3 flex justify-between items-center z-20">
+    <div className="fixed inset-0 z-[200] bg-surface overflow-y-auto no-scrollbar animate-fade-in">
+      <div className="min-h-[100dvh] flex flex-col">
+        <div className="shrink-0 pt-[calc(1.5rem+env(safe-area-inset-top))] px-3 flex justify-between items-center z-20">
             <div className={`px-3 py-1 rounded-full border flex items-center gap-2 ${permissions.storage ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-red-500/10 text-red-500 border-red-500/30'}`}>
                 <i className={`fas ${permissions.storage ? 'fa-shield-check' : 'fa-lock'} text-[10px]`}></i>
                 <span className="text-[9px] font-black uppercase tracking-widest">{permissions.storage ? 'Sensors Online' : 'Sensors Locked'}</span>
             </div>
             <button onClick={onClose} className="w-10 h-10 rounded-full bg-theme-element flex items-center justify-center text-theme-text active:scale-95 transition-transform"><i className="fas fa-times"></i></button>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center px-3 pb-6 min-h-0">
+        <div className="flex-1 flex flex-col items-center justify-center px-3 py-6 min-h-0">
             {view === 'permissions' && renderPermissionsView()}
             {view === 'database' && renderDatabaseView()}
             {view === 'main' && renderMainView()}
@@ -629,13 +631,14 @@ const SentinelModal: React.FC<SentinelModalProps> = ({ onClose }) => {
             {view === 'results' && renderResultsView()}
             {view === 'network' && renderNetworkSentryView()}
         </div>
-        <div className="pb-6 px-3 z-20">
+        <div className="shrink-0 pb-[calc(1.5rem+env(safe-area-inset-bottom))] px-3 z-20">
             <div className="bg-theme-element border border-theme-border rounded-xl p-2 flex items-center justify-center text-center">
                 <p className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">
                     {signatureCount ? `${signatureCount.toLocaleString()} Signatures Live` : `...`}
                 </p>
             </div>
         </div>
+      </div>
         
         {toast && (
             <div className="absolute bottom-28 left-0 right-0 flex justify-center animate-slide-up pointer-events-none">

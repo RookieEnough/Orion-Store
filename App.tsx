@@ -1,4 +1,19 @@
 
+// --- IMMEDIATE THEME DETECTION (Prevents white flash on boot) ---
+(() => {
+    try {
+        const theme = localStorage.getItem('app-theme') || 'light';
+        const isOled = localStorage.getItem('app-is-oled') === 'true';
+        const root = document.documentElement;
+        root.classList.remove('light', 'dusk', 'dark', 'oled');
+        if (theme === 'dark' && isOled) {
+            root.classList.add('oled', 'dark');
+        } else {
+            root.classList.add(theme);
+        }
+    } catch (e) {}
+})();
+
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy, useDeferredValue, startTransition } from 'react';
 import { flushSync } from 'react-dom';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -50,8 +65,9 @@ const SplashScreenPreview = lazy(() => import('./components/SplashScreenPreview'
 const ReleaseNotesModal = lazy(() => import('./components/ReleaseNotesModal'));
 const BundlePreviewModal = lazy(() => import('./components/BundlePreviewModal'));
 const ProfileStatsModal = lazy(() => import('./components/ProfileStatsModal'));
+const VirusTotalScanModal = lazy(() => import('./components/VirusTotalScanModal'));
 
-const CURRENT_STORE_VERSION = '1.3.1';
+const CURRENT_STORE_VERSION = '1.3.2';
 const UNITY_GAME_ID = '5996387';
 const ADS_TEST_MODE = false;
 
@@ -379,6 +395,7 @@ const App: React.FC = () => {
     const [showSplashPreview, setShowSplashPreview] = useState(!Capacitor.isNativePlatform());
     const [activeTab, setActiveTab] = useState<Tab>('android');
     const [selectedApp, setSelectedApp] = useState<AppItem | null>(null);
+    const [vtScanTarget, setVtScanTarget] = useState<AppItem | null>(null);
     const [selectedBundle, setSelectedBundle] = useState<BundleItem | null>(null);
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -388,7 +405,6 @@ const App: React.FC = () => {
     const [showInstallToast, setShowInstallToast] = useState<{ app: AppItem, file: string } | null>(null);
     const [showErrorToast, setShowErrorToast] = useState(false);
     const [errorMsg, setErrorMsg] = useState('Failed to load apps');
-    const [profileImgError, setProfileImgError] = useState(false);
     const [showFAQ, setShowFAQ] = useState(false);
     const [showAdDonation, setShowAdDonation] = useState(false);
     const [showSubmissionModal, setShowSubmissionModal] = useState(false);
@@ -1508,14 +1524,18 @@ const App: React.FC = () => {
                 return;
             }
             if (showAllSorted) { setShowAllSorted(false); setViewAllApps(null); return; }
+            if (vtScanTarget) { setVtScanTarget(null); return; }
             if (selectedApp) setSelectedApp(null);
             else if (selectedBundle) setSelectedBundle(null);
+            else if (showProfileStats) { setShowProfileStats(false); setProfileBadgeSelectionIndex(null); }
+            else if (showCustomBundleModal) setShowCustomBundleModal(false);
             else if (showSettingsModal) setShowSettingsModal(false);
             else if (showReleaseNotes) setShowReleaseNotes(false);
             else if (showFAQ) setShowFAQ(false);
             else if (showSubmissionModal) setShowSubmissionModal(false);
             else if (showAdDonation) setShowAdDonation(false);
             else if (showStoreUpdateModal) setShowStoreUpdateModal(false);
+            else if (showModernUITutorial) setShowModernUITutorial(false);
             else if (showNotice) handleDismissNotice();
             else if (canResetCurrentBrowseState) restorePrimaryBrowseState();
             else if (activeTab !== 'android') setActiveTab('android');
@@ -1523,7 +1543,7 @@ const App: React.FC = () => {
         };
         const backListener = CapacitorApp.addListener('backButton', handleBack);
         return () => { backListener.then(h => h.remove()); };
-    }, [selectedApp, selectedBundle, showSettingsModal, showFAQ, showSubmissionModal, showAdDonation, activeTab, showStoreUpdateModal, showNotice, showReleaseNotes, canResetCurrentBrowseState, restorePrimaryBrowseState, showAllSorted]);
+    }, [selectedApp, selectedBundle, showSettingsModal, showFAQ, showSubmissionModal, showAdDonation, activeTab, showStoreUpdateModal, showNotice, showReleaseNotes, canResetCurrentBrowseState, restorePrimaryBrowseState, showAllSorted, vtScanTarget, showProfileStats, showCustomBundleModal, showModernUITutorial]);
 
     const handleDownloadStart = useCallback((appId: string, downloadId: string, fileName: string) => {
         data.startDownload(appId, downloadId, fileName);
@@ -2309,6 +2329,12 @@ const App: React.FC = () => {
         loadApps(true);
     }, [loadApps]);
 
+    useEffect(() => {
+        const handler = () => handleReloadApps();
+        window.addEventListener('orion:trigger-refresh' as any, handler);
+        return () => window.removeEventListener('orion:trigger-refresh' as any, handler);
+    }, [handleReloadApps]);
+
     // Pull-to-refresh is only enabled on the app data tabs (Android / PC / TV).
     // The About tab is excluded so that pulling on it is a no-op.
     usePullToRefresh({
@@ -2563,20 +2589,13 @@ const App: React.FC = () => {
                     )}
 
                     <main ref={appListScrollRef} className="relative w-full min-h-[50vh] pb-[calc(env(safe-area-inset-bottom)+5.35rem)]">
-                        {isAppDataTab && isRefreshing && (
-                            <div className="pointer-events-none sticky top-0 z-10 flex justify-end pr-3">
-                                <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-card/90 text-primary shadow-md ring-1 ring-theme-border backdrop-blur">
-                                    <i className="fas fa-circle-notch fa-spin text-sm"></i>
-                                </div>
-                            </div>
-                        )}
                         <div key={activeTab} className="animate-tab-enter">
                             {activeTab === 'android' && renderAppGrid(Platform.ANDROID)}
                             {activeTab === 'pc' && renderAppGrid(Platform.PC)}
                             {activeTab === 'tv' && renderAppGrid(Platform.TV)}
                             {activeTab === 'about' && (
                                 <Suspense fallback={<div className="flex justify-center p-12"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div></div>}>
-                                    <AboutTabContainer devProfile={devProfile} socialLinks={socialLinks} faqs={faqs} profileImgError={profileImgError} setProfileImgError={setProfileImgError} handleProfileClick={handleAboutProfileClick} setShowFAQ={setShowFAQ} onOpenAdDonation={() => setShowAdDonation(true)} currentStoreVersion={CURRENT_STORE_VERSION} onWipeCache={() => { localStorage.clear(); window.location.reload(); }} onTestStoreUpdate={() => { setIsTestingUpdate(true); setShowStoreUpdateModal(true); triggerHaptic('impact', ImpactStyle.Medium); }} mirrorSource={mirrorSource} availableUpdates={availableUpdates} onTriggerUpdate={(app) => handleDownloadAction(app)} onTriggerDebugToast={(type) => { if (type === 'install') { const fallbackApp = allKnownApps[0]; if (fallbackApp) setShowInstallToast({ app: fallbackApp, file: 'test.apk' }); } if (type === 'error') { setShowErrorToast(true); setErrorMsg("This is a test error message for alignment checking."); } if (type === 'cleanup') data.setPendingCleanup({ 'test-1': { fileName: 'a', timestamp: Date.now() }, 'test-2': { fileName: 'b', timestamp: Date.now() }, 'test-3': { fileName: 'c', timestamp: Date.now() } }); }} onTriggerModernUITutorial={() => { settings.setHasSeenModernUITutorial(false); setShowModernUITutorial(true); }} onReloadApps={handleReloadApps} />
+                                    <AboutTabContainer devProfile={devProfile} socialLinks={socialLinks} faqs={faqs} handleProfileClick={handleAboutProfileClick} setShowFAQ={setShowFAQ} onOpenAdDonation={() => setShowAdDonation(true)} currentStoreVersion={CURRENT_STORE_VERSION} onWipeCache={() => { localStorage.clear(); window.location.reload(); }} onTestStoreUpdate={() => { setIsTestingUpdate(true); setShowStoreUpdateModal(true); triggerHaptic('impact', ImpactStyle.Medium); }} mirrorSource={mirrorSource} availableUpdates={availableUpdates} onTriggerUpdate={(app) => handleDownloadAction(app)} onTriggerDebugToast={(type) => { if (type === 'install') { const fallbackApp = allKnownApps[0]; if (fallbackApp) setShowInstallToast({ app: fallbackApp, file: 'test.apk' }); } if (type === 'error') { setShowErrorToast(true); setErrorMsg("This is a test error message for alignment checking."); } if (type === 'cleanup') data.setPendingCleanup({ 'test-1': { fileName: 'a', timestamp: Date.now() }, 'test-2': { fileName: 'b', timestamp: Date.now() }, 'test-3': { fileName: 'c', timestamp: Date.now() } }); }} onTriggerModernUITutorial={() => { settings.setHasSeenModernUITutorial(false); setShowModernUITutorial(true); }} onReloadApps={handleReloadApps} />
                                 </Suspense>
                             )}
                         </div>
@@ -2636,6 +2655,13 @@ const App: React.FC = () => {
                                 onDeleteReadyFile={handleDeleteReadyFile}
                                 onExportAPK={handleExportAPK}
                                 isScanning={scanningId === selectedApp.id}
+                                onVirusTotalScan={() => setVtScanTarget(selectedApp)}
+                            />
+                        )}
+                        {vtScanTarget && (
+                            <VirusTotalScanModal 
+                                app={vtScanTarget} 
+                                onClose={() => setVtScanTarget(null)} 
                             />
                         )}
                         {showFAQ && <FAQModal onClose={() => setShowFAQ(false)} items={faqs} />}

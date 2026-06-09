@@ -11,6 +11,7 @@ interface ModernAppListProps {
     onSeeAllCategory?: (category: string) => void;
     onBundleClick?: (bundle: BundleItem) => void;
     onShowAll?: () => void;
+    onShowCollectionAll?: (collection: StoreCollection) => void;
 }
 
 const getLaneId = (title: string) => `swimlane-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`;
@@ -359,8 +360,9 @@ const SwimlaneRow: React.FC<{
     collection: StoreCollection;
     onAppClick: (app: AppItem) => void;
     onSeeAllCategory?: (category: string) => void;
+    onShowCollectionAll?: (collection: StoreCollection) => void;
     index: number;
-}> = ({ collection, onAppClick, onSeeAllCategory, index }) => {
+}> = ({ collection, onAppClick, onSeeAllCategory, onShowCollectionAll, index }) => {
     const compactMode = false; // Modern layout ignores global compact mode for its own cards
     const rowRef = useRef<HTMLDivElement>(null);
     const [isVisible, setIsVisible] = useState(false);
@@ -385,6 +387,7 @@ const SwimlaneRow: React.FC<{
 
     if (!collection.apps || collection.apps.length === 0) return null;
     const laneId = getLaneId(collection.title || `lane-${index}`);
+    const hasCollectionViewAll = !!collection.totalAppCount && collection.totalAppCount > collection.apps.length && !!onShowCollectionAll;
 
     return (
         <section
@@ -411,6 +414,15 @@ const SwimlaneRow: React.FC<{
                         className="rounded-full border border-theme-border/80 bg-theme-element/60 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-primary transition-colors hover:border-primary hover:bg-primary hover:text-white"
                     >
                         See All
+                    </motion.button>
+                )}
+                {hasCollectionViewAll && (
+                    <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => onShowCollectionAll(collection)}
+                        className="rounded-full border border-theme-border/80 bg-theme-element/60 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-primary transition-colors hover:border-primary hover:bg-primary hover:text-white"
+                    >
+                        View All
                     </motion.button>
                 )}
             </div>
@@ -602,7 +614,8 @@ const ModernAppList: React.FC<ModernAppListProps> = ({
     onAppClick,
     onSeeAllCategory,
     onBundleClick,
-    onShowAll
+    onShowAll,
+    onShowCollectionAll
 }) => {
     const heroCollection = collections.find((collection) => collection.type === 'hero');
     const bodyCollections = collections.filter((collection) => collection.type !== 'hero');
@@ -626,7 +639,15 @@ const ModernAppList: React.FC<ModernAppListProps> = ({
             });
         });
 
-        prefetchUrls.forEach((url) => prefetchImage(url));
+        const urls = Array.from(prefetchUrls).slice(0, 24);
+        const idleId = window.requestIdleCallback
+            ? window.requestIdleCallback(() => urls.forEach((url) => prefetchImage(url)), { timeout: 1800 })
+            : window.setTimeout(() => urls.forEach((url) => prefetchImage(url)), 700);
+
+        return () => {
+            if (typeof idleId === 'number') window.clearTimeout(idleId);
+            else window.cancelIdleCallback?.(idleId);
+        };
     }, [collections]);
 
     return (
@@ -677,6 +698,7 @@ const ModernAppList: React.FC<ModernAppListProps> = ({
                                 collection={collection}
                                 onAppClick={onAppClick}
                                 onSeeAllCategory={onSeeAllCategory}
+                                onShowCollectionAll={onShowCollectionAll}
                                 index={index}
                             />
                         );

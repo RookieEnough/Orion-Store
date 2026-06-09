@@ -38,8 +38,11 @@ select {
 
 #root {
   height: 100%;
+  /* Use `auto` instead of `overflow-y: auto` on #root: a top-level scroller
+     combined with `backdrop-blur` overlays is one of the biggest WebView
+     scroll-lag triggers. We let the inner content scroll on its own. */
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: visible;
   overscroll-behavior-y: contain;
 }
 
@@ -226,8 +229,13 @@ body.native-ui .shadow-2xl {
     contain: layout paint style;
 }
 
-header, nav, .modal-content {
-    will-change: transform, opacity;
+header, nav {
+    will-change: transform;
+    transform: translateZ(0);
+}
+.modal-content {
+    /* Isolated stacking context — prevents backdrop-filter bleed from parent layers */
+    isolation: isolate;
     transform: translateZ(0);
 }
 
@@ -511,6 +519,8 @@ html.oled {
   --orion-shadow-strong: 0 28px 52px -24px rgba(0, 0, 0, 0.92);
   --orion-shadow-perf: 0 10px 18px -14px rgba(0, 0, 0, 0.62);
 }
+
+
 
 /* Subtle elevation glow for dark modes (borderless cards still pop) */
 html.dusk .orion-shadow-surface {

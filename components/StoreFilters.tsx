@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { SortOption } from '../types';
+import { useSettingsStore } from '../store/useAppStore';
 
 interface StoreFiltersProps {
   searchQuery: string;
@@ -163,7 +164,14 @@ const StoreFilters: React.FC<StoreFiltersProps> = ({
                       <div className="w-px h-3 bg-theme-border mx-0.5"></div>
                       {onToggleFavorites && (
                           <button
-                              onClick={onToggleFavorites}
+                              onClick={() => {
+                                  onToggleFavorites();
+                                  if (useSettingsStore.getState().hapticEnabled) {
+                                      import('@capacitor/haptics').then(({ Haptics }) => {
+                                          Haptics.selection();
+                                      });
+                                  }
+                              }}
                               className={`w-7 h-7 flex items-center justify-center transition-all rounded-full hover:bg-theme-element active:scale-90 ${showFavorites ? 'text-rose-500 bg-rose-500/10' : 'text-theme-sub hover:text-rose-500'}`}
                           >
                               <i className={`${showFavorites ? 'fas' : 'far'} fa-heart text-[10px]`}></i>
@@ -311,7 +319,14 @@ const StoreFilters: React.FC<StoreFiltersProps> = ({
                       <div className="w-px h-3 bg-theme-border mx-0.5"></div>
                       {onToggleFavorites && (
                           <button
-                              onClick={onToggleFavorites}
+                              onClick={() => {
+                                  onToggleFavorites();
+                                  if (useSettingsStore.getState().hapticEnabled) {
+                                      import('@capacitor/haptics').then(({ Haptics }) => {
+                                          Haptics.selection();
+                                      });
+                                  }
+                              }}
                               className={`w-7 h-7 flex items-center justify-center transition-all rounded-full hover:bg-theme-element active:scale-90 ${showFavorites ? 'text-rose-500 bg-rose-500/10' : 'text-theme-sub hover:text-rose-500'}`}
                           >
                               <i className={`${showFavorites ? 'fas' : 'far'} fa-heart text-[10px]`}></i>
@@ -405,7 +420,14 @@ const StoreFilters: React.FC<StoreFiltersProps> = ({
                   {/* Favorites Toggle */}
                   {onToggleFavorites && (
                       <button
-                          onClick={onToggleFavorites}
+                          onClick={() => {
+                              onToggleFavorites();
+                              if (useSettingsStore.getState().hapticEnabled) {
+                                  import('@capacitor/haptics').then(({ Haptics }) => {
+                                      Haptics.selection();
+                                  });
+                              }
+                          }}
                           className={`w-8 h-8 flex items-center justify-center transition-all rounded-full hover:bg-theme-element active:scale-90 ${showFavorites ? 'text-rose-500 bg-rose-500/10' : 'text-theme-sub hover:text-rose-500'}`}
                           title="Show Favorites"
                       >

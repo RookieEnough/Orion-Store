@@ -6,12 +6,13 @@ interface BottomNavProps {
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
   hiddenTabs?: string[];
+  glassEffect?: boolean;
 }
 
-const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, hiddenTabs = [] }) => {
+const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, hiddenTabs = [], glassEffect = true }) => {
   return (
     <div className="fixed bottom-4 left-0 right-0 z-40 flex justify-center pointer-events-none safe-area-pb">
-       <nav className="bg-surface/95 backdrop-blur-lg border border-theme-border p-1.5 rounded-[2rem] shadow-2xl flex items-center gap-1 animate-slide-up pointer-events-auto transform translate-z-0">
+       <nav className={`${glassEffect ? 'bg-surface/95 backdrop-blur-lg' : 'bg-surface'} border border-theme-border p-1.5 rounded-[2rem] shadow-2xl flex items-center gap-1 animate-slide-up pointer-events-auto transform translate-z-0`}>
          
          {!hiddenTabs.includes('android') && (
              <button 

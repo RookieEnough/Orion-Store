@@ -16,16 +16,18 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
-    <!-- 3. FOREGROUND SERVICE FOR BACKGROUND DOWNLOADS (v1.3.1) -->
+    <!-- 3. SHIZUKU PERMISSION -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+
+    <!-- 4. FOREGROUND SERVICE PERMISSIONS -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- 4. SHIZUKU PERMISSION -->
-    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
-
+    <!-- Application-level performance flags: hardware acceleration stays enabled;
+         persistent remains false so Android can manage memory normally. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -34,19 +36,32 @@
         android:largeHeap="true"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
-        android:theme="@style/AppTheme">
+        android:theme="@style/AppTheme"
+        android:persistent="false"
+        android:useEmbeddedDex="true"
+        android:appComponentFactory="androidx.core.app.CoreComponentFactory">
+
         <activity
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|density|fontScale"
             android:name=".MainActivity"
-            android:label="@string/app_name"
             android:theme="@style/AppTheme.Splash"
             android:launchMode="singleTask"
-            android:exported="true">
+            android:exported="true"
+            android:resizeableActivity="false"
+            android:windowSoftInputMode="adjustResize"
+            android:screenOrientation="portrait">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Download Foreground Service -->
+        <service
+            android:name=".DownloadForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -56,22 +71,14 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- BACKGROUND DOWNLOADS FOREGROUND SERVICE (v1.3.1) -->
-        <service
-            android:name=".DownloadForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync"
-            android:stopWithTask="false" />
-
-        <!-- SHIZUKU PROVIDER (CRITICAL FOR SERVICE BINDING) -->
+        <!-- Shizuku Permission Provider -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
             android:multiprocess="false"
             android:enabled="true"
             android:exported="true"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
-            tools:ignore="WrongManifestParent"
-        />
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
     </application>
 </manifest>

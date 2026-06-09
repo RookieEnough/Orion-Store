@@ -16,6 +16,7 @@ interface SelectedAppModalContainerProps {
   onNavigateToApp: (appId: string) => void;
   onExportAPK: (app: AppItem, fileName: string) => void;
   isScanning: boolean;
+  onVirusTotalScan: () => void;
 }
 
 const SelectedAppModalContainer: React.FC<SelectedAppModalContainerProps> = ({
@@ -28,7 +29,8 @@ const SelectedAppModalContainer: React.FC<SelectedAppModalContainerProps> = ({
   onDeleteReadyFile,
   onNavigateToApp,
   onExportAPK,
-  isScanning
+  isScanning,
+  onVirusTotalScan
 }) => {
   const { resolvedPackageName, localVersion, preferredStream } = useSettingsStore((state) => ({
     resolvedPackageName: state.resolvedPackageNames[app.id],
@@ -96,6 +98,7 @@ const SelectedAppModalContainer: React.FC<SelectedAppModalContainerProps> = ({
       onDeleteReadyFile={onDeleteReadyFile}
       onExportAPK={onExportAPK}
       isScanning={isScanning}
+      onVirusTotalScan={onVirusTotalScan}
     />
   );
 };

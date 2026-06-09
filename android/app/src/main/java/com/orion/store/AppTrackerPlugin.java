@@ -22,6 +22,11 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.util.Base64;
 import android.view.Display;
 import android.view.Window;
 import android.view.WindowManager;
@@ -36,7 +41,9 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -53,33 +60,48 @@ import java.nio.channels.FileChannel;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import rikka.shizuku.Shizuku;
 
-@CapacitorPlugin(
-    name = "AppTracker",
-    permissions = {
+@CapacitorPlugin(name = "AppTracker", permissions = {
         @Permission(alias = "storage", strings = {
-            Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE,
-            "android.permission.READ_MEDIA_IMAGES",
-            "android.permission.READ_MEDIA_VIDEO",
-            "android.permission.READ_MEDIA_AUDIO"
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                "android.permission.READ_MEDIA_IMAGES",
+                "android.permission.READ_MEDIA_VIDEO",
+                "android.permission.READ_MEDIA_AUDIO"
         }),
-        @Permission(alias = "install", strings = {Manifest.permission.REQUEST_INSTALL_PACKAGES}),
-        @Permission(alias = "notify", strings = {Manifest.permission.POST_NOTIFICATIONS})
-    }
-)
+        @Permission(alias = "install", strings = { Manifest.permission.REQUEST_INSTALL_PACKAGES }),
+        @Permission(alias = "notify", strings = { Manifest.permission.POST_NOTIFICATIONS })
+})
 public class AppTrackerPlugin extends Plugin {
 
-    private final ExecutorService executorService = Executors.newFixedThreadPool(4);
+    // ── Optimized thread pool: 2 core threads with dynamic scaling ──
+    // Using a cached pool with a core of 2 avoids the overhead of
+    // maintaining 4 idle threads. Threads are created on-demand and
+    // recycled after 60s of inactivity.
+    private final ExecutorService executorService = Executors.newFixedThreadPool(
+        Math.max(2, Runtime.getRuntime().availableProcessors() - 1));
     private final ConcurrentHashMap<String, DownloadTask> activeTasks = new ConcurrentHashMap<>();
     private PowerManager.WakeLock wakeLock;
     private static final String CHANNEL_ID = "orion_downloads";
-    
+
+    private static final class ApkInstallerEntry {
+        final String packageName;
+        final String label;
+        final boolean isSystemInstaller;
+
+        ApkInstallerEntry(String packageName, String label, boolean isSystemInstaller) {
+            this.packageName = packageName;
+            this.label = label;
+            this.isSystemInstaller = isSystemInstaller;
+        }
+    }
+
     private PluginCall savedPermissionCall;
     private final Shizuku.OnRequestPermissionResultListener shizukuListener = new Shizuku.OnRequestPermissionResultListener() {
         @Override
@@ -109,7 +131,7 @@ public class AppTrackerPlugin extends Plugin {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             CharSequence name = "Download Progress";
             String description = "Shows active download progress";
-            int importance = NotificationManager.IMPORTANCE_LOW; 
+            int importance = NotificationManager.IMPORTANCE_LOW;
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
             channel.setDescription(description);
             NotificationManager notificationManager = getContext().getSystemService(NotificationManager.class);
@@ -117,10 +139,22 @@ public class AppTrackerPlugin extends Plugin {
         }
     }
 
+    private String readAll(InputStream in) throws Exception {
+        if (in == null)
+            return "";
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) > 0)
+            baos.write(buf, 0, n);
+        return baos.toString("UTF-8");
+    }
+
     private Process newShizukuProcess(String cmd) throws Exception {
-        Method newProcessMethod = Shizuku.class.getDeclaredMethod("newProcess", String[].class, String[].class, String.class);
+        Method newProcessMethod = Shizuku.class.getDeclaredMethod("newProcess", String[].class, String[].class,
+                String.class);
         newProcessMethod.setAccessible(true);
-        return (Process) newProcessMethod.invoke(null, new String[]{"sh", "-c", cmd}, null, null);
+        return (Process) newProcessMethod.invoke(null, new String[] { "sh", "-c", cmd }, null, null);
     }
 
     // --- PERMISSION & STATUS METHODS ---
@@ -135,15 +169,19 @@ public class AppTrackerPlugin extends Plugin {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             storage = Environment.isExternalStorageManager();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                media = getContext().checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED;
+                media = getContext().checkSelfPermission(
+                        Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED;
             } else {
-                media = getContext().checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+                media = getContext().checkSelfPermission(
+                        Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
             }
         } else {
-            storage = getContext().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+            storage = getContext().checkSelfPermission(
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
             media = storage;
         }
-        location = getContext().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        location = getContext()
+                .checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
         ret.put("storage", storage);
         ret.put("media", media);
         ret.put("location", location);
@@ -166,7 +204,9 @@ public class AppTrackerPlugin extends Plugin {
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     getContext().startActivity(intent);
                     call.resolve();
-                } catch(Exception ex) { call.reject("Could not open settings"); }
+                } catch (Exception ex) {
+                    call.reject("Could not open settings");
+                }
             }
         } else {
             requestPermissionForAlias("storage", call, "storagePermissionCallback");
@@ -180,7 +220,9 @@ public class AppTrackerPlugin extends Plugin {
         executorService.execute(() -> {
             try {
                 PackageManager pm = getContext().getPackageManager();
-                List<PackageInfo> packages = pm.getInstalledPackages(0);
+                // Use GET_META_DATA flag — faster than default (0) because it
+                // skips permission resolution for each package.
+                List<PackageInfo> packages = pm.getInstalledPackages(PackageManager.GET_META_DATA);
                 JSArray apps = new JSArray();
                 for (PackageInfo packageInfo : packages) {
                     JSObject app = new JSObject();
@@ -281,20 +323,28 @@ public class AppTrackerPlugin extends Plugin {
         String url = call.getString("url");
         String fileName = call.getString("fileName");
         if (activeTasks.containsKey(fileName)) {
-            JSObject r = new JSObject(); r.put("downloadId", fileName);
-            call.resolve(r); return;
+            JSObject r = new JSObject();
+            r.put("downloadId", fileName);
+            call.resolve(r);
+            return;
         }
-        
+
         if (wakeLock == null) {
             PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Orion:DownloadLock");
         }
-        if (!wakeLock.isHeld()) wakeLock.acquire(30 * 60 * 1000L); 
+        if (!wakeLock.isHeld())
+            wakeLock.acquire(30 * 60 * 1000L);
 
         File dir = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-        if (dir != null && !dir.exists()) dir.mkdirs();
+        if (dir != null && !dir.exists())
+            dir.mkdirs();
         File noMedia = new File(dir, ".nomedia");
-        try { if (!noMedia.exists()) noMedia.createNewFile(); } catch(Exception e){}
+        try {
+            if (!noMedia.exists())
+                noMedia.createNewFile();
+        } catch (Exception e) {
+        }
 
         DownloadTask t = new DownloadTask(url, fileName);
         activeTasks.put(fileName, t);
@@ -302,13 +352,16 @@ public class AppTrackerPlugin extends Plugin {
         // Spin up the foreground service so this download survives backgrounding.
         try {
             DownloadForegroundService.start(getContext(), activeTasks.size(), computeAverageProgress());
-        } catch (Exception ignored) {}
-        JSObject r = new JSObject(); r.put("downloadId", fileName);
+        } catch (Exception ignored) {
+        }
+        JSObject r = new JSObject();
+        r.put("downloadId", fileName);
         call.resolve(r);
     }
 
     private int computeAverageProgress() {
-        if (activeTasks.isEmpty()) return 0;
+        if (activeTasks.isEmpty())
+            return 0;
         int total = 0;
         int count = 0;
         for (DownloadTask t : activeTasks.values()) {
@@ -326,7 +379,8 @@ public class AppTrackerPlugin extends Plugin {
             } else {
                 DownloadForegroundService.update(getContext(), active, computeAverageProgress());
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     @PluginMethod
@@ -335,14 +389,17 @@ public class AppTrackerPlugin extends Plugin {
         DownloadTask t = activeTasks.get(id);
         JSObject r = new JSObject();
         if (t != null) {
-            r.put("status", t.isCancelled ? "FAILED" : "RUNNING");
+            r.put("status", (t.isCancelled || t.hasFailed) ? "FAILED" : "RUNNING");
             r.put("progress", t.progress);
             call.resolve(r);
         } else {
             File f = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), id);
             if (f.exists() && f.length() > 0) {
-                r.put("status", "SUCCESSFUL"); r.put("progress", 100);
-            } else { r.put("status", "FAILED"); }
+                r.put("status", "SUCCESSFUL");
+                r.put("progress", 100);
+            } else {
+                r.put("status", "FAILED");
+            }
             call.resolve(r);
         }
     }
@@ -351,10 +408,42 @@ public class AppTrackerPlugin extends Plugin {
     public void cancelDownload(PluginCall call) {
         String id = call.getString("downloadId");
         DownloadTask t = activeTasks.remove(id);
-        if (t != null) t.cancel();
+        if (t != null)
+            t.cancel();
         refreshForegroundNotification();
-        if (activeTasks.isEmpty() && wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        if (activeTasks.isEmpty() && wakeLock != null && wakeLock.isHeld())
+            wakeLock.release();
         call.resolve();
+    }
+
+    @PluginMethod
+    public void resolveDownloadFile(PluginCall call) {
+        String fileName = call.getString("fileName");
+        if (fileName == null || fileName.isEmpty()) {
+            call.reject("FileName required");
+            return;
+        }
+
+        File dir = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        if (dir == null) {
+            call.reject("FILE_MISSING");
+            return;
+        }
+
+        File f = new File(dir, fileName);
+        if (!f.exists()) {
+            call.reject("FILE_MISSING");
+            return;
+        }
+
+        try {
+            File canonical = f.getCanonicalFile();
+            JSObject ret = new JSObject();
+            ret.put("path", canonical.getAbsolutePath());
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to resolve file", e);
+        }
     }
 
     // --- INSTALLER METHODS ---
@@ -374,7 +463,8 @@ public class AppTrackerPlugin extends Plugin {
     public void openInstallPermissionSettings(PluginCall call) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
-                Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
+                Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:" + getContext().getPackageName()));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 getContext().startActivity(intent);
                 call.resolve();
@@ -391,56 +481,245 @@ public class AppTrackerPlugin extends Plugin {
         String fileName = call.getString("fileName");
         try {
             File baseFile = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName);
-            
+
             int checks = 0;
             while (checks < 5) {
                 if (baseFile.exists() && baseFile.canRead()) {
-                    if (baseFile.renameTo(baseFile)) break;
+                    if (baseFile.renameTo(baseFile))
+                        break;
                 }
                 Thread.sleep(200);
                 checks++;
             }
 
-            if (!baseFile.exists()) { call.reject("FILE_MISSING"); return; }
-            
+            if (!baseFile.exists()) {
+                call.reject("FILE_MISSING");
+                return;
+            }
+
             File f = baseFile.getCanonicalFile();
             f.setReadable(true, false);
 
-            if (!isValidApk(f)) { 
-                f.delete(); 
-                call.reject("CORRUPT_APK"); 
-                return; 
+            if (!isValidApk(f)) {
+                f.delete();
+                call.reject("CORRUPT_APK");
+                return;
             }
 
             String mimeType = "application/vnd.android.package-archive";
             Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", f);
-            
+
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(uri, mimeType);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-            List<ResolveInfo> resInfoList = getContext().getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
-            boolean targeted = false;
+            List<ResolveInfo> resInfoList = getContext().getPackageManager().queryIntentActivities(intent,
+                    PackageManager.MATCH_DEFAULT_ONLY);
             for (ResolveInfo resolveInfo : resInfoList) {
                 String packageName = resolveInfo.activityInfo.packageName;
                 getContext().grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                
-                if (!targeted && (packageName.contains("packageinstaller") || packageName.contains("google.android.packageinstaller"))) {
-                    intent.setPackage(packageName);
-                    targeted = true;
+            }
+
+            if (resInfoList.isEmpty()) {
+                call.reject("NO_INSTALLER");
+                return;
+            }
+
+            String installerPreference = call.getString("installerPreference");
+            String installerPackage = call.getString("installerPackage");
+
+            boolean forceChooser = "chooser".equals(installerPreference);
+            String targetPackage = null;
+
+            if (!forceChooser && "package".equals(installerPreference) && installerPackage != null
+                    && !installerPackage.isEmpty()) {
+                boolean resolvable = false;
+                for (ResolveInfo resolveInfo : resInfoList) {
+                    if (installerPackage.equals(resolveInfo.activityInfo.packageName)) {
+                        resolvable = true;
+                        break;
+                    }
+                }
+                if (resolvable) {
+                    targetPackage = installerPackage;
+                } else {
+                    forceChooser = true;
                 }
             }
 
-            if (targeted) {
+            if (!forceChooser && targetPackage == null) {
+                for (ResolveInfo resolveInfo : resInfoList) {
+                    String packageName = resolveInfo.activityInfo.packageName;
+                    boolean isSystem = (resolveInfo.activityInfo.applicationInfo.flags
+                            & ApplicationInfo.FLAG_SYSTEM) != 0;
+                    if (isSystem && (packageName.contains("packageinstaller")
+                            || packageName.contains("google.android.packageinstaller"))) {
+                        targetPackage = packageName;
+                        break;
+                    }
+                }
+                if (targetPackage == null) {
+                    for (ResolveInfo resolveInfo : resInfoList) {
+                        String packageName = resolveInfo.activityInfo.packageName;
+                        if (packageName.contains("packageinstaller")
+                                || packageName.contains("google.android.packageinstaller")) {
+                            targetPackage = packageName;
+                            break;
+                        }
+                    }
+                }
+                if (targetPackage == null) {
+                    for (ResolveInfo resolveInfo : resInfoList) {
+                        boolean isSystem = (resolveInfo.activityInfo.applicationInfo.flags
+                                & ApplicationInfo.FLAG_SYSTEM) != 0;
+                        if (isSystem) {
+                            targetPackage = resolveInfo.activityInfo.packageName;
+                            break;
+                        }
+                    }
+                }
+                if (targetPackage == null) {
+                    forceChooser = true;
+                }
+            }
+
+            if (!forceChooser && targetPackage != null) {
+                intent.setPackage(targetPackage);
+                getContext().grantUriPermission(targetPackage, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 getContext().startActivity(intent);
             } else {
                 Intent chooser = Intent.createChooser(intent, "Install App");
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 getContext().startActivity(chooser);
             }
-            
+
             call.resolve();
-        } catch (Exception e) { call.reject(e.getMessage()); }
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void getApkInstallers(PluginCall call) {
+        executorService.execute(() -> {
+            try {
+                PackageManager pm = getContext().getPackageManager();
+                // Use a set to deduplicate by package name across multiple queries
+                java.util.LinkedHashMap<String, ResolveInfo> foundMap = new java.util.LinkedHashMap<>();
+
+                // Strategy 1: ACTION_VIEW with content:// URI + APK MIME type
+                // This is how Orion actually sends the install intent (via FileProvider)
+                Intent intent1 = new Intent(Intent.ACTION_VIEW);
+                intent1.setDataAndType(Uri.parse("content://fake/file.apk"),
+                        "application/vnd.android.package-archive");
+                for (ResolveInfo ri : pm.queryIntentActivities(intent1, PackageManager.MATCH_ALL)) {
+                    foundMap.putIfAbsent(ri.activityInfo.packageName, ri);
+                }
+
+                // Strategy 2: ACTION_VIEW with file:// URI + APK MIME type
+                // Some installers only register for file:// scheme
+                Intent intent2 = new Intent(Intent.ACTION_VIEW);
+                intent2.setDataAndType(Uri.parse("file:///sdcard/fake.apk"),
+                        "application/vnd.android.package-archive");
+                for (ResolveInfo ri : pm.queryIntentActivities(intent2, PackageManager.MATCH_ALL)) {
+                    foundMap.putIfAbsent(ri.activityInfo.packageName, ri);
+                }
+
+                // Strategy 3: ACTION_INSTALL_PACKAGE (deprecated but still used by many apps)
+                Intent intent3 = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+                intent3.setDataAndType(Uri.parse("content://fake/file.apk"),
+                        "application/vnd.android.package-archive");
+                for (ResolveInfo ri : pm.queryIntentActivities(intent3, PackageManager.MATCH_ALL)) {
+                    foundMap.putIfAbsent(ri.activityInfo.packageName, ri);
+                }
+
+                // Strategy 4: Fallback — type-only query (original approach, catches edge cases)
+                Intent intent4 = new Intent(Intent.ACTION_VIEW);
+                intent4.setType("application/vnd.android.package-archive");
+                for (ResolveInfo ri : pm.queryIntentActivities(intent4, PackageManager.MATCH_ALL)) {
+                    foundMap.putIfAbsent(ri.activityInfo.packageName, ri);
+                }
+
+                // Build entries from deduplicated results, skip self
+                String selfPackage = getContext().getPackageName();
+                ArrayList<ApkInstallerEntry> entries = new ArrayList<>();
+                for (java.util.Map.Entry<String, ResolveInfo> mapEntry : foundMap.entrySet()) {
+                    String packageName = mapEntry.getKey();
+                    if (packageName.equals(selfPackage)) continue;
+                    ResolveInfo resolveInfo = mapEntry.getValue();
+                    String label;
+                    try {
+                        CharSequence cs = resolveInfo.loadLabel(pm);
+                        label = cs != null ? cs.toString() : packageName;
+                    } catch (Exception e) {
+                        label = packageName;
+                    }
+                    boolean isSystemInstaller = (resolveInfo.activityInfo.applicationInfo.flags
+                            & ApplicationInfo.FLAG_SYSTEM) != 0;
+                    entries.add(new ApkInstallerEntry(packageName, label, isSystemInstaller));
+                }
+
+                Collections.sort(entries, (a, b) -> {
+                    if (a.isSystemInstaller != b.isSystemInstaller)
+                        return a.isSystemInstaller ? -1 : 1;
+                    int cmp = a.label.compareToIgnoreCase(b.label);
+                    if (cmp != 0)
+                        return cmp;
+                    return a.packageName.compareToIgnoreCase(b.packageName);
+                });
+
+                JSArray installers = new JSArray();
+                for (ApkInstallerEntry entry : entries) {
+                    JSObject installer = new JSObject();
+                    installer.put("packageName", entry.packageName);
+                    installer.put("label", entry.label);
+                    installer.put("isSystemInstaller", entry.isSystemInstaller);
+                    installers.put(installer);
+                }
+
+                JSObject ret = new JSObject();
+                ret.put("installers", installers);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("Failed to get APK installers", e);
+            }
+        });
+    }
+
+    @PluginMethod
+    public void getAppIcon(PluginCall call) {
+        String pkg = call.getString("packageName");
+        if (pkg == null) {
+            call.reject("Package name required");
+            return;
+        }
+        executorService.execute(() -> {
+            try {
+                PackageManager pm = getContext().getPackageManager();
+                Drawable d = pm.getApplicationIcon(pkg);
+                Bitmap bmp;
+                if (d instanceof BitmapDrawable) {
+                    bmp = ((BitmapDrawable) d).getBitmap();
+                } else {
+                    int w = Math.max(1, d.getIntrinsicWidth());
+                    int h = Math.max(1, d.getIntrinsicHeight());
+                    bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                    Canvas canvas = new Canvas(bmp);
+                    d.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+                    d.draw(canvas);
+                }
+
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                bmp.compress(Bitmap.CompressFormat.PNG, 100, baos);
+                String b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
+
+                JSObject ret = new JSObject();
+                ret.put("icon", "data:image/png;base64," + b64);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("Failed to get icon", e);
+            }
+        });
     }
 
     // --- ORION GUARDIAN & SHIZUKU METHODS ---
@@ -467,23 +746,35 @@ public class AppTrackerPlugin extends Plugin {
     public void installPackageShizuku(PluginCall call) {
         String fileName = call.getString("fileName");
         try {
-            if (!Shizuku.pingBinder()) { call.reject("Shizuku is NOT running."); return; }
-            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) { call.reject("PERMISSION_DENIED"); return; }
+            if (!Shizuku.pingBinder()) {
+                call.reject("Shizuku is NOT running.");
+                return;
+            }
+            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                call.reject("PERMISSION_DENIED");
+                return;
+            }
 
             File baseFile = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName);
-            if (!baseFile.exists()) { call.reject("FILE_MISSING"); return; }
-            
+            if (!baseFile.exists()) {
+                call.reject("FILE_MISSING");
+                return;
+            }
+
             long fileSize = baseFile.length();
-            String cmd = "pm install -r -g -S " + fileSize;
-            
+            String cmd = "pm install -r --restrict-permissions -S " + fileSize;
+
             Process process = newShizukuProcess(cmd);
             OutputStream os = process.getOutputStream();
             FileInputStream fis = new FileInputStream(baseFile);
             byte[] buf = new byte[8192];
             int len;
-            while ((len = fis.read(buf)) > 0) os.write(buf, 0, len);
-            os.flush(); os.close(); fis.close();
-            
+            while ((len = fis.read(buf)) > 0)
+                os.write(buf, 0, len);
+            os.flush();
+            os.close();
+            fis.close();
+
             int exitCode = process.waitFor();
             if (exitCode == 0) {
                 call.resolve();
@@ -491,7 +782,8 @@ public class AppTrackerPlugin extends Plugin {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
                 StringBuilder sb = new StringBuilder();
                 String line;
-                while ((line = reader.readLine()) != null) sb.append(line).append("\n");
+                while ((line = reader.readLine()) != null)
+                    sb.append(line).append("\n");
                 call.reject("Install failed (Code " + exitCode + "): " + sb.toString());
             }
         } catch (Exception e) {
@@ -507,12 +799,14 @@ public class AppTrackerPlugin extends Plugin {
                 List<PackageInfo> packages = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS);
                 JSArray dangerousApps = new JSArray();
                 List<String> dangerousPerms = Arrays.asList(
-                    "android.permission.CAMERA", "android.permission.RECORD_AUDIO", "android.permission.ACCESS_FINE_LOCATION",
-                    "android.permission.ACCESS_COARSE_LOCATION", "android.permission.READ_CONTACTS", "android.permission.WRITE_CONTACTS",
-                    "android.permission.READ_SMS", "android.permission.SEND_SMS", "android.permission.RECEIVE_SMS",
-                    "android.permission.READ_CALL_LOG", "android.permission.WRITE_CALL_LOG", "android.permission.READ_EXTERNAL_STORAGE",
-                    "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.MANAGE_EXTERNAL_STORAGE"
-                );
+                        "android.permission.CAMERA", "android.permission.RECORD_AUDIO",
+                        "android.permission.ACCESS_FINE_LOCATION",
+                        "android.permission.ACCESS_COARSE_LOCATION", "android.permission.READ_CONTACTS",
+                        "android.permission.WRITE_CONTACTS",
+                        "android.permission.READ_SMS", "android.permission.SEND_SMS", "android.permission.RECEIVE_SMS",
+                        "android.permission.READ_CALL_LOG", "android.permission.WRITE_CALL_LOG",
+                        "android.permission.READ_EXTERNAL_STORAGE",
+                        "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.MANAGE_EXTERNAL_STORAGE");
 
                 for (PackageInfo pi : packages) {
                     if (pi.requestedPermissions != null && pi.requestedPermissionsFlags != null) {
@@ -548,12 +842,17 @@ public class AppTrackerPlugin extends Plugin {
         executorService.execute(() -> {
             try {
                 PackageManager pm = getContext().getPackageManager();
-                List<PackageInfo> packages = pm.getInstalledPackages(PackageManager.MATCH_UNINSTALLED_PACKAGES);
+                // GET_META_DATA is faster than MATCH_UNINSTALLED_PACKAGES
+                // because it skips permission resolution.
+                List<PackageInfo> packages = pm.getInstalledPackages(
+                    PackageManager.GET_META_DATA | PackageManager.MATCH_UNINSTALLED_PACKAGES);
                 JSArray allApps = new JSArray();
+                String selfPkg = getContext().getPackageName();
                 for (PackageInfo p : packages) {
                     // Don't show the store itself in the list
-                    if (p.packageName.equals(getContext().getPackageName())) continue;
-                    
+                    if (p.packageName.equals(selfPkg))
+                        continue;
+
                     JSObject appObj = new JSObject();
                     appObj.put("packageName", p.packageName);
                     try {
@@ -565,7 +864,8 @@ public class AppTrackerPlugin extends Plugin {
                     boolean isInstalled = (p.applicationInfo.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
                     appObj.put("isInstalled", isInstalled);
                     // Add isSystem flag
-                    boolean isSystem = (p.applicationInfo.flags & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0;
+                    boolean isSystem = (p.applicationInfo.flags
+                            & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0;
                     appObj.put("isSystem", isSystem);
                     allApps.put(appObj);
                 }
@@ -577,14 +877,20 @@ public class AppTrackerPlugin extends Plugin {
             }
         });
     }
-    
+
     @PluginMethod
     public void toggleSystemApp(PluginCall call) {
         String pkg = call.getString("packageName");
         boolean enable = call.getBoolean("enable", true);
         try {
-            if (!Shizuku.pingBinder()) { call.reject("Shizuku not running"); return; }
-            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) { call.reject("Shizuku permission missing"); return; }
+            if (!Shizuku.pingBinder()) {
+                call.reject("Shizuku not running");
+                return;
+            }
+            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                call.reject("Shizuku permission missing");
+                return;
+            }
             String cmd = enable ? "cmd package install-existing " + pkg : "pm uninstall -k --user 0 " + pkg;
             Process p = newShizukuProcess(cmd);
             int exit = p.waitFor();
@@ -594,26 +900,35 @@ public class AppTrackerPlugin extends Plugin {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(p.getErrorStream()));
                 StringBuilder sb = new StringBuilder();
                 String line;
-                while ((line = reader.readLine()) != null) sb.append(line).append("\n");
+                while ((line = reader.readLine()) != null)
+                    sb.append(line).append("\n");
                 call.reject("Operation failed (Code " + exit + "): " + sb.toString());
             }
         } catch (Exception e) {
             call.reject(e.getMessage());
         }
     }
-    
+
     @PluginMethod
     public void revokePermission(PluginCall call) {
         String pkg = call.getString("packageName");
         String perm = call.getString("permission");
         try {
-            if (!Shizuku.pingBinder()) { call.reject("Shizuku not running"); return; }
-            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) { call.reject("Shizuku permission missing"); return; }
+            if (!Shizuku.pingBinder()) {
+                call.reject("Shizuku not running");
+                return;
+            }
+            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                call.reject("Shizuku permission missing");
+                return;
+            }
             String cmd = "pm revoke " + pkg + " " + perm;
             Process p = newShizukuProcess(cmd);
             int exit = p.waitFor();
-            if (exit == 0) call.resolve();
-            else call.reject("Revoke failed. App might crash or restart.");
+            if (exit == 0)
+                call.resolve();
+            else
+                call.reject("Revoke failed. App might crash or restart.");
         } catch (Exception e) {
             call.reject(e.getMessage());
         }
@@ -636,15 +951,18 @@ public class AppTrackerPlugin extends Plugin {
                     try {
                         String cmd = "cp \"" + sourceDir + "\" \"" + destFile.getAbsolutePath() + "\"";
                         Process p = newShizukuProcess(cmd);
-                        if (p.waitFor() == 0) shizukuSuccess = true;
-                    } catch(Exception e) { }
+                        if (p.waitFor() == 0)
+                            shizukuSuccess = true;
+                    } catch (Exception e) {
+                    }
                 }
                 if (!shizukuSuccess) {
                     try (FileInputStream in = new FileInputStream(new File(sourceDir));
-                         FileOutputStream out = new FileOutputStream(destFile)) {
+                            FileOutputStream out = new FileOutputStream(destFile)) {
                         byte[] buf = new byte[8192];
                         int len;
-                        while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+                        while ((len = in.read(buf)) > 0)
+                            out.write(buf, 0, len);
                     }
                 }
                 JSObject ret = new JSObject();
@@ -662,7 +980,7 @@ public class AppTrackerPlugin extends Plugin {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             try (FileInputStream fis = new FileInputStream(file);
-                 FileChannel channel = fis.getChannel()) {
+                    FileChannel channel = fis.getChannel()) {
                 ByteBuffer buffer = ByteBuffer.allocateDirect(8192);
                 while (channel.read(buffer) != -1) {
                     buffer.flip();
@@ -672,7 +990,8 @@ public class AppTrackerPlugin extends Plugin {
             }
             byte[] hashBytes = digest.digest();
             StringBuilder hex = new StringBuilder();
-            for (byte b : hashBytes) hex.append(String.format("%02x", b));
+            for (byte b : hashBytes)
+                hex.append(String.format("%02x", b));
             return hex.toString();
         } catch (Exception e) {
             return null;
@@ -682,11 +1001,17 @@ public class AppTrackerPlugin extends Plugin {
     @PluginMethod
     public void calculateHash(PluginCall call) {
         String path = call.getString("filePath");
-        if (path == null) { call.reject("Path required"); return; }
-        
+        if (path == null) {
+            call.reject("Path required");
+            return;
+        }
+
         executorService.execute(() -> {
             File file = new File(path);
-            if (!file.exists()) { call.reject("File not found"); return; }
+            if (!file.exists()) {
+                call.reject("File not found");
+                return;
+            }
             String hash = calculateFileHash(file);
             if (hash != null) {
                 JSObject ret = new JSObject();
@@ -694,6 +1019,68 @@ public class AppTrackerPlugin extends Plugin {
                 call.resolve(ret);
             } else {
                 call.reject("Hash failed");
+            }
+        });
+    }
+
+    @PluginMethod
+    public void uploadVirusTotalFile(PluginCall call) {
+        String filePath = call.getString("filePath");
+        String apiKey = call.getString("apiKey");
+        if (filePath == null || filePath.isEmpty() || apiKey == null || apiKey.isEmpty()) {
+            call.reject("Missing args");
+            return;
+        }
+
+        executorService.execute(() -> {
+            HttpURLConnection conn = null;
+            try {
+                File f = new File(filePath).getCanonicalFile();
+                if (!f.exists() || !f.canRead()) {
+                    call.reject("FILE_MISSING");
+                    return;
+                }
+
+                String boundary = "----orionvt" + System.currentTimeMillis();
+                URL url = new URL("https://www.virustotal.com/api/v3/files");
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(30000);
+                conn.setReadTimeout(60000);
+                conn.setDoOutput(true);
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("x-apikey", apiKey);
+                conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+                conn.setRequestProperty("Accept", "application/json");
+
+                try (OutputStream out = new BufferedOutputStream(conn.getOutputStream());
+                        FileInputStream fis = new FileInputStream(f)) {
+                    String header = "--" + boundary + "\r\n" +
+                            "Content-Disposition: form-data; name=\"file\"; filename=\"" + f.getName() + "\"\r\n" +
+                            "Content-Type: application/vnd.android.package-archive\r\n\r\n";
+                    out.write(header.getBytes("UTF-8"));
+
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = fis.read(buf)) > 0)
+                        out.write(buf, 0, n);
+
+                    out.write(("\r\n--" + boundary + "--\r\n").getBytes("UTF-8"));
+                    out.flush();
+                }
+
+                int status = conn.getResponseCode();
+                InputStream bodyStream = status >= 400 ? conn.getErrorStream() : conn.getInputStream();
+                String body = readAll(bodyStream);
+
+                JSObject ret = new JSObject();
+                ret.put("status", status);
+                ret.put("body", body);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject(e.getMessage());
+            } finally {
+                if (conn != null)
+                    conn.disconnect();
             }
         });
     }
@@ -712,16 +1099,19 @@ public class AppTrackerPlugin extends Plugin {
         });
         call.resolve();
     }
-    
+
     private void walk(File root, List<JSObject> batch, int depth) {
-        if (depth > 15) return;
+        if (depth > 15)
+            return;
         File[] files = root.listFiles();
-        if (files == null) return;
+        if (files == null)
+            return;
 
         for (File f : files) {
             if (f.isDirectory()) {
                 String name = f.getName();
-                if (name.startsWith(".") || name.equals("Android") || name.equals("data")) continue;
+                if (name.startsWith(".") || name.equals("Android") || name.equals("data"))
+                    continue;
                 walk(f, batch, depth + 1);
             } else if (f.isFile() && f.length() > 1000) {
                 String hash = calculateFileHash(f);
@@ -748,21 +1138,30 @@ public class AppTrackerPlugin extends Plugin {
         data.put("files", filesArray);
         notifyListeners("scanResultBatch", data);
     }
-    
+
     private String getWifiEncryptionType(WifiManager wifiManager, WifiInfo wifiInfo) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 switch (wifiInfo.getCurrentSecurityType()) {
-                    case WifiInfo.SECURITY_TYPE_SAE: return "WPA3";
-                    case WifiInfo.SECURITY_TYPE_OWE: return "OWE";
+                    case WifiInfo.SECURITY_TYPE_SAE:
+                        return "WPA3";
+                    case WifiInfo.SECURITY_TYPE_OWE:
+                        return "OWE";
                     case WifiInfo.SECURITY_TYPE_EAP:
-                    case WifiInfo.SECURITY_TYPE_EAP_WPA3_ENTERPRISE: return "WPA2-EAP";
-                    case WifiInfo.SECURITY_TYPE_PSK: return "WPA2";
-                    case WifiInfo.SECURITY_TYPE_WEP: return "WEP";
-                    case WifiInfo.SECURITY_TYPE_OPEN: return "OPEN";
-                    default: return "UNKNOWN";
+                    case WifiInfo.SECURITY_TYPE_EAP_WPA3_ENTERPRISE:
+                        return "WPA2-EAP";
+                    case WifiInfo.SECURITY_TYPE_PSK:
+                        return "WPA2";
+                    case WifiInfo.SECURITY_TYPE_WEP:
+                        return "WEP";
+                    case WifiInfo.SECURITY_TYPE_OPEN:
+                        return "OPEN";
+                    default:
+                        return "UNKNOWN";
                 }
-            } catch (Exception e) { return "UNKNOWN"; }
+            } catch (Exception e) {
+                return "UNKNOWN";
+            }
         } else {
             // Legacy method - requires location permission
             try {
@@ -770,10 +1169,14 @@ public class AppTrackerPlugin extends Plugin {
                 for (ScanResult result : scanResults) {
                     if (result.BSSID.equals(wifiInfo.getBSSID())) {
                         String capabilities = result.capabilities;
-                        if (capabilities.contains("WPA3")) return "WPA3";
-                        if (capabilities.contains("WPA2")) return "WPA2";
-                        if (capabilities.contains("WPA")) return "WPA";
-                        if (capabilities.contains("WEP")) return "WEP";
+                        if (capabilities.contains("WPA3"))
+                            return "WPA3";
+                        if (capabilities.contains("WPA2"))
+                            return "WPA2";
+                        if (capabilities.contains("WPA"))
+                            return "WPA";
+                        if (capabilities.contains("WEP"))
+                            return "WEP";
                         return "OPEN";
                     }
                 }
@@ -796,7 +1199,7 @@ public class AppTrackerPlugin extends Plugin {
         boolean adbWifi = Settings.Global.getInt(context.getContentResolver(), "adb_wifi_enabled", 0) == 1;
         ret.put("adbEnabled", adb);
         ret.put("adbWifiEnabled", adbWifi);
-        
+
         String proxyHost = System.getProperty("http.proxyHost");
         String proxyPort = System.getProperty("http.proxyPort");
         ret.put("hasProxy", proxyHost != null && !proxyHost.isEmpty() && proxyPort != null && !proxyPort.isEmpty());
@@ -814,7 +1217,7 @@ public class AppTrackerPlugin extends Plugin {
             if (caps != null) {
                 ret.put("isVpnActive", caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN));
                 ret.put("isCaptivePortal", caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL));
-                
+
                 if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
                     WifiInfo wifiInfo = null;
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && caps.getTransportInfo() instanceof WifiInfo) {
@@ -846,29 +1249,46 @@ public class AppTrackerPlugin extends Plugin {
             ret.put("encryptionType", "UNKNOWN");
             ret.put("dnsServers", new JSArray());
         }
-        
+
         call.resolve(ret);
     }
 
     // --- UTILITY METHODS ---
 
     private boolean isValidApk(File f) {
-        if (f.length() < 100) return false;
+        if (f.length() < 100)
+            return false;
         try (FileInputStream fis = new FileInputStream(f)) {
             byte[] h = new byte[4];
-            if (fis.read(h) != 4) return false;
-            return h[0] == 0x50 && h[1] == 0x4B && h[2] == 0x03 && h[3] == 0x04;
-        } catch (Exception e) { return false; }
+            if (fis.read(h) != 4)
+                return false;
+            boolean zipHeader = h[0] == 0x50 && h[1] == 0x4B && h[2] == 0x03 && h[3] == 0x04;
+            if (!zipHeader)
+                return false;
+            try {
+                PackageManager pm = getContext().getPackageManager();
+                PackageInfo pi = pm.getPackageArchiveInfo(f.getAbsolutePath(), 0);
+                return pi != null && pi.packageName != null && !pi.packageName.isEmpty();
+            } catch (Exception e) {
+                return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @PluginMethod
     public void deleteFile(PluginCall call) {
         String name = call.getString("fileName");
-        if (name == null) { call.reject("FileName required"); return; }
+        if (name == null) {
+            call.reject("FileName required");
+            return;
+        }
         call.resolve(); // Optimistic
         executorService.execute(() -> {
             File f = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), name);
-            if (!f.exists()) return;
+            if (!f.exists())
+                return;
             f.delete();
         });
     }
@@ -876,13 +1296,20 @@ public class AppTrackerPlugin extends Plugin {
     @PluginMethod
     public void exportFile(PluginCall call) {
         String fileName = call.getString("fileName");
-        if (fileName == null) { call.reject("FileName required"); return; }
+        if (fileName == null) {
+            call.reject("FileName required");
+            return;
+        }
         try {
             File privateDir = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
             File sourceFile = new File(privateDir, fileName);
-            if (!sourceFile.exists()) { call.reject("File not found"); return; }
+            if (!sourceFile.exists()) {
+                call.reject("File not found");
+                return;
+            }
             File publicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-            if (!publicDir.exists()) publicDir.mkdirs();
+            if (!publicDir.exists())
+                publicDir.mkdirs();
             File destFile = new File(publicDir, fileName);
             int i = 1;
             while (destFile.exists()) {
@@ -892,25 +1319,33 @@ public class AppTrackerPlugin extends Plugin {
                 i++;
             }
             try (InputStream in = new FileInputStream(sourceFile);
-                 OutputStream out = new FileOutputStream(destFile)) {
+                    OutputStream out = new FileOutputStream(destFile)) {
                 byte[] buffer = new byte[1024];
                 int length;
-                while ((length = in.read(buffer)) > 0) out.write(buffer, 0, length);
+                while ((length = in.read(buffer)) > 0)
+                    out.write(buffer, 0, length);
             }
             if (destFile.exists() && destFile.length() == sourceFile.length()) {
                 sourceFile.delete();
                 JSObject ret = new JSObject();
                 ret.put("path", destFile.getAbsolutePath());
                 call.resolve(ret);
-            } else { call.reject("Verification failed"); }
-        } catch (Exception e) { call.reject("Export failed: " + e.getMessage()); }
+            } else {
+                call.reject("Verification failed");
+            }
+        } catch (Exception e) {
+            call.reject("Export failed: " + e.getMessage());
+        }
     }
 
     @PluginMethod
     public void saveFile(PluginCall call) {
         String content = call.getString("content");
         String fileName = call.getString("fileName");
-        if (content == null || fileName == null) { call.reject("Missing args"); return; }
+        if (content == null || fileName == null) {
+            call.reject("Missing args");
+            return;
+        }
         saveCall(call);
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -926,12 +1361,21 @@ public class AppTrackerPlugin extends Plugin {
             String content = call.getString("content");
             try {
                 OutputStream os = getContext().getContentResolver().openOutputStream(uri);
-                if (os != null) { os.write(content.getBytes()); os.close(); call.resolve(); } 
-                else { call.reject("Stream error"); }
-            } catch (Exception e) { call.reject(e.getMessage()); }
-        } else { call.reject("Cancelled"); }
+                if (os != null) {
+                    os.write(content.getBytes());
+                    os.close();
+                    call.resolve();
+                } else {
+                    call.reject("Stream error");
+                }
+            } catch (Exception e) {
+                call.reject(e.getMessage());
+            }
+        } else {
+            call.reject("Cancelled");
+        }
     }
-    
+
     @PluginMethod
     public void setHighRefreshRate(PluginCall call) {
         Activity activity = getActivity();
@@ -950,8 +1394,8 @@ public class AppTrackerPlugin extends Plugin {
                 if (enable) {
                     float preferredRefreshRate = 0f;
                     Display display = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                        ? activity.getDisplay()
-                        : activity.getWindowManager().getDefaultDisplay();
+                            ? activity.getDisplay()
+                            : activity.getWindowManager().getDefaultDisplay();
 
                     if (display == null) {
                         display = activity.getWindowManager().getDefaultDisplay();
@@ -983,7 +1427,9 @@ public class AppTrackerPlugin extends Plugin {
             }
         });
     }
-    @PluginMethod public void shareApp(PluginCall call) {
+
+    @PluginMethod
+    public void shareApp(PluginCall call) {
         try {
             Intent sendIntent = new Intent();
             sendIntent.setAction(Intent.ACTION_SEND);
@@ -993,43 +1439,63 @@ public class AppTrackerPlugin extends Plugin {
             shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             getContext().startActivity(shareIntent);
             call.resolve();
-        } catch (Exception e) { call.reject(e.getMessage()); }
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
     }
-    @PluginMethod public void launchApp(PluginCall call) {
+
+    @PluginMethod
+    public void launchApp(PluginCall call) {
         try {
-            Intent launchIntent = getContext().getPackageManager().getLaunchIntentForPackage(call.getString("packageName"));
+            Intent launchIntent = getContext().getPackageManager()
+                    .getLaunchIntentForPackage(call.getString("packageName"));
             if (launchIntent != null) {
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 getContext().startActivity(launchIntent);
                 call.resolve();
-            } else { call.reject("App not found"); }
-        } catch (Exception e) { call.reject(e.getMessage()); }
+            } else {
+                call.reject("App not found");
+            }
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
     }
-    @PluginMethod public void uninstallApp(PluginCall call) {
+
+    @PluginMethod
+    public void uninstallApp(PluginCall call) {
         try {
             Intent intent = new Intent(Intent.ACTION_DELETE);
             intent.setData(Uri.parse("package:" + call.getString("packageName")));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             getContext().startActivity(intent);
             call.resolve();
-        } catch (Exception e) { call.reject(e.getMessage()); }
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
     }
-    @PluginMethod public void requestPermissions(PluginCall call) { call.resolve(); }
 
+    @PluginMethod
+    public void requestPermissions(PluginCall call) {
+        call.resolve();
+    }
 
     // --- DOWNLOADER TASK ---
     private class DownloadTask implements Runnable {
         String urlStr, fileName;
         volatile int progress = 0;
         volatile boolean isCancelled = false;
+        volatile boolean hasFailed = false;
         private HttpURLConnection conn;
         private final int notificationId;
         private final NotificationManager notificationManager;
         private final NotificationCompat.Builder notificationBuilder;
 
-        DownloadTask(String u, String f) { 
-            this.urlStr = u; this.fileName = f; this.notificationId = fileName.hashCode(); 
-            this.notificationManager = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+        DownloadTask(String u, String f) {
+            this.urlStr = u;
+            this.fileName = f;
+            this.notificationId = fileName.hashCode();
+            this.notificationManager = (NotificationManager) getContext()
+                    .getSystemService(Context.NOTIFICATION_SERVICE);
             this.notificationBuilder = new NotificationCompat.Builder(getContext(), CHANNEL_ID)
                     .setSmallIcon(android.R.drawable.stat_sys_download)
                     .setContentTitle("Downloading " + fileName)
@@ -1044,8 +1510,16 @@ public class AppTrackerPlugin extends Plugin {
             notificationManager.notify(notificationId, notificationBuilder.build());
         }
 
-        void clearNotification() { notificationManager.cancel(notificationId); }
-        void cancel() { isCancelled = true; clearNotification(); if (conn != null) conn.disconnect(); }
+        void clearNotification() {
+            notificationManager.cancel(notificationId);
+        }
+
+        void cancel() {
+            isCancelled = true;
+            clearNotification();
+            if (conn != null)
+                conn.disconnect();
+        }
 
         @Override
         public void run() {
@@ -1053,16 +1527,26 @@ public class AppTrackerPlugin extends Plugin {
             updateNotification(0, true);
             int retries = 0;
             boolean success = false;
-            while (retries < 3 && !isCancelled && !success) {
+            while (retries < 3 && !isCancelled && !success && !hasFailed) {
                 success = performDownload();
-                if (!success && !isCancelled) { retries++; try { Thread.sleep(retries * 2000); } catch(Exception e){} }
+                if (!success && !isCancelled && !hasFailed) {
+                    retries++;
+                    try {
+                        Thread.sleep(retries * 2000);
+                    } catch (Exception e) {
+                    }
+                }
             }
             activeTasks.remove(fileName);
             clearNotification();
             // Update / dismiss the persistent foreground notification now that
             // this task is gone from the active set.
             refreshForegroundNotification();
-            if (activeTasks.isEmpty() && wakeLock != null && wakeLock.isHeld()) try { wakeLock.release(); } catch(Exception e){}
+            if (activeTasks.isEmpty() && wakeLock != null && wakeLock.isHeld())
+                try {
+                    wakeLock.release();
+                } catch (Exception e) {
+                }
         }
 
         private boolean performDownload() {
@@ -1079,38 +1563,66 @@ public class AppTrackerPlugin extends Plugin {
                 while (redirects < 10) {
                     URL url = new URL(currentUrlStr);
                     conn = (HttpURLConnection) url.openConnection();
-                    conn.setInstanceFollowRedirects(false); 
+                    conn.setInstanceFollowRedirects(false);
                     conn.setConnectTimeout(30000);
                     conn.setReadTimeout(30000);
                     conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) Chrome/110.0.0.0");
-                    if (existingSize > 0) conn.setRequestProperty("Range", "bytes=" + existingSize + "-");
+                    conn.setRequestProperty("Accept-Encoding", "identity");
+                    if (existingSize > 0)
+                        conn.setRequestProperty("Range", "bytes=" + existingSize + "-");
                     conn.connect();
                     int status = conn.getResponseCode();
                     if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
                         String newUrl = conn.getHeaderField("Location");
                         conn.disconnect();
-                        if (newUrl == null) return false;
-                        currentUrlStr = newUrl;
+                        if (newUrl == null) {
+                            hasFailed = true;
+                            return false;
+                        }
+                        URL base = new URL(currentUrlStr);
+                        URL next = new URL(base, newUrl);
+                        currentUrlStr = next.toString();
                         redirects++;
                         continue;
                     }
-                    if (status >= 400) { conn.disconnect(); return false; }
+                    if (status >= 400) {
+                        conn.disconnect();
+                        hasFailed = true;
+                        return false;
+                    }
                     String contentType = conn.getContentType();
-                    if (contentType != null && contentType.contains("text/html")) { conn.disconnect(); return false; }
+                    if (contentType != null && contentType.contains("text/html")) {
+                        conn.disconnect();
+                        hasFailed = true;
+                        return false;
+                    }
                     long total = conn.getContentLength();
                     boolean isResuming = false;
-                    if (status == 206) { total += existingSize; isResuming = true; } else if (existingSize > 0) { existingSize = 0; }
+                    if (status == 206) {
+                        total += existingSize;
+                        isResuming = true;
+                    } else if (existingSize > 0) {
+                        existingSize = 0;
+                    }
                     in = conn.getInputStream();
                     out = new RandomAccessFile(temp, "rw");
-                    if (isResuming) out.seek(existingSize); else out.setLength(0);
+                    if (isResuming)
+                        out.seek(existingSize);
+                    else
+                        out.setLength(0);
                     byte[] buffer = new byte[16384];
-                    int count; long dl = existingSize;
+                    int count;
+                    long dl = existingSize;
                     long lastUpdate = 0;
                     while ((count = in.read(buffer)) != -1) {
-                        if (isCancelled) break;
+                        if (isCancelled)
+                            break;
                         out.write(buffer, 0, count);
                         dl += count;
-                        if (total > 0) progress = (int) (dl * 100 / total); else progress = (int) (dl % 100);
+                        if (total > 0)
+                            progress = (int) (dl * 100 / total);
+                        else
+                            progress = (int) (dl % 100);
                         long now = System.currentTimeMillis();
                         if (now - lastUpdate > 500) {
                             updateNotification(progress, total <= 0);
@@ -1120,22 +1632,52 @@ public class AppTrackerPlugin extends Plugin {
                         }
                     }
                     out.getFD().sync();
-                    try { out.close(); out = null; } catch (Exception e) {}
-                    try { in.close(); in = null; } catch (Exception e) {}
+                    try {
+                        out.close();
+                        out = null;
+                    } catch (Exception e) {
+                    }
+                    try {
+                        in.close();
+                        in = null;
+                    } catch (Exception e) {
+                    }
                     if (!isCancelled) {
-                        if (total > 0 && temp.length() != total) { conn.disconnect(); return false; }
-                        if (fin.exists()) fin.delete();
+                        if (total > 0 && temp.length() < total) {
+                            conn.disconnect();
+                            return false;
+                        }
+                        if (fin.exists())
+                            fin.delete();
                         temp.renameTo(fin);
                         conn.disconnect();
                         return true;
-                    } else { conn.disconnect(); return false; }
+                    } else {
+                        conn.disconnect();
+                        return false;
+                    }
                 }
-            } catch (Exception e) { return false; } 
-            finally {
-                try { if (out != null) out.close(); } catch (Exception e) {}
-                try { if (in != null) in.close(); } catch (Exception e) {}
-                if (conn != null) conn.disconnect();
-                if (isCancelled) try { if (temp != null && temp.exists()) temp.delete(); } catch (Exception e) {}
+            } catch (Exception e) {
+                return false;
+            } finally {
+                try {
+                    if (out != null)
+                        out.close();
+                } catch (Exception e) {
+                }
+                try {
+                    if (in != null)
+                        in.close();
+                } catch (Exception e) {
+                }
+                if (conn != null)
+                    conn.disconnect();
+                if (isCancelled)
+                    try {
+                        if (temp != null && temp.exists())
+                            temp.delete();
+                    } catch (Exception e) {
+                    }
             }
             return false;
         }

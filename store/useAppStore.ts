@@ -26,10 +26,14 @@ interface SettingsState {
   storeLayout: 'classic' | 'modern';
   isOled: boolean;
   hiddenTabs: string[];
+  virusTotalApiKey: string;
   autoUpdateEnabled: boolean;
   wifiOnly: boolean;
   deleteApk: boolean; // true = Silent Janitor, false = Manual Popup
   useShizuku: boolean; // true = Silent Install via Shizuku
+  installerPreference: 'system' | 'chooser' | 'package';
+  installerPackage: string;
+  installerLabel: string;
   disableAnimations: boolean;
   compactMode: boolean;
   highRefreshRate: boolean;
@@ -61,6 +65,8 @@ interface SettingsState {
   unlockedBadges: string[];
   showcasedBadges: string[];
   localMaintenanceMode: boolean;
+  hiddenInstallers: string[];
+  coinFlipHintCount: number;
 
   // Actions
   setTheme: (theme: Theme) => void;
@@ -68,10 +74,12 @@ interface SettingsState {
   setStoreLayout: (layout: 'classic' | 'modern') => void;
   toggleOled: () => void;
   toggleHiddenTab: (tab: string) => void;
+  setVirusTotalApiKey: (apiKey: string) => void;
   toggleAutoUpdate: () => void;
   toggleWifiOnly: () => void;
   toggleDeleteApk: () => void;
   toggleUseShizuku: () => void;
+  setInstallerPreference: (installerPreference: 'system' | 'chooser' | 'package', installerPackage?: string, installerLabel?: string) => void;
   toggleDisableAnimations: () => void;
   toggleCompactMode: () => void;
   toggleHighRefreshRate: () => void;
@@ -113,6 +121,9 @@ interface SettingsState {
   setShowcasedBadgeAtIndex: (index: number, badgeId: string) => void;
   clearShowcasedBadges: () => void;
   toggleLocalMaintenance: () => void;
+  hideInstaller: (packageName: string) => void;
+  resetHiddenInstallers: () => void;
+  incrementCoinFlipHint: () => void;
 }
 
 interface DataState {
@@ -170,16 +181,28 @@ const idbStorage: StateStorage = {
 
 // --- Store Implementation ---
 
+const getInitialTheme = (): Theme => {
+  try {
+    const cached = localStorage.getItem('app-theme') as Theme;
+    if (cached && ['light', 'dusk', 'dark', 'oled'].includes(cached)) return cached;
+  } catch {}
+  return 'light';
+};
+
 const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
-  theme: 'light',
+  theme: getInitialTheme(),
   appFont: DEFAULT_APP_FONT,
   storeLayout: 'classic', // Default to classic for lighter new installs
   isOled: false,
   hiddenTabs: [],
+  virusTotalApiKey: '',
   autoUpdateEnabled: false,
   wifiOnly: false,
   deleteApk: false, // Defaults to OFF (Manual Popup Mode)
   useShizuku: false, // Defaults to OFF
+  installerPreference: 'system',
+  installerPackage: '',
+  installerLabel: '',
   disableAnimations: false,
   compactMode: false,
   highRefreshRate: false,
@@ -211,11 +234,17 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   unlockedBadges: [],
   showcasedBadges: [],
   localMaintenanceMode: false,
+  hiddenInstallers: [],
+  coinFlipHintCount: 0,
 
-  setTheme: (theme) => set({ theme }),
+  setTheme: (theme) => { try { localStorage.setItem('app-theme', theme); } catch {} set({ theme }); },
   setAppFont: (appFont) => set({ appFont }),
   setStoreLayout: (layout) => set({ storeLayout: layout }),
-  toggleOled: () => set((state) => ({ isOled: !state.isOled })),
+  toggleOled: () => set((state) => {
+    const next = !state.isOled;
+    try { localStorage.setItem('app-is-oled', String(next)); } catch {}
+    return { isOled: next };
+  }),
   toggleHiddenTab: (tab) => set((state) => {
     const exists = state.hiddenTabs.includes(tab);
     const next = exists
@@ -226,10 +255,22 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
     if (visibleTabs.length === 0) return state;
     return { hiddenTabs: next };
   }),
+  setVirusTotalApiKey: (virusTotalApiKey) => set({ virusTotalApiKey }),
   toggleAutoUpdate: () => set((state) => ({ autoUpdateEnabled: !state.autoUpdateEnabled })),
   toggleWifiOnly: () => set((state) => ({ wifiOnly: !state.wifiOnly })),
   toggleDeleteApk: () => set((state) => ({ deleteApk: !state.deleteApk })),
   toggleUseShizuku: () => set((state) => ({ useShizuku: !state.useShizuku })),
+  setInstallerPreference: (installerPreference, installerPackage = '', installerLabel = '') => set({
+    installerPreference,
+    installerPackage: installerPreference === 'package' ? installerPackage : '',
+    installerLabel: installerPreference === 'package' ? installerLabel : ''
+  }),
+  hideInstaller: (packageName) => set((state) => {
+    if (state.hiddenInstallers.includes(packageName)) return state;
+    return { hiddenInstallers: [...state.hiddenInstallers, packageName] };
+  }),
+  resetHiddenInstallers: () => set({ hiddenInstallers: [] }),
+  incrementCoinFlipHint: () => set((state) => ({ coinFlipHintCount: Math.min(state.coinFlipHintCount + 1, 3) })),
   toggleDisableAnimations: () => set((state) => ({ disableAnimations: !state.disableAnimations })),
   toggleCompactMode: () => set((state) => ({ compactMode: !state.compactMode })),
   toggleHighRefreshRate: () => set((state) => ({ highRefreshRate: !state.highRefreshRate })),
@@ -382,10 +423,14 @@ export const useSettingsStore = create<SettingsState>()(
         storeLayout: state.storeLayout,
         isOled: state.isOled,
         hiddenTabs: state.hiddenTabs,
+        virusTotalApiKey: state.virusTotalApiKey,
         autoUpdateEnabled: state.autoUpdateEnabled,
         wifiOnly: state.wifiOnly,
         deleteApk: state.deleteApk,
         useShizuku: state.useShizuku,
+        installerPreference: state.installerPreference,
+        installerPackage: state.installerPackage,
+        installerLabel: state.installerLabel,
         disableAnimations: state.disableAnimations,
         compactMode: state.compactMode,
         highRefreshRate: state.highRefreshRate,
@@ -417,7 +462,17 @@ export const useSettingsStore = create<SettingsState>()(
         unlockedBadges: state.unlockedBadges,
         showcasedBadges: state.showcasedBadges,
         localMaintenanceMode: state.localMaintenanceMode,
-      })
+        hiddenInstallers: state.hiddenInstallers,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state && state.theme) {
+          try {
+            localStorage.setItem('app-theme', state.theme);
+            document.documentElement.classList.remove('light', 'dusk', 'dark', 'oled');
+            document.documentElement.classList.add(state.theme);
+          } catch {}
+        }
+      }
     }
   )
 );

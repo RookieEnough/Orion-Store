@@ -582,7 +582,8 @@ const generateStorefront = (
         id: 'new_updated',
         title: 'New & Updated',
         type: 'swimlane',
-        apps: [...platformApps].reverse().slice(0, 12)
+        apps: [...platformApps].reverse().slice(0, 12),
+        totalAppCount: Math.min(platformApps.length, 18)
     });
 
     // 4. Dynamic Categories with interludes inserted between rows

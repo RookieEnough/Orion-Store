@@ -25,9 +25,7 @@ public class MainActivity extends BridgeActivity {
     private SwipeRefreshLayout swipeRefreshLayout;
     private PixelCatRefreshView pixelCatRefreshView;
     private boolean webContentAtTop = true;
-    private boolean refreshEligibleSurface = true;
-    private float pullStartX = 0f;
-    private float pullStartY = 0f;
+    private boolean refreshEligibleSurface = false;
     private boolean pullGestureAllowed = false;
     // Throttle JS bridge calls — evaluateJavascript is expensive
     private long lastTopStateCheck = 0;
@@ -159,7 +157,7 @@ public class MainActivity extends BridgeActivity {
         ));
 
         pixelCatRefreshView = new PixelCatRefreshView(this);
-        FrameLayout.LayoutParams catParams = new FrameLayout.LayoutParams(dp(54), dp(54));
+        FrameLayout.LayoutParams catParams = new FrameLayout.LayoutParams(dp(72), dp(72));
         catParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         catParams.topMargin = getSafeRefreshTopOffset();
         pullContainer.addView(pixelCatRefreshView, catParams);
@@ -178,7 +176,7 @@ public class MainActivity extends BridgeActivity {
         swipeRefreshLayout.setColorSchemeColors(Color.TRANSPARENT);
 
         // Keep the gesture quick, but start/end far enough below the status cutout.
-        swipeRefreshLayout.setDistanceToTriggerSync(dp(96));
+        swipeRefreshLayout.setDistanceToTriggerSync(dp(1000)); // We manually trigger it, hide native threshold
         swipeRefreshLayout.setSlingshotDistance(dp(152));
 
         swipeRefreshLayout.addView(pullContainer,
@@ -194,54 +192,10 @@ public class MainActivity extends BridgeActivity {
         // 3) only from the top gesture strip, so hero carousel/update swipes stay native-smooth
         swipeRefreshLayout.setOnChildScrollUpCallback(
             (parentLayout, child) -> !canPullToRefresh(webView));
-
-        swipeRefreshLayout.setOnRefreshListener(() -> {
-            if (pixelCatRefreshView != null) {
-                pixelCatRefreshView.setRefreshing(true);
-            }
-            hideNativeRefreshIndicator();
-            webView.reload();
-            // Faster refresh cycle — 800ms instead of 1200ms
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                hideNativeRefreshIndicator();
-                if (swipeRefreshLayout != null) {
-                    swipeRefreshLayout.setRefreshing(false);
-                }
-                if (pixelCatRefreshView != null) {
-                    pixelCatRefreshView.setRefreshing(false);
-                    pixelCatRefreshView.setPullProgress(0f);
-                }
-            }, 800);
-        });
-
-        // Drive only the custom cat progress here. The actual refresh intercept is
-        // handled by HomeOnlySwipeRefreshLayout so horizontal carousel gestures are not stolen.
-        webView.setOnTouchListener((view, event) -> {
-            int action = event.getActionMasked();
-            if (action == MotionEvent.ACTION_DOWN) {
-                pullStartX = event.getRawX();
-                pullStartY = event.getRawY();
-                pullGestureAllowed = isInTopPullStrip(event.getRawY());
-                updateTopStateIfNeeded(webView, true);
-            } else if (action == MotionEvent.ACTION_MOVE) {
-                float dx = Math.abs(event.getRawX() - pullStartX);
-                float dy = event.getRawY() - pullStartY;
-                if (dx > dp(14) && dx > Math.abs(dy) * 0.75f) {
-                    pullGestureAllowed = false;
-                }
-                updateTopStateIfNeeded(webView, false);
-                if (pixelCatRefreshView != null && pullGestureAllowed && canPullToRefresh(webView) && dy > 0) {
-                    pixelCatRefreshView.setPullProgress(Math.min(1f, dy / dp(120)));
-                }
-            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                pullGestureAllowed = false;
-                if (pixelCatRefreshView != null && !swipeRefreshLayout.isRefreshing()) {
-                    pixelCatRefreshView.setPullProgress(0f);
-                }
-            }
-            return false;
-        });
-
+            
+        // We completely bypass swipeRefreshLayout's internal onRefreshListener sequence
+        // because its scale animations are too hostile to custom invisble indicators.
+        // It is now purely used as a touch interceptor, and we manually trigger below.
         updateWebContentTopState(webView);
         parent.addView(swipeRefreshLayout, webViewIndex);
     }
@@ -262,7 +216,11 @@ public class MainActivity extends BridgeActivity {
             }
 
             child.setAlpha(0f);
-            child.setVisibility(View.GONE);
+            // CRITICAL: We MUST NOT set visibility to GONE. SwipeRefreshLayout relies on
+            // this view's animation completing to trigger the onRefresh() callback!
+            // If it's GONE, the animation aborts and the refresh is never triggered.
+            // We just remove the elevation so it casts no shadow, and alpha 0 hides it entirely.
+            child.setElevation(0f);
         }
     }
 
@@ -274,12 +232,20 @@ public class MainActivity extends BridgeActivity {
             if (webView.getScrollY() > 2) {
                 webContentAtTop = false;
             } else {
+                // Optimistic fast-path: if the native ScrollY is 0, set
+                // webContentAtTop = true immediately so the very first
+                // ACTION_MOVE in a new touch sequence can be intercepted.
+                // The JS bridge will correct it asynchronously if needed.
+                webContentAtTop = true;
                 updateWebContentTopState(webView);
             }
         }
     }
 
     private boolean canPullToRefresh(WebView webView) {
+        // Synchronous fast-path: trust the native scroll position and the
+        // last-known eligibility. The JS bridge keeps refreshEligibleSurface
+        // up-to-date on every ACTION_DOWN, so it is never dangerously stale.
         return refreshEligibleSurface
             && pullGestureAllowed
             && webContentAtTop
@@ -287,8 +253,8 @@ public class MainActivity extends BridgeActivity {
     }
 
     private boolean isInTopPullStrip(float rawY) {
-        // This is the main fix for the hero carousel/update area: a pull-to-refresh
-        // gesture must begin near the physical top, not halfway down the home page.
+        // Pull-to-refresh gesture must begin near the physical top of the screen,
+        // not halfway down the home page where carousels/swim-lanes live.
         return rawY <= getStatusBarHeight() + dp(156);
     }
 
@@ -299,20 +265,29 @@ public class MainActivity extends BridgeActivity {
             return;
         }
 
-        // Keep this JS lightweight but smarter than a plain document scroll check.
-        // It blocks refresh whenever a fixed modal/sheet/dialog is visible, which covers
-        // Settings, app details, and other overlays. It also checks common scroll containers.
+        // The JS check does two things:
+        // 1) Reads the REAL scroll position from both window AND #root (the app's
+        //    actual scroll container has overflow-y:visible but we check it anyway).
+        // 2) Detects full-screen modals. We only flag an element as a "modal" if it
+        //    is fixed/absolute AND covers >50% of the viewport height. This avoids
+        //    false positives from the fixed header bar and bottom navigation.
         webView.evaluateJavascript(
             "(function(){" +
                 "var eps=2;" +
-                "var root=document.documentElement;" +
-                "var top=Math.max(document.documentElement.scrollTop||0,document.body.scrollTop||0,window.scrollY||0);" +
+                "var rootEl=document.getElementById('root');" +
+                "var rootScroll=rootEl?rootEl.scrollTop:0;" +
+                "var top=Math.max(document.documentElement.scrollTop||0,document.body.scrollTop||0,window.scrollY||0,rootScroll);" +
+                "var vh=window.innerHeight||document.documentElement.clientHeight;" +
                 "var modal=false;" +
-                "var nodes=document.querySelectorAll('[role=dialog],.modal,[class*=Modal],[class*=modal],[class*=fixed],.fixed');" +
+                "var nodes=document.querySelectorAll('[role=dialog],[class*=Modal],[class*=modal]');" +
                 "for(var i=0;i<nodes.length;i++){" +
                     "var el=nodes[i],st=getComputedStyle(el),r=el.getBoundingClientRect();" +
-                    "if(st.display!=='none'&&st.visibility!=='hidden'&&+st.opacity!==0&&r.width>80&&r.height>80&&st.position==='fixed'){modal=true;break;}" +
+                    "if(st.display!=='none'&&st.visibility!=='hidden'&&+st.opacity!==0" +
+                        "&&(st.position==='fixed'||st.position==='absolute')" +
+                        "&&r.height>vh*0.5&&r.width>80){modal=true;break;}" +
                 "}" +
+                "if(!modal&&document.body.classList.contains('lightbox-open')){modal=true;}" +
+                "var root=document.documentElement;" +
                 "var activeTab=(root.dataset.orionActiveTab||'').toLowerCase();" +
                 "var datasetEligible=root.dataset.orionRefreshEligible==='true';" +
                 "var tabEligible=activeTab==='android'||activeTab==='tv'||activeTab==='pc';" +
@@ -373,8 +348,6 @@ public class MainActivity extends BridgeActivity {
             if (action == MotionEvent.ACTION_DOWN) {
                 startX = event.getRawX();
                 startY = event.getRawY();
-                pullStartX = startX;
-                pullStartY = startY;
                 pullGestureAllowed = isInTopPullStrip(startY);
                 updateTopStateIfNeeded(webView, true);
                 gestureMayRefresh = pullGestureAllowed
@@ -403,6 +376,51 @@ public class MainActivity extends BridgeActivity {
                 pullGestureAllowed = false;
             }
             return gestureMayRefresh && super.onInterceptTouchEvent(event);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            int action = event.getActionMasked();
+            
+            if (action == MotionEvent.ACTION_MOVE) {
+                float dy = event.getRawY() - startY;
+                if (pixelCatRefreshView != null && gestureMayRefresh && dy > 0) {
+                    pixelCatRefreshView.setPullProgress(Math.min(1f, dy / dp(120)));
+                }
+            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                float dy = event.getRawY() - startY;
+                // Manual explicit trigger: If pulled 116dp physically down
+                boolean shouldTrigger = (action == MotionEvent.ACTION_UP && dy >= dp(116) && gestureMayRefresh);
+                
+                gestureMayRefresh = false;
+                pullGestureAllowed = false;
+                boolean handled = super.onTouchEvent(event);
+                
+                if (shouldTrigger) {
+                    if (pixelCatRefreshView != null) {
+                        pixelCatRefreshView.setRefreshing(true);
+                    }
+                    hideNativeRefreshIndicator();
+                    if (webView != null) {
+                        webView.evaluateJavascript("window.dispatchEvent(new Event('orion:trigger-refresh'));", null);
+                    }
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        hideNativeRefreshIndicator();
+                        if (swipeRefreshLayout != null) {
+                            swipeRefreshLayout.setRefreshing(false);
+                        }
+                        if (pixelCatRefreshView != null) {
+                            pixelCatRefreshView.setRefreshing(false);
+                            pixelCatRefreshView.setPullProgress(0f);
+                        }
+                    }, 800);
+                } else if (pixelCatRefreshView != null && !pixelCatRefreshView.refreshing) {
+                    pixelCatRefreshView.setPullProgress(0f);
+                }
+                return handled;
+            }
+            
+            return super.onTouchEvent(event);
         }
     }
 
@@ -473,9 +491,10 @@ public class MainActivity extends BridgeActivity {
             super.onDraw(canvas);
             float w = getWidth();
             float h = getHeight();
-            float px = Math.min(w, h) / 18f;
+            // Expanded divisor from 18f to 24f to keep px=3dp since canvas is 72dp instead of 54dp.
+            float px = Math.min(w, h) / 24f;
             float cx = w / 2f;
-            float top = h * 0.16f;
+            float top = h * 0.12f; // 72*0.12 = 8.64dp (exactly identical to 54*0.16)
             boolean blink = refreshing && ((System.currentTimeMillis() - refreshStartedAt) / 180) % 6 == 0;
             boolean showClosedEyes = !refreshing && pullProgress > 0.08f;
             float bob = refreshing

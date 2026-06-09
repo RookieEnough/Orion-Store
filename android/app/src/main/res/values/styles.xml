@@ -1,14 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Base application theme. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. Edge-to-edge with transparent system bars so the WebView
+         draws under the status / navigation bar; CSS safe-area variables handle the inset. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <!-- Enable edge-to-edge / fullscreen immersive -->
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowTranslucentStatus">false</item>
         <item name="android:windowTranslucentNavigation">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+        <!-- Disable the default activity enter/exit animations — our WebView
+             handles transitions via CSS. This eliminates a 300ms system animation
+             overhead on every activity launch. -->
+        <item name="android:windowAnimationStyle">@null</item>
+        <!-- Disable preview window (cold-start white flash) — the splash screen
+             API handles this now. -->
+        <item name="android:windowDisablePreview">true</item>
     </style>
 
     <!-- This theme is used for the MainActivity after the splash screen. -->
@@ -18,13 +27,18 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowDisablePreview">true</item>
     </style>
 
-    <!-- Splash Screen Theme using modern SplashScreen API. -->
+    <!-- Splash Screen Theme using modern SplashScreen API.
+         Reduced animation duration from 1200ms to 600ms for faster launch. -->
     <style name="AppTheme.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/avd_splash_logo</item>
-        <item name="windowSplashScreenAnimationDuration">1200</item>
+        <item name="windowSplashScreenAnimationDuration">600</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBarLaunch</item>
     </style>
 </resources>

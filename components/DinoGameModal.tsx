@@ -1,7 +1,9 @@
-import React, { useRef, useMemo, useState } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { useSettingsStore } from '../store/useAppStore';
 import DinoGame, { DinoGameStatus, DinoGameHandle } from './DinoGame';
 import { useScrollLock } from '../hooks/useScrollLock';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 
 interface DinoGameModalProps {
   onClose: () => void;
@@ -9,12 +11,26 @@ interface DinoGameModalProps {
 
 const DinoGameModal: React.FC<DinoGameModalProps> = ({ onClose }) => {
   useScrollLock(true);
+  const hapticEnabled = useSettingsStore((state) => state.hapticEnabled);
   const { addGameXP, unlockBadge, dinoHighScore, updateDinoHighScore } = useSettingsStore((state) => ({
     addGameXP: state.addGameXP,
     unlockBadge: state.unlockBadge,
     dinoHighScore: state.dinoHighScore,
     updateDinoHighScore: state.updateDinoHighScore,
   }));
+
+  // Bridge haptic preference to the dino game iframe/script
+  useEffect(() => {
+    (window as any).__ORION_HAPTIC_DISABLED = !hapticEnabled;
+    return () => { delete (window as any).__ORION_HAPTIC_DISABLED; };
+  }, [hapticEnabled]);
+
+  // Android back button handler
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const listenerPromise = CapacitorApp.addListener('backButton', () => onClose());
+    return () => { listenerPromise.then(h => h.remove()); };
+  }, [onClose]);
 
   const dinoRef = useRef<DinoGameHandle>(null);
   const [gameOverScore, setGameOverScore] = useState<number | null>(null);

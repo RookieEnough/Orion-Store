@@ -136,7 +136,15 @@ const CompactAppCard: React.FC<CompactAppCardProps> = ({
 
                 <div className="flex flex-col items-center gap-1.5 mt-auto pt-0.5 relative z-10">
                     <button
-                        onClick={(e) => { e.stopPropagation(); toggleFavorite(app.id); }}
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            toggleFavorite(app.id); 
+                            if (useSettingsStore.getState().hapticEnabled) {
+                                import('@capacitor/haptics').then(({ Haptics, ImpactStyle }) => {
+                                    Haptics.impact({ style: ImpactStyle.Medium });
+                                });
+                            }
+                        }}
                         className={`w-6 h-6 rounded-full flex items-center justify-center transition-all active:scale-90 ${isFavorite ? 'text-rose-500 bg-rose-500/10' : 'text-theme-sub hover:text-rose-500 hover:bg-rose-500/10'}`}
                     >
                         <i className={`${isFavorite ? 'fas' : 'far'} fa-heart text-[9px]`}></i>

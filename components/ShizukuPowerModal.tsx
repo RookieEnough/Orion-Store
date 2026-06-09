@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSettingsStore } from '../store/useAppStore';
 import { createPortal } from 'react-dom';
 import AppTracker, { DangerousApp, SystemApp } from '../plugins/AppTracker';
 import { useScrollLock } from '../hooks/useScrollLock';
@@ -139,7 +140,7 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
       e.stopPropagation();
       try {
           await navigator.clipboard.writeText(pkg);
-          Haptics.selection();
+          if (useSettingsStore.getState().hapticEnabled) Haptics.selection();
       } catch (err) {
           setToast({ msg: "Failed to copy", type: 'error' });
       }
@@ -207,7 +208,7 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
       try {
           await AppTracker.requestShizukuPermission();
           await AppTracker.revokePermission({ packageName: pkg, permission: perm });
-          Haptics.notification({ type: NotificationType.Success });
+          if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success });
           setToast({ msg: 'Permission Revoked', type: 'success' });
           setDangerousCache(null); 
           setTimeout(fetchApps, 500);
@@ -222,7 +223,7 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
       setProcessing(app.packageName);
       try {
           const res = await AppTracker.extractApk({ packageName: app.packageName });
-          Haptics.notification({ type: NotificationType.Success });
+          if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success });
           const filename = res.path.split('/').pop();
           setToast({ msg: `Extracted: ${filename}`, type: 'success' });
       } catch (e: any) {
@@ -250,7 +251,7 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
       setProcessing(app.packageName);
       try {
           await AppTracker.toggleSystemApp({ packageName: app.packageName, enable: !app.isInstalled });
-          Haptics.notification({ type: NotificationType.Success });
+          if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success });
           setToast({ msg: app.isInstalled ? 'Uninstalled (User 0)' : 'Restored', type: 'success' });
           setSystemCache(null);
           setTimeout(fetchSystemApps, 800);
@@ -348,9 +349,9 @@ const ShizukuPowerModal: React.FC<ShizukuPowerModalProps> = ({ onClose, initialT
 
                 {activeTab !== 'debloater' && (
                     <div className="flex gap-2 p-1 bg-white/5 rounded-lg">
-                        <button onClick={() => { setAppFilter('all'); Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'all' ? 'bg-white/10 text-white' : 'text-white/25 hover:text-white/50'}`}>All</button>
-                        <button onClick={() => { setAppFilter('user'); Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'user' ? 'bg-emerald-500/20 text-emerald-400' : 'text-white/25 hover:text-white/50'}`}>User</button>
-                        <button onClick={() => { setAppFilter('system'); Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'system' ? 'bg-amber-500/20 text-amber-400' : 'text-white/25 hover:text-white/50'}`}>System</button>
+                        <button onClick={() => { setAppFilter('all'); if (useSettingsStore.getState().hapticEnabled) Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'all' ? 'bg-white/10 text-white' : 'text-white/25 hover:text-white/50'}`}>All</button>
+                        <button onClick={() => { setAppFilter('user'); if (useSettingsStore.getState().hapticEnabled) Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'user' ? 'bg-emerald-500/20 text-emerald-400' : 'text-white/25 hover:text-white/50'}`}>User</button>
+                        <button onClick={() => { setAppFilter('system'); if (useSettingsStore.getState().hapticEnabled) Haptics.selection(); }} className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${appFilter === 'system' ? 'bg-amber-500/20 text-amber-400' : 'text-white/25 hover:text-white/50'}`}>System</button>
                     </div>
                 )}
             </div>

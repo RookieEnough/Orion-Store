@@ -41,7 +41,7 @@ export const DEV_SOCIALS = {
   github: 'https://github.com/RookieEnough',
   x: 'https://x.com/_Rookie_Z',
   discord: 'https://discord.com/invite/CrM6y4ujnq',
-  coffee: 'https://ko-fi.com/rookie_z'
+  coffee: 'https://www.buymeacoffee.com/rookiez'
 };
 
 export const DEFAULT_DEV_PROFILE: DevProfile = {

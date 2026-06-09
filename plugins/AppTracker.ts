@@ -14,36 +14,42 @@ export interface DownloadProgressResult {
 }
 
 export interface DangerousApp {
-    packageName: string;
-    name: string;
-    permissions: string[];
-    isSystem: boolean;
+  packageName: string;
+  name: string;
+  permissions: string[];
+  isSystem: boolean;
 }
 
 export interface SystemApp {
-    packageName: string;
-    name: string;
-    isInstalled: boolean;
-    isSystem: boolean;	
+  packageName: string;
+  name: string;
+  isInstalled: boolean;
+  isSystem: boolean;
 }
 
 export interface NetworkSecurityResult {
-    adbEnabled: boolean;
-    adbWifiEnabled: boolean;
-    isVpnActive: boolean;
-    hasProxy: boolean;
-    // WiFi Audit Fields
-    encryptionType: 'WPA3' | 'WPA2' | 'WPA' | 'WEP' | 'OPEN' | 'UNKNOWN';
-    dnsServers: string[];
-    isCaptivePortal: boolean;
-    isHiddenSsid: boolean;
+  adbEnabled: boolean;
+  adbWifiEnabled: boolean;
+  isVpnActive: boolean;
+  hasProxy: boolean;
+  // WiFi Audit Fields
+  encryptionType: 'WPA3' | 'WPA2' | 'WPA' | 'WEP' | 'OPEN' | 'UNKNOWN';
+  dnsServers: string[];
+  isCaptivePortal: boolean;
+  isHiddenSsid: boolean;
 }
 
 export interface PermissionsStatusResult {
-    storage: boolean;
-    location: boolean;
-    media: boolean;
-    isLegacy: boolean;
+  storage: boolean;
+  location: boolean;
+  media: boolean;
+  isLegacy: boolean;
+}
+
+export interface ApkInstallerInfo {
+  packageName: string;
+  label: string;
+  isSystemInstaller: boolean;
 }
 
 export interface AppTrackerPlugin {
@@ -52,33 +58,37 @@ export interface AppTrackerPlugin {
   downloadFile(options: { url: string, fileName: string }): Promise<{ downloadId: string }>;
   getDownloadProgress(options: { downloadId: string }): Promise<DownloadProgressResult>;
   checkActiveDownloads(): Promise<Record<string, boolean>>;
-  installPackage(options: { fileName: string }): Promise<void>;
+  installPackage(options: { fileName: string, installerPreference?: 'system' | 'chooser' | 'package', installerPackage?: string }): Promise<void>;
+  getApkInstallers(): Promise<{ installers: ApkInstallerInfo[] }>;
+  getAppIcon(options: { packageName: string }): Promise<{ icon: string }>;
   canRequestPackageInstalls(): Promise<{ value: boolean }>;
   openInstallPermissionSettings(): Promise<void>;
-  
+
   getInstalledPackages(): Promise<{ apps: { name: string, packageName: string }[] }>;
 
   requestShizukuPermission(): Promise<void>;
   installPackageShizuku(options: { fileName: string }): Promise<void>;
-  
+
   getDangerousApps(): Promise<{ apps: DangerousApp[] }>;
   getSystemApps(): Promise<{ apps: SystemApp[] }>;
-  toggleSystemApp(options: { packageName: string, enable: boolean }): Promise<void>; 
-  
+  toggleSystemApp(options: { packageName: string, enable: boolean }): Promise<void>;
+
   revokePermission(options: { packageName: string, permission: string }): Promise<void>;
   extractApk(options: { packageName: string }): Promise<{ path: string }>;
+  resolveDownloadFile(options: { fileName: string }): Promise<{ path: string }>;
 
   calculateHash(options: { filePath: string }): Promise<{ hash: string }>;
+  uploadVirusTotalFile(options: { filePath: string, apiKey: string }): Promise<{ status: number, body: string }>;
   scanDirectory(options?: { path?: string }): Promise<void>;
   abortScan(): Promise<void>;
-  
+
   checkNetworkSecurity(): Promise<NetworkSecurityResult>;
   checkPermissionsStatus(): Promise<PermissionsStatusResult>;
   requestManageFilesPermission(): Promise<void>;
   requestUniversalStorage(): Promise<void>;
   getStorageMounts(): Promise<{ paths: string[] }>;
   isRooted(): Promise<{ rooted: boolean }>;
-  
+
   requestBatteryOptimizationBypass(): Promise<void>;
   resetPermissions(): Promise<void>;
   openAppSettings(): Promise<void>;

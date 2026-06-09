@@ -1,4 +1,4 @@
-import React, { useState, Suspense, lazy, useRef } from 'react';
+import React, { useState, Suspense, lazy, useRef, useEffect } from 'react';
 import { useSettingsStore, Theme } from '../store/useAppStore';
 import DinoCirclePreview from './DinoCirclePreview';
 
@@ -6,7 +6,7 @@ const DinoGameModal = lazy(() => import('./DinoGameModal'));
 
 interface MaintenanceModeProps {
   maintenanceMessage?: string;
-  socialLinks: { discord?: string };
+  socialLinks: { discord?: string; coffee?: string };
   onBypass: () => void;
   triggerHaptic: (type?: any, style?: any, notificationType?: any) => void;
   version: string;
@@ -27,8 +27,17 @@ const MaintenanceMode: React.FC<MaintenanceModeProps> = ({
   const theme = useSettingsStore((s) => s.theme);
   const helperTextClass = theme === 'light' ? 'fill-black/80' : 'fill-yellow-300';
 
+  useEffect(() => {
+    // Lock scroll on mount
+    document.body.style.overflow = 'hidden';
+    return () => {
+      // Restore scroll on unmount
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
   return (
-    <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-hidden bg-surface px-6 py-10 text-theme-text selection:bg-primary/30">
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-surface px-6 py-10 text-theme-text selection:bg-primary/30">
       {/* Background Layer: Animated Gradient & Grid */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute left-1/2 top-[10%] h-[40rem] w-[40rem] -translate-x-1/2 rounded-full bg-primary/20 blur-[120px] transition-all duration-1000" />
@@ -70,7 +79,7 @@ const MaintenanceMode: React.FC<MaintenanceModeProps> = ({
               </textPath>
             </text>
           </svg>
-          
+
           {/* Neon Glow */}
           <div className="absolute inset-2 rounded-full bg-primary/10 blur-xl group-hover:bg-primary/20 transition-colors" />
 
@@ -78,7 +87,7 @@ const MaintenanceMode: React.FC<MaintenanceModeProps> = ({
           <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-[#f7f7f7] dark:bg-[#202124] ring-1 ring-theme-border shadow-[0_8px_40px_-12px_rgba(99,102,241,0.5)] transition-all duration-300 group-hover:ring-primary/40 group-hover:shadow-primary/20">
             {/* The standalone canvas preview */}
             <DinoCirclePreview size={96} isPaused={showGame} />
-            
+
             {/* Play Overlay */}
             <div className="absolute inset-0 flex items-center justify-center bg-primary/0 group-hover:bg-primary/10 transition-colors z-10">
               <i className="fas fa-play text-primary scale-0 group-hover:scale-100 transition-transform duration-300"></i>
@@ -99,15 +108,15 @@ const MaintenanceMode: React.FC<MaintenanceModeProps> = ({
 
           {/* Actions */}
           <div className="flex w-full flex-col gap-3">
-             <div className="flex items-center gap-3 rounded-2xl border border-theme-border bg-theme-element p-3 shadow-sm">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                  <i className="fas fa-cat text-primary text-base opacity-90" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-theme-sub">Store Status</p>
-                  <p className="text-xs font-bold text-primary">Under Maintenance</p>
-                </div>
-             </div>
+            <div className="flex items-center gap-3 rounded-2xl border border-theme-border bg-theme-element p-3 shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                <i className="fas fa-cat text-primary text-base opacity-90" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="text-[10px] font-black uppercase tracking-widest text-theme-sub">Store Status</p>
+                <p className="text-xs font-bold text-primary">Under Maintenance</p>
+              </div>
+            </div>
 
             {socialLinks.discord && (
               <button
@@ -121,14 +130,24 @@ const MaintenanceMode: React.FC<MaintenanceModeProps> = ({
                 </span>
               </button>
             )}
-            
-            <button
-              onClick={() => { triggerHaptic('impact', 'light'); window.location.reload(); }}
-              className="w-full rounded-2xl border border-theme-border bg-theme-element px-5 py-3.5 text-xs font-black uppercase tracking-widest text-theme-text shadow-sm transition-all hover:bg-theme-hover hover:border-theme-sub/30 active:scale-[0.98]"
-            >
-              Refresh Store
-            </button>
-            
+
+            {socialLinks.coffee && (
+              <button
+                onClick={() => { triggerHaptic('selection'); window.open(socialLinks.coffee, '_blank'); }}
+                className="group relative w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-emerald-100 dark:bg-emerald-900/60 border-2 border-emerald-400 rounded-2xl hover:scale-[1.01] transition-all cursor-pointer shadow-lg shadow-emerald-400/20"
+              >
+                <div className="w-8 h-8 rounded-full bg-emerald-400 text-emerald-900 flex items-center justify-center text-lg shrink-0 group-hover:rotate-12 transition-transform">
+                    <i className="fas fa-coins"></i>
+                </div>
+                <div className="text-center">
+                    <span className="font-black text-sm uppercase tracking-widest text-gray-900 dark:text-emerald-100 block leading-none">DONATE ME</span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-200 font-bold tracking-wider mt-1 block">Support development</span>
+                </div>
+                {/* Visual balance spacer of same width as icon */}
+                <div className="w-8 h-8 invisible shrink-0" />
+              </button>
+            )}
+
             {isDevUnlocked && (
               <button
                 onClick={onBypass}
@@ -139,7 +158,7 @@ const MaintenanceMode: React.FC<MaintenanceModeProps> = ({
             )}
           </div>
 
-          <p 
+          <p
             onClick={() => {
               const now = Date.now();
               if (now - lastClick.current < 500) {

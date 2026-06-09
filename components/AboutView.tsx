@@ -17,8 +17,6 @@ interface AboutViewProps {
   isLegend: boolean;
   isContributor: boolean; 
   adWatchCount: number;
-  profileImgError: boolean;
-  setProfileImgError: (hasError: boolean) => void;
   handleProfileClick: (view?: 'profile' | 'badges', badgeIndex?: number) => void;
   setShowFAQ: (show: boolean) => void;
   onOpenAdDonation: () => void; 
@@ -66,8 +64,6 @@ const AboutView: React.FC<AboutViewProps> = ({
   socialLinks,
   isLegend,
   adWatchCount,
-  profileImgError,
-  setProfileImgError,
   handleProfileClick,
   setShowFAQ,
   onOpenAdDonation,
@@ -89,10 +85,35 @@ const AboutView: React.FC<AboutViewProps> = ({
 }) => {
   const hapticEnabled = useSettingsStore((state) => state.hapticEnabled); 
   const userProfile = useSettingsStore((state) => state.userProfile);
+  const coinFlipHintCount = useSettingsStore((state) => state.coinFlipHintCount);
+  const incrementCoinFlipHint = useSettingsStore((state) => state.incrementCoinFlipHint);
   
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showSubmitRank, setShowSubmitRank] = useState(false);
   const [isAvatarFlipped, setIsAvatarFlipped] = useState(false);
+
+  // --- AUTO FLIP BACK LOGIC (10 seconds) ---
+  useEffect(() => {
+    let timer: any;
+    if (isAvatarFlipped) {
+      timer = setTimeout(() => {
+        setIsAvatarFlipped(false);
+      }, 10000);
+    }
+    return () => clearTimeout(timer);
+  }, [isAvatarFlipped]);
+
+  // --- AUTO-FLIP HINT ON ABOUT TAB VISIT (max 3 times ever) ---
+  useEffect(() => {
+    if (coinFlipHintCount >= 3) return;
+    // Small delay so the tab has fully rendered before flipping
+    const flipTimer = setTimeout(() => {
+      setIsAvatarFlipped(true);
+      incrementCoinFlipHint();
+    }, 1200);
+    return () => clearTimeout(flipTimer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run only once per mount
 
   // Badge Logic
   const hasBackerBadge = adWatchCount >= 3;
@@ -198,16 +219,12 @@ const AboutView: React.FC<AboutViewProps> = ({
         <div 
             className="w-32 h-32 mb-4 relative cursor-pointer perspective-1000"
             onClick={() => {
-                if (!userProfile) {
-                    setShowSubmitRank(true);
-                    if(hapticEnabled) Haptics.impact({ style: ImpactStyle.Medium });
-                    return;
-                }
-                
                 if (isAvatarFlipped) {
+                    // Always open the leaderboard — it handles profile creation internally
                     setShowLeaderboard(true);
                     if(hapticEnabled) Haptics.impact({ style: ImpactStyle.Medium });
                 } else {
+                    // First click — always flip the coin
                     setIsAvatarFlipped(true);
                     if(hapticEnabled) Haptics.selection();
                 }
@@ -215,37 +232,25 @@ const AboutView: React.FC<AboutViewProps> = ({
         >
             <div className={`relative w-full h-full duration-500 preserve-3d transition-transform ${isAvatarFlipped ? 'rotate-y-180' : ''}`}>
                 
-                {/* FRONT: AVATAR - RESTORED GLOWING PULSE */}
+                {/* FRONT: AVATAR - 'R' Coin */}
                 <div className="absolute inset-0 backface-hidden w-full h-full rounded-full p-1 bg-gradient-to-br from-acid to-primary animate-pulse-slow">
-                    {profileImgError ? (
-                        <div className="w-full h-full rounded-full bg-card border-4 border-card flex items-center justify-center relative overflow-hidden">
-                            <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black opacity-90"></div>
-                            {/* Inner Glow Restored */}
-                            <div className="absolute w-full h-full bg-gradient-to-tr from-acid/20 to-neon/20 animate-pulse"></div>
-                            <span className="relative text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-acid via-primary to-neon tracking-tighter filter drop-shadow-lg">
-                                R
-                            </span>
-                        </div>
-                    ) : (
-                        <img 
-                            src={devProfile.image} 
-                            alt={devProfile.name} 
-                            onError={() => setProfileImgError(true)}
-                            className="w-full h-full rounded-full object-cover border-4 border-card bg-theme-element relative z-10"
-                        />
-                    )}
+                    <div className="w-full h-full rounded-full bg-card border-4 border-card flex items-center justify-center relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black opacity-90"></div>
+                        <div className="absolute w-full h-full bg-gradient-to-tr from-acid/20 to-neon/20 animate-pulse"></div>
+                        <span className="relative text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-acid via-primary to-neon tracking-tighter filter drop-shadow-lg">
+                            R
+                        </span>
+                    </div>
                     {/* Small hint icon */}
                     <div className="absolute bottom-0 right-0 w-8 h-8 bg-surface rounded-full flex items-center justify-center border-2 border-theme-border shadow-md z-20 text-green-500">
                         <i className="fas fa-trophy text-xs"></i>
                     </div>
                 </div>
 
-                {/* BACK: HALL OF FAME COIN - NO WHITE SHINE */}
+                {/* BACK: HALL OF FAME COIN */}
                 <div className="absolute inset-0 backface-hidden rotate-y-180 w-full h-full rounded-full bg-gradient-to-br from-green-400 to-emerald-600 border-4 border-green-300 shadow-xl flex flex-col items-center justify-center text-white p-2">
-                    
-                    {/* Pattern Texture Only */}
+                    {/* Pattern Texture */}
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 rounded-full"></div>
-
                     <i className="fas fa-trophy text-4xl mb-1 drop-shadow-md animate-bounce relative z-10 text-yellow-300"></i>
                     <span className="text-[9px] font-black uppercase tracking-tighter leading-tight drop-shadow-md relative z-10">Hall of<br/>Fame</span>
                 </div>

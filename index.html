@@ -1,12 +1,33 @@
 
 <!DOCTYPE html>
-<html lang="en" class="light">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover" />
     <meta name="description" content="Orion Store is a serverless, open-source app marketplace powered entirely by GitHub." />
     <meta name="theme-color" content="#6366f1" />
     <title>Orion Store</title>
+    <script>
+      (function() {
+        try {
+          // Primary: fast localStorage mirror written by setTheme()
+          var theme = localStorage.getItem('app-theme');
+          var valid = ['light', 'dusk', 'dark', 'oled'];
+          if (!theme || !valid.includes(theme)) {
+            // Fallback: try the persisted store JSON (written by zustand-persist)
+            var stored = localStorage.getItem('orion-settings-storage');
+            if (stored) {
+              var p = JSON.parse(stored);
+              if (p && p.state && p.state.theme) theme = p.state.theme;
+            }
+          }
+          if (!theme || !valid.includes(theme)) theme = 'light';
+          document.documentElement.classList.add(theme);
+        } catch (e) {
+          document.documentElement.classList.add('light');
+        }
+      })();
+    </script>
     
     <!-- NETWORK OPTIMIZATION: Pre-warm connections to Image CDN and Data Source -->
     <link rel="preconnect" href="https://wsrv.nl" crossorigin />

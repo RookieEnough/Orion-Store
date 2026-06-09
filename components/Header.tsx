@@ -9,6 +9,7 @@ interface HeaderProps {
   toggleTheme: () => void;
   activeTab: Tab;
   onOpenSettings: () => void;
+  onOpenSettingsPreload?: () => void;
   onOpenReleaseNotes: () => void;
   updateCount?: number;
   activeDownloadCount?: number;
@@ -22,6 +23,7 @@ const Header: React.FC<HeaderProps> = ({
   toggleTheme,
   activeTab,
   onOpenSettings,
+  onOpenSettingsPreload,
   onOpenReleaseNotes,
   updateCount = 0,
   activeDownloadCount = 0
@@ -73,6 +75,8 @@ const Header: React.FC<HeaderProps> = ({
               <div className="relative">
                   <button 
                       onClick={onOpenSettings}
+                      onPointerEnter={onOpenSettingsPreload}
+                      onFocus={onOpenSettingsPreload}
                       className={`w-10 h-10 rounded-full bg-theme-element hover:bg-theme-hover flex items-center justify-center text-theme-sub hover:text-primary transition-all hover:scale-110 active:scale-95 shadow-sm ${activeDownloadCount > 0 ? 'animate-pulse text-primary' : ''}`}
                       title="Settings & Updates"
                   >

@@ -8,8 +8,6 @@ interface AboutTabContainerProps {
   devProfile: DevProfile;
   socialLinks: SocialLinks;
   faqs: FAQItem[];
-  profileImgError: boolean;
-  setProfileImgError: (hasError: boolean) => void;
   handleProfileClick: (view?: 'profile' | 'badges', badgeIndex?: number) => void;
   setShowFAQ: (show: boolean) => void;
   onOpenAdDonation: () => void;
@@ -28,8 +26,6 @@ const AboutTabContainer: React.FC<AboutTabContainerProps> = ({
   devProfile,
   socialLinks,
   faqs,
-  profileImgError,
-  setProfileImgError,
   handleProfileClick,
   setShowFAQ,
   onOpenAdDonation,
@@ -94,8 +90,6 @@ const AboutTabContainer: React.FC<AboutTabContainerProps> = ({
       isLegend={isLegend}
       isContributor={isContributor}
       adWatchCount={adWatchCount}
-      profileImgError={profileImgError}
-      setProfileImgError={setProfileImgError}
       handleProfileClick={handleProfileClick}
       setShowFAQ={setShowFAQ}
       onOpenAdDonation={onOpenAdDonation}

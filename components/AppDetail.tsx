@@ -30,6 +30,7 @@ interface AppDetailProps {
     onNavigateToApp?: (appId: string) => void;
     onExportAPK?: (app: AppItem, fileName: string) => void;
     isScanning?: boolean; // New prop
+    onVirusTotalScan?: () => void;
 }
 
 interface LazyScreenshotProps {
@@ -44,11 +45,12 @@ const LazyScreenshot: React.FC<LazyScreenshotProps> = ({ src, index, platform, o
     const [isVisible, setIsVisible] = useState(priority);
     const [isLoaded, setIsLoaded] = useState(false);
     const [hasError, setHasError] = useState(false);
+    const [androidTreatAsLandscape, setAndroidTreatAsLandscape] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const isLandscape = platform === Platform.PC || platform === Platform.TV;
-    const heightClass = isLandscape ? 'h-48' : 'h-72';
-    const widthClass = isLandscape ? 'w-80' : 'w-36';
+    const isLandscape = platform === Platform.PC || platform === Platform.TV || (platform === Platform.ANDROID && androidTreatAsLandscape);
+    const heightClass = isLandscape ? 'h-48' : 'h-80'; // Dynamic height with transition handles the gap
+    const widthClass = isLandscape ? 'w-80' : 'w-36'; // w-36 better fits two per frame
     const targetRequestHeight = isLandscape ? 600 : 800;
 
     useEffect(() => {
@@ -74,7 +76,7 @@ const LazyScreenshot: React.FC<LazyScreenshotProps> = ({ src, index, platform, o
         <div
             ref={containerRef}
             onClick={onClick}
-            className={`relative shrink-0 snap-center ${heightClass} ${widthClass} flex items-center justify-center cursor-zoom-in active:scale-[0.98] transition-transform`}
+            className={`relative shrink-0 snap-start ${heightClass} ${widthClass} flex items-center justify-center cursor-zoom-in active:scale-[0.98] transition-all duration-500 ease-in-out overflow-hidden`}
         >
             {(!isLoaded || !isVisible) && <div className={`absolute inset-0 bg-theme-element animate-pulse rounded-2xl`} />}
             {isVisible && (
@@ -82,9 +84,15 @@ const LazyScreenshot: React.FC<LazyScreenshotProps> = ({ src, index, platform, o
                     src={optimizedSrc}
                     alt={`Screenshot ${index + 1}`}
                     loading={priority ? "eager" : "lazy"}
-                    onLoad={() => setIsLoaded(true)}
+                    onLoad={(e) => {
+                        setIsLoaded(true);
+                        if (platform !== Platform.ANDROID) return;
+                        const img = e.currentTarget;
+                        const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
+                        if (ratio >= 0.9) setAndroidTreatAsLandscape(true);
+                    }}
                     onError={() => setHasError(true)}
-                    className={`max-w-full max-h-full w-auto h-auto rounded-2xl shadow-sm transition-opacity duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+                    className={`max-w-full max-h-full w-auto h-auto object-contain rounded-2xl shadow-sm transition-opacity duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
                 />
             )}
         </div>
@@ -95,7 +103,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
     app, onClose, onDownload, isInstalling, localVersion, supportEmail, isUpdateAvailable,
     activeDownloadId, cleanupFileName, onCleanupDone,
     currentProgress, currentStatus, readyFileName,
-    onCancelDownload, onDeleteReadyFile, onExportAPK, onNavigateToApp, isScanning
+    onCancelDownload, onDeleteReadyFile, onExportAPK, onNavigateToApp, isScanning, onVirusTotalScan
 }) => {
     const { favorites, toggleFavorite } = useDataStore((state) => ({
         favorites: state.favorites,
@@ -415,7 +423,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
     };
 
     const handleShare = async () => {
-        Haptics.selection();
+        if (useSettingsStore.getState().hapticEnabled) Haptics.selection();
         const shareUrl = app.repoUrl || app.downloadUrl || '#';
         const shareText = `Check out ${app.name} on Orion Store!`;
 
@@ -431,7 +439,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
 
     const handleFavoriteToggle = () => {
         toggleFavorite(app.id);
-        Haptics.impact({ style: ImpactStyle.Heavy });
+        if (useSettingsStore.getState().hapticEnabled) Haptics.impact({ style: ImpactStyle.Heavy });
     };
 
     const proceedWithVersion = (version: VersionOption, url?: string) => {
@@ -468,7 +476,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
 
     const handleLaunch = () => {
         if (app.packageName && Capacitor.isNativePlatform()) {
-            Haptics.impact({ style: ImpactStyle.Heavy });
+            if (useSettingsStore.getState().hapticEnabled) Haptics.impact({ style: ImpactStyle.Heavy });
             AppTracker.launchApp({ packageName: app.packageName }).catch(() => { alert("Could not launch app. It may be restricted."); });
         }
     };
@@ -480,7 +488,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
             setIsCleaning(true); // Start Cleaning Animation
             try {
                 await AppTracker.deleteFile({ fileName: cleanupFileName });
-                Haptics.notification({ type: NotificationType.Success });
+                if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success });
                 if (onCleanupDone) onCleanupDone();
                 setShowCleanupPrompt(false);
             } catch (e) {
@@ -494,9 +502,9 @@ const AppDetail: React.FC<AppDetailProps> = ({
         }
     };
 
-    const handleKeep = () => { Haptics.selection(); setShowCleanupPrompt(false); };
+    const handleKeep = () => { if (useSettingsStore.getState().hapticEnabled) Haptics.selection(); setShowCleanupPrompt(false); };
 
-    const handleRedownload = () => { if (readyFileName && onDeleteReadyFile) { Haptics.impact({ style: ImpactStyle.Medium }); onDeleteReadyFile(app, readyFileName); } };
+    const handleRedownload = () => { if (readyFileName && onDeleteReadyFile) { if (useSettingsStore.getState().hapticEnabled) Haptics.impact({ style: ImpactStyle.Medium }); onDeleteReadyFile(app, readyFileName); } };
 
     const getStreamColor = (stream: string) => {
         switch (stream) {
@@ -576,7 +584,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
                 {needsUpdate && !isInstalling && !isFallbackMode && !isUnavailable && (
                     <div className="relative">
                         <button
-                            onClick={() => { setShowIgnoreMenu(!showIgnoreMenu); if (!showIgnoreMenu) Haptics.impact({ style: ImpactStyle.Light }); }}
+                            onClick={() => { setShowIgnoreMenu(!showIgnoreMenu); if (!showIgnoreMenu) if (useSettingsStore.getState().hapticEnabled) Haptics.impact({ style: ImpactStyle.Light }); }}
                             className={`w-14 h-full rounded-2xl transition-all active:scale-95 flex items-center justify-center ${showIgnoreMenu ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-theme-element text-theme-sub hover:text-primary'}`}
                             title="Ignore Update Options"
                         >
@@ -590,21 +598,21 @@ const AppDetail: React.FC<AppDetailProps> = ({
                                 </div>
                                 <div className="flex flex-col">
                                     <button
-                                        onClick={() => { setIgnoredUpdate(app.id, 'week'); setShowIgnoreMenu(false); onClose(); Haptics.notification({ type: NotificationType.Success }); }}
+                                        onClick={() => { setIgnoredUpdate(app.id, 'week'); setShowIgnoreMenu(false); onClose(); if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success }); }}
                                         className="px-4 py-3.5 text-left text-sm font-bold hover:bg-theme-element transition-colors flex items-center gap-3 text-theme-text"
                                     >
                                         <i className="fas fa-calendar-alt text-primary w-4"></i>
                                         <span>Ignore for 1 week</span>
                                     </button>
                                     <button
-                                        onClick={() => { setIgnoredUpdate(app.id, 'version', app.latestVersion); setShowIgnoreMenu(false); onClose(); Haptics.notification({ type: NotificationType.Success }); }}
+                                        onClick={() => { setIgnoredUpdate(app.id, 'version', app.latestVersion); setShowIgnoreMenu(false); onClose(); if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success }); }}
                                         className="px-4 py-3.5 text-left text-sm font-bold hover:bg-theme-element transition-colors flex items-center gap-3 text-theme-text"
                                     >
                                         <i className="fas fa-code-branch text-primary w-4"></i>
                                         <span>Until next version</span>
                                     </button>
                                     <button
-                                        onClick={() => { setIgnoredUpdate(app.id, 'never'); setShowIgnoreMenu(false); onClose(); Haptics.notification({ type: NotificationType.Success }); }}
+                                        onClick={() => { setIgnoredUpdate(app.id, 'never'); setShowIgnoreMenu(false); onClose(); if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success }); }}
                                         className="px-4 py-3.5 text-left text-sm font-bold hover:bg-theme-element transition-colors flex items-center gap-3 text-red-500"
                                     >
                                         <i className="fas fa-ban w-4"></i>
@@ -683,7 +691,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
                     <div className="flex gap-3">
                         <button onClick={handleFavoriteToggle} className={`w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md flex items-center justify-center transition-colors shadow-sm ${isFavorite ? 'text-rose-500' : 'text-theme-text hover:bg-theme-hover'}`}><i className={`${isFavorite ? 'fas' : 'far'} fa-heart`}></i></button>
                         <button onClick={handleShare} className="w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md flex items-center justify-center hover:bg-theme-hover transition-colors text-theme-text shadow-sm"><i className="fas fa-share-alt"></i></button>
-                        <button onClick={() => { Haptics.impact({ style: ImpactStyle.Light }); const subject = `Report Issue: ${app.name}`; window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}`; }} className="w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md text-theme-sub flex items-center justify-center hover:text-red-500 transition-colors shadow-sm"><i className="fas fa-flag"></i></button>
+                        <button onClick={() => { if (useSettingsStore.getState().hapticEnabled) Haptics.impact({ style: ImpactStyle.Light }); const subject = `Report Issue: ${app.name}`; window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}`; }} className="w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md text-theme-sub flex items-center justify-center hover:text-red-500 transition-colors shadow-sm"><i className="fas fa-flag"></i></button>
                     </div>
                 </div>
                 <div className="px-6 pt-6 pb-6 flex gap-5 items-start">
@@ -700,6 +708,12 @@ const AppDetail: React.FC<AppDetailProps> = ({
                 </div>
                 <div className="px-6 mb-6 flex flex-wrap gap-2">
                     <span className="px-3 py-1 rounded-lg bg-theme-element text-theme-sub text-xs font-bold uppercase tracking-wide">{app.category}</span>
+                    <button 
+                        onClick={() => onVirusTotalScan && onVirusTotalScan()}
+                        className="px-3 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-400 dark:border-blue-700 text-blue-600 dark:text-blue-400 text-xs font-bold uppercase tracking-wide hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                    >
+                        VirusTotal Scan
+                    </button>
                     {app.patches && app.patches.length > 0 && <span className="px-3 py-1 rounded-lg bg-primary/10 text-primary text-xs font-bold uppercase tracking-wide flex items-center gap-1"><i className="fas fa-puzzle-piece text-[8px]"></i>{app.patches.length} Patches</span>}
                     {cleanupFileName ? <span className="px-3 py-1 rounded-lg bg-acid/20 text-acid-dark dark:text-acid text-xs font-bold uppercase tracking-wide animate-pulse">Pending Cleanup</span> : readyFileName ? <span className="px-3 py-1 rounded-lg bg-primary/20 text-primary text-xs font-bold uppercase tracking-wide animate-pulse">{isInstalling ? 'Installing...' : 'Ready to Install'}</span> : needsUpdate ? <span className="px-3 py-1 rounded-lg bg-acid/20 text-acid-dark dark:text-acid text-xs font-bold uppercase tracking-wide animate-pulse">Update Available</span> : isUpToDate ? <span className="px-3 py-1 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-bold uppercase tracking-wide">Installed v{localVersion}</span> : null}
                 </div>
@@ -715,7 +729,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
 
                 {app.repoUrl && app.repoUrl !== '#' && (
                     <div className="px-6 mb-6">
-                        <button onClick={() => { Haptics.selection(); window.open(app.repoUrl, '_blank'); }} className="w-full py-4 bg-card rounded-2xl flex items-center justify-center gap-3 hover:bg-theme-element transition-all active:scale-[0.98] shadow-sm group">
+                        <button onClick={() => { if (useSettingsStore.getState().hapticEnabled) Haptics.selection(); window.open(app.repoUrl, '_blank'); }} className="w-full py-4 bg-card rounded-2xl flex items-center justify-center gap-3 hover:bg-theme-element transition-all active:scale-[0.98] shadow-sm group">
                             {app.repoUrl.includes('gitlab') ? (
                                 <i className="fab fa-gitlab text-orange-500 text-2xl group-hover:scale-110 transition-transform"></i>
                             ) : app.repoUrl.includes('codeberg') ? (
@@ -734,9 +748,9 @@ const AppDetail: React.FC<AppDetailProps> = ({
 
                 <div className="mb-8">
                     <h3 className="px-6 text-lg font-bold text-theme-text mb-4">Preview</h3>
-                    <div className="flex gap-4 overflow-x-auto px-6 pb-4 no-scrollbar snap-x">
+                    <div className="flex gap-4 overflow-x-auto px-6 pb-4 no-scrollbar snap-x scroll-pl-6">
                         {app.screenshots.map((src: string, idx: number) => (
-                            <LazyScreenshot key={idx} src={src} index={idx} platform={app.platform} priority={idx === 0} onClick={() => { setLightboxIndex(idx); Haptics.selection(); }} />
+                            <LazyScreenshot key={idx} src={src} index={idx} platform={app.platform} priority={idx === 0} onClick={() => { setLightboxIndex(idx); if (useSettingsStore.getState().hapticEnabled) Haptics.selection(); }} />
                         ))}
                     </div>
                 </div>

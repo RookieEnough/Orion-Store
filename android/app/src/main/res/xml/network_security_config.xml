@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network Security Configuration for Orion Store.
+  Allows cleartext traffic for local Capacitor WebView (file:// assets)
+  while enforcing HTTPS for all external connections.
+-->
+<network-security-config>
+    <!-- Allow cleartext for localhost and raw.githubusercontent.com (some repos use HTTP redirects) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">raw.githubusercontent.com</domain>
+    </domain-config>
+    <!-- Default: trust only system CAs (no user-installed certs — security hardening) -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

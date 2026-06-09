@@ -77,7 +77,7 @@ export interface SocialLinks {
 
 export interface DevProfile {
   name: string;
-  image: string;
+  image?: string;
   bio: string;
 }
 

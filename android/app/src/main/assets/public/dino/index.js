@@ -981,7 +981,7 @@
      * @param {number} duration Duration of the vibration in milliseconds.
      */
     function vibrate(duration) {
-        if (IS_MOBILE && window.navigator.vibrate) {
+        if (IS_MOBILE && window.navigator.vibrate && !window.__ORION_HAPTIC_DISABLED) {
             window.navigator.vibrate(duration);
         }
     }

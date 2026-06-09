@@ -1,37 +1,109 @@
-
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { AppCategory, Platform, Tab } from '../types';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useSettingsStore } from '../store/useAppStore';
+import { explainRejectedImageLink } from '../utils/imageLink';
 
 interface SubmissionModalProps {
-  onClose: () => void;
-  currentStoreVersion: string;
-  onSuccess?: () => void;
-  submissionCount?: number;
-  activeTab: Tab;
+    onClose: () => void;
+    currentStoreVersion: string;
+    onSuccess?: () => void;
+    submissionCount?: number;
+    activeTab: Tab;
 }
 
-// Helper Component for Labels with Clickable Tooltips
-const LabelWithTooltip: React.FC<{ 
-    label: string; 
-    tooltip: string; 
-    required?: boolean;
-    onHelp: (text: string) => void;
-}> = ({ label, tooltip, required, onHelp }) => (
-    <label className="block text-xs font-bold text-theme-sub mb-1.5 uppercase flex items-center">
-        {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-        <button 
-            type="button"
-            onClick={() => onHelp(tooltip)}
-            className="ml-1.5 text-theme-sub opacity-40 hover:opacity-100 cursor-help text-[10px] transition-opacity focus:outline-none"
-            title="Click for info"
+const InlineHelp: React.FC<{ text: string; label?: string }> = memo(({ text, label }) => {
+    const [open, setOpen] = useState(false);
+    const [sticky, setSticky] = useState(false);
+    const rootRef = useRef<HTMLSpanElement | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const onPointerDown = (e: PointerEvent) => {
+            const root = rootRef.current;
+            if (!root) return;
+            if (root.contains(e.target as Node)) return;
+            setOpen(false);
+            setSticky(false);
+        };
+        document.addEventListener('pointerdown', onPointerDown);
+        return () => document.removeEventListener('pointerdown', onPointerDown);
+    }, [open]);
+
+    const show = () => {
+        if (!sticky) setOpen(true);
+    };
+
+    const hide = () => {
+        if (!sticky) setOpen(false);
+    };
+
+    const toggleSticky = () => {
+        setOpen((prev) => !prev || !sticky);
+        setSticky((prev) => !prev);
+    };
+
+    return (
+        <span
+            ref={rootRef}
+            className="relative ml-1 inline-flex items-center"
+            onMouseEnter={show}
+            onMouseLeave={hide}
         >
-            <i className="fas fa-question-circle"></i>
-        </button>
+            <button
+                type="button"
+                onClick={toggleSticky}
+                className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] text-slate-400 transition hover:text-slate-200 focus:outline-none"
+                aria-label={label ? `Help: ${label}` : 'Help'}
+            >
+                <i className="fas fa-circle-info"></i>
+            </button>
+            {open && (
+                <span className="absolute left-1/2 top-full z-30 mt-2 w-56 -translate-x-1/2 rounded-xl border border-white/10 bg-[#1e1f2c] px-3 py-2 text-[11px] font-medium normal-case leading-relaxed text-slate-300 shadow-2xl">
+                    {text}
+                </span>
+            )}
+        </span>
+    );
+});
+
+// A label without the info button
+const SimpleLabel: React.FC<{ label: string; required?: boolean }> = ({ label, required }) => (
+    <label className="mb-1.5 flex items-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
+        {label}
+        {required && <span className="ml-0.5 text-red-400">*</span>}
     </label>
 );
+
+const LabelWithTooltip: React.FC<{
+    label: string;
+    tooltip: string;
+    required?: boolean;
+}> = memo(({ label, tooltip, required }) => (
+    <label className="mb-1.5 flex items-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
+        {label}
+        {required && <span className="ml-0.5 text-red-400">*</span>}
+        <InlineHelp text={tooltip} label={label} />
+    </label>
+));
+
+const Section: React.FC<React.PropsWithChildren<{ title?: string; subtitle?: string; className?: string; innerClassName?: string }>> = memo(({
+    title,
+    subtitle,
+    className = '',
+    innerClassName = '',
+    children
+}) => (
+    <div className={`mb-5 ${className}`}>
+        {(title || subtitle) && (
+            <div className="mb-2">
+                {title && <h4 className="text-[13px] font-black tracking-tight text-white">{title}</h4>}
+                {subtitle && <p className="mt-0.5 text-[10px] leading-relaxed text-slate-400">{subtitle}</p>}
+            </div>
+        )}
+        <div className={innerClassName}>{children}</div>
+    </div>
+));
 
 type RepoDetectionStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -180,278 +252,247 @@ const detectRepoAutofill = async (source: RepoSource, githubToken?: string): Pro
 };
 
 const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, currentStoreVersion, onSuccess, submissionCount = 0, activeTab }) => {
-  useScrollLock(true);
-  const githubToken = useSettingsStore((state) => state.githubToken);
+    useScrollLock(true);
+    const githubToken = useSettingsStore((state) => state.githubToken);
 
-  // --- DRAFT PERSISTENCE KEY ---
-  const DRAFT_KEY = 'orion_submission_draft';
+    const DRAFT_KEY = 'orion_submission_draft';
 
-  // Restore draft from sessionStorage on mount
-  const loadDraft = () => {
-    try {
-      const raw = sessionStorage.getItem(DRAFT_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return null;
-  };
-  const savedDraft = loadDraft();
+    const loadDraft = () => {
+        try {
+            const raw = sessionStorage.getItem(DRAFT_KEY);
+            if (raw) return JSON.parse(raw);
+        } catch (e) { }
+        return null;
+    };
+    const savedDraft = loadDraft();
 
-  // Default mode depends on context. Android -> Obtainium by default. PC/TV -> Manual.
-  const [mode, setMode] = useState<'obtainium' | 'manual'>(savedDraft?.mode || (activeTab === 'android' ? 'obtainium' : 'manual'));
-  const [jsonInput, setJsonInput] = useState(savedDraft?.jsonInput || '');
-  const [error, setError] = useState('');
-  const [activeHelpText, setActiveHelpText] = useState<string | null>(null);
+    const [mode, setMode] = useState<'obtainium' | 'manual'>(savedDraft?.mode || (activeTab === 'android' ? 'obtainium' : 'manual'));
+    const [jsonInput, setJsonInput] = useState(savedDraft?.jsonInput || '');
+    const [error, setError] = useState('');
+    const [, startTransition] = useTransition();
+    const [screenshotInput, setScreenshotInput] = useState('');
+    const [addedScreenshots, setAddedScreenshots] = useState<string[]>(savedDraft?.addedScreenshots || []);
+    const [obtainiumIcon, setObtainiumIcon] = useState(savedDraft?.obtainiumIcon || '');
+    const [obtainiumKeyword, setObtainiumKeyword] = useState(savedDraft?.obtainiumKeyword || '');
+    const [obtainiumDescription, setObtainiumDescription] = useState(savedDraft?.obtainiumDescription || '');
 
-  // Screenshot Management
-  const [screenshotInput, setScreenshotInput] = useState('');
-  const [addedScreenshots, setAddedScreenshots] = useState<string[]>(savedDraft?.addedScreenshots || []);
+    type FormDataType = {
+        name: string; id: string; description: string; icon: string; repoUrl: string;
+        githubRepo: string; gitlabRepo: string; gitlabDomain: string; codebergRepo: string;
+        releaseKeyword: string; packageName: string; category: string; author: string; officialSite: string;
+    };
+    const [isManualKeyword, setIsManualKeyword] = useState(savedDraft?.isManualKeyword || false);
+    const [formData, setFormData] = useState<FormDataType>(savedDraft?.formData || {
+        name: '',
+        id: '',
+        description: '',
+        icon: '',
+        repoUrl: '',
+        githubRepo: '',
+        gitlabRepo: '',
+        gitlabDomain: '',
+        codebergRepo: '',
+        releaseKeyword: 'apk',
+        packageName: '',
+        category: AppCategory.UTILITY,
+        author: '',
+        officialSite: '',
+    });
+    const [autoFilledPackageName, setAutoFilledPackageName] = useState(savedDraft?.autoFilledPackageName || '');
+    const [autoFilledDescription, setAutoFilledDescription] = useState(savedDraft?.autoFilledDescription || '');
+    const [autoFilledName, setAutoFilledName] = useState(savedDraft?.autoFilledName || '');
+    const [repoAutofillState, setRepoAutofillState] = useState<{ status: RepoDetectionStatus; message: string }>(
+        savedDraft?.repoAutofillState || { status: 'idle', message: '' }
+    );
+    const lastAutofillRepo = useRef('');
+    const [issueUrlToOpen, setIssueUrlToOpen] = useState<string | null>(null);
 
-  // Obtainium Mode Overrides
-  const [obtainiumIcon, setObtainiumIcon] = useState(savedDraft?.obtainiumIcon || '');
-  const [obtainiumKeyword, setObtainiumKeyword] = useState(savedDraft?.obtainiumKeyword || '');
-  const [obtainiumDescription, setObtainiumDescription] = useState(savedDraft?.obtainiumDescription || '');
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+                mode, jsonInput, addedScreenshots, obtainiumIcon, obtainiumKeyword,
+                obtainiumDescription, isManualKeyword, formData,
+                autoFilledPackageName, autoFilledDescription, autoFilledName, repoAutofillState
+            }));
+        } catch (e) { }
+    }, [mode, jsonInput, addedScreenshots, obtainiumIcon, obtainiumKeyword, obtainiumDescription, isManualKeyword, formData, autoFilledPackageName, autoFilledDescription, autoFilledName, repoAutofillState]);
 
-  // Manual Form State
-  type FormDataType = {
-    name: string; id: string; description: string; icon: string; repoUrl: string;
-    githubRepo: string; gitlabRepo: string; gitlabDomain: string; codebergRepo: string;
-    releaseKeyword: string; packageName: string; category: string; author: string; officialSite: string;
-  };
-  const [isManualKeyword, setIsManualKeyword] = useState(savedDraft?.isManualKeyword || false);
-  const [formData, setFormData] = useState<FormDataType>(savedDraft?.formData || {
-    name: '',
-    id: '', 
-    description: '',
-    icon: '',
-    repoUrl: '',
-    githubRepo: '',
-    gitlabRepo: '',
-    gitlabDomain: '',
-    codebergRepo: '',
-    releaseKeyword: 'apk',
-    packageName: '',
-    category: AppCategory.UTILITY,
-    author: '',
-    officialSite: '', 
-  });
-  const [autoFilledPackageName, setAutoFilledPackageName] = useState(savedDraft?.autoFilledPackageName || '');
-  const [autoFilledDescription, setAutoFilledDescription] = useState(savedDraft?.autoFilledDescription || '');
-  const [autoFilledName, setAutoFilledName] = useState(savedDraft?.autoFilledName || '');
-  const [repoAutofillState, setRepoAutofillState] = useState<{ status: RepoDetectionStatus; message: string }>(
-    savedDraft?.repoAutofillState || { status: 'idle', message: '' }
-  );
-  const lastAutofillRepo = useRef('');
-  const [issueUrlToOpen, setIssueUrlToOpen] = useState<string | null>(null);
+    const clearDraft = () => { try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) { } };
 
-  // Save draft to sessionStorage on key state changes
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
-        mode, jsonInput, addedScreenshots, obtainiumIcon, obtainiumKeyword,
-        obtainiumDescription, isManualKeyword, formData,
-        autoFilledPackageName, autoFilledDescription, autoFilledName, repoAutofillState
-      }));
-    } catch (e) {}
-  }, [mode, jsonInput, addedScreenshots, obtainiumIcon, obtainiumKeyword, obtainiumDescription, isManualKeyword, formData, autoFilledPackageName, autoFilledDescription, autoFilledName, repoAutofillState]);
+    const baseCooldown = 180;
+    const reductionPerSub = 15;
+    const maxReduction = 150;
+    const currentReduction = Math.min(submissionCount * reductionPerSub, maxReduction);
+    const currentCooldown = baseCooldown - currentReduction;
+    const currentLevel = submissionCount;
 
-  const clearDraft = () => { try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) {} };
+    const getRankInfo = (level: number) => {
+        if (level >= 10) return { title: 'Elite', color: 'text-green-400', bg: 'bg-acid/20', icon: 'fa-crown' };
+        if (level >= 5) return { title: 'Expert', color: 'text-green-400', bg: 'bg-purple-500/20', icon: 'fa-star' };
+        if (level >= 1) return { title: 'Contributor', color: 'text-green-400', bg: 'bg-blue-500/20', icon: 'fa-shield-alt' };
+        return { title: 'Newcomer', color: 'text-green-400', bg: 'bg-white/5', icon: 'fa-user' };
+    };
 
-  // Calculate Trust Stats
-  const baseCooldown = 180; // 3 hours
-  const reductionPerSub = 15; // 15 mins
-  const maxReduction = 150; // Down to 30 mins
-  const currentReduction = Math.min(submissionCount * reductionPerSub, maxReduction);
-  const currentCooldown = baseCooldown - currentReduction;
-  
-  const currentLevel = submissionCount;
-  
-  // Rank Logic
-  const getRankInfo = (level: number) => {
-      if (level >= 10) return { title: "Elite", color: "text-acid", bg: "bg-acid", icon: "fa-crown" };
-      if (level >= 5) return { title: "Expert", color: "text-purple-400", bg: "bg-purple-500", icon: "fa-star" };
-      if (level >= 1) return { title: "Contributor", color: "text-blue-400", bg: "bg-blue-500", icon: "fa-shield-alt" };
-      return { title: "Newcomer", color: "text-gray-400", bg: "bg-gray-500", icon: "fa-user" };
-  };
+    const rank = getRankInfo(currentLevel);
 
-  const rank = getRankInfo(currentLevel);
+    const sanitizeGitHubImageUrl = (url: string) => {
+        if (!url) return '';
+        try {
+            const trimmed = url.trim();
+            if (!trimmed.startsWith('http')) return trimmed;
+            const urlObj = new URL(trimmed);
+            if (urlObj.hostname.endsWith('github.com')) {
+                const segments = urlObj.pathname.split('/').filter(Boolean);
+                if (segments.length >= 4 && segments[2] === 'blob') {
+                    segments.splice(2, 1);
+                    return `https://raw.githubusercontent.com/${segments.join('/')}`;
+                }
+            }
+        } catch (e) { return url; }
+        return url;
+    };
 
-  // Helper to fix GitHub blob links (Auto-convert to raw)
-  const sanitizeGitHubImageUrl = (url: string) => {
-      if (!url) return '';
-      try {
-          const trimmed = url.trim();
-          if (!trimmed.startsWith('http')) return trimmed;
-          
-          const urlObj = new URL(trimmed);
-          // Check for github.com (or www.github.com)
-          if (urlObj.hostname.endsWith('github.com')) {
-              const segments = urlObj.pathname.split('/').filter(Boolean);
-              // Expected: [user, repo, blob, ref, ...path]
-              if (segments.length >= 4 && segments[2] === 'blob') {
-                  segments.splice(2, 1); // Remove 'blob'
-                  return `https://raw.githubusercontent.com/${segments.join('/')}`;
-              }
-          }
-      } catch (e) { return url; }
-      return url;
-  };
+    useEffect(() => {
+        if (formData.name) {
+            const generatedId = formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+            setFormData(prev => ({ ...prev, id: generatedId }));
+        }
+    }, [formData.name]);
 
-  // Auto-generate ID
-  useEffect(() => {
-    if (formData.name) {
-        const generatedId = formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-        setFormData(prev => ({ ...prev, id: generatedId }));
-    }
-  }, [formData.name]);
-
-  useEffect(() => {
-    // Auto-fill Repo details if we are on Android
-    if (activeTab === 'android' && formData.repoUrl) {
-        // GitHub Parsing
-        if (formData.repoUrl.includes('github.com')) {
-            try {
-                const urlParts = formData.repoUrl.split('github.com/');
-                if (urlParts.length > 1 && urlParts[1]) {
-                    const parts = urlParts[1].split('/');
-                    if (parts.length >= 2) {
-                        const owner = parts[0];
-                        // FIX: Ensure parts[1] is treated as a string even if TS doubts it
-                        const repoPart = parts[1] || '';
-                        const repo = repoPart.replace('.git', '').replace(/\/$/, '');
-                        setFormData(prev => ({ 
-                            ...prev, 
-                            githubRepo: `${owner}/${repo}`,
-                            gitlabRepo: '',
-                            gitlabDomain: '',
+    useEffect(() => {
+        if (activeTab === 'android' && formData.repoUrl) {
+            if (formData.repoUrl.includes('github.com')) {
+                try {
+                    const urlParts = formData.repoUrl.split('github.com/');
+                    if (urlParts.length > 1 && urlParts[1]) {
+                        const parts = urlParts[1].split('/');
+                        if (parts.length >= 2) {
+                            const owner = parts[0];
+                            const repoPart = parts[1] || '';
+                            const repo = repoPart.replace('.git', '').replace(/\/$/, '');
+                            setFormData(prev => ({
+                                ...prev,
+                                githubRepo: `${owner}/${repo}`,
+                                gitlabRepo: '',
+                                gitlabDomain: '',
+                                codebergRepo: '',
+                                author: prev.author || owner || ''
+                            }));
+                        }
+                    }
+                } catch (e) { }
+            } else if (formData.repoUrl.includes('gitlab')) {
+                try {
+                    const urlObj = new URL(formData.repoUrl);
+                    const pathParts = urlObj.pathname.split('/').filter(p => p);
+                    if (pathParts.length >= 2) {
+                        setFormData(prev => ({
+                            ...prev,
+                            githubRepo: '',
+                            gitlabRepo: pathParts.join('/'),
+                            gitlabDomain: urlObj.hostname,
                             codebergRepo: '',
-                            author: prev.author || owner || ''
+                            author: prev.author || pathParts[0] || ''
                         }));
                     }
-                }
-            } catch (e) {}
+                } catch (e) { }
+            } else if (formData.repoUrl.includes('codeberg.org')) {
+                try {
+                    const urlObj = new URL(formData.repoUrl);
+                    const pathParts = urlObj.pathname.split('/').filter(p => p);
+                    if (pathParts.length >= 2) {
+                        setFormData(prev => ({
+                            ...prev,
+                            githubRepo: '',
+                            gitlabRepo: '',
+                            gitlabDomain: '',
+                            codebergRepo: pathParts.join('/'),
+                            author: prev.author || pathParts[0] || ''
+                        }));
+                    }
+                } catch (e) { }
+            }
         }
-        // GitLab Parsing
-        else if (formData.repoUrl.includes('gitlab')) {
+    }, [formData.repoUrl, activeTab]);
+
+    const repoSource = useMemo(() => {
+        if (activeTab !== 'android' || mode !== 'manual' || !formData.repoUrl.trim()) return null;
+        return parseRepoSource(formData.repoUrl);
+    }, [activeTab, mode, formData.repoUrl]);
+
+    useEffect(() => {
+        if (activeTab !== 'android' || mode !== 'manual') return;
+        if (!repoSource) {
+            lastAutofillRepo.current = '';
+            setRepoAutofillState({ status: 'idle', message: '' });
+            return;
+        }
+
+        const repoKey = `${repoSource.provider}:${repoSource.domain || ''}:${repoSource.repoPath}`;
+        if (lastAutofillRepo.current === repoKey) return;
+
+        let cancelled = false;
+        setRepoAutofillState({ status: 'loading', message: 'Detecting description and package name from the repo...' });
+
+        const timer = window.setTimeout(async () => {
             try {
-                const urlObj = new URL(formData.repoUrl);
-                const pathParts = urlObj.pathname.split('/').filter(p => p);
-                if (pathParts.length >= 2) {
-                    setFormData(prev => ({
-                        ...prev,
-                        githubRepo: '',
-                        gitlabRepo: pathParts.join('/'),
-                        gitlabDomain: urlObj.hostname,
-                        codebergRepo: '',
-                        author: prev.author || pathParts[0] || ''
-                    }));
-                }
-            } catch (e) {}
-        }
-        // Codeberg Parsing
-        else if (formData.repoUrl.includes('codeberg.org')) {
-            try {
-                const urlObj = new URL(formData.repoUrl);
-                const pathParts = urlObj.pathname.split('/').filter(p => p);
-                if (pathParts.length >= 2) {
-                    setFormData(prev => ({
-                        ...prev,
-                        githubRepo: '',
-                        gitlabRepo: '',
-                        gitlabDomain: '',
-                        codebergRepo: pathParts.join('/'),
-                        author: prev.author || pathParts[0] || ''
-                    }));
-                }
-            } catch (e) {}
-        }
-    }
-  }, [formData.repoUrl, activeTab]);
+                const detected = await detectRepoAutofill(repoSource, githubToken);
+                if (cancelled) return;
 
-  const repoSource = useMemo(() => {
-      if (activeTab !== 'android' || mode !== 'manual' || !formData.repoUrl.trim()) return null;
-      return parseRepoSource(formData.repoUrl);
-  }, [activeTab, mode, formData.repoUrl]);
+                lastAutofillRepo.current = repoKey;
 
-  useEffect(() => {
-      if (activeTab !== 'android' || mode !== 'manual') return;
-      if (!repoSource) {
-          lastAutofillRepo.current = '';
-          setRepoAutofillState({ status: 'idle', message: '' });
-          return;
-      }
+                setFormData((prev) => {
+                    const next = { ...prev };
+                    if (detected.author && !prev.author) next.author = detected.author;
+                    if (detected.name && (!prev.name || prev.name === autoFilledName)) next.name = detected.name;
+                    if (detected.description && (!prev.description || prev.description === autoFilledDescription)) next.description = detected.description;
+                    if (detected.packageName && (!prev.packageName || prev.packageName === autoFilledPackageName)) next.packageName = detected.packageName;
+                    return next;
+                });
 
-      const repoKey = `${repoSource.provider}:${repoSource.domain || ''}:${repoSource.repoPath}`;
-      if (lastAutofillRepo.current === repoKey) return;
+                if (detected.name) setAutoFilledName(detected.name);
+                if (detected.description) setAutoFilledDescription(detected.description);
+                if (detected.packageName) setAutoFilledPackageName(detected.packageName);
 
-      let cancelled = false;
-      setRepoAutofillState({ status: 'loading', message: 'Detecting description and package name from the repo...' });
+                const statusMessage = detected.name && detected.packageName && detected.description
+                    ? 'App name, package name, and description detected automatically.'
+                    : detected.name && detected.packageName
+                        ? 'App name and package name detected automatically.'
+                        : detected.packageName
+                            ? 'Package name detected. Add a custom description if needed.'
+                            : detected.name
+                                ? 'App name detected. Orion still needs Android metadata.'
+                                : detected.description
+                                    ? 'Description detected. Package name still needs confirmation.'
+                                    : 'Repo found, but Orion could not detect Android metadata.';
 
-      const timer = window.setTimeout(async () => {
-          try {
-              const detected = await detectRepoAutofill(repoSource, githubToken);
-              if (cancelled) return;
+                setRepoAutofillState({
+                    status: detected.packageName || detected.description ? 'success' : 'error',
+                    message: statusMessage
+                });
+            } catch (error) {
+                if (cancelled) return;
+                setRepoAutofillState({ status: 'error', message: 'Could not auto-detect repo metadata right now.' });
+            }
+        }, 650);
 
-              lastAutofillRepo.current = repoKey;
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [activeTab, mode, repoSource, githubToken, autoFilledDescription, autoFilledName, autoFilledPackageName]);
 
-              setFormData((prev) => {
-                  const next = { ...prev };
-                  if (detected.author && !prev.author) next.author = detected.author;
-                  if (detected.name && (!prev.name || prev.name === autoFilledName)) {
-                      next.name = detected.name;
-                  }
-                  if (detected.description && (!prev.description || prev.description === autoFilledDescription)) {
-                      next.description = detected.description;
-                  }
-                  if (detected.packageName && (!prev.packageName || prev.packageName === autoFilledPackageName)) {
-                      next.packageName = detected.packageName;
-                  }
-                  return next;
-              });
+    const releasesUrl = useMemo(() => {
+        const url = formData.repoUrl;
+        if (!url) return null;
+        const clean = url.trim().replace(/\/$/, '');
+        if (clean.includes('github.com')) return `${clean}/releases`;
+        if (clean.includes('gitlab')) return `${clean}/-/releases`;
+        if (clean.includes('codeberg.org')) return `${clean}/releases`;
+        return null;
+    }, [formData.repoUrl]);
 
-              if (detected.name) setAutoFilledName(detected.name);
-              if (detected.description) setAutoFilledDescription(detected.description);
-              if (detected.packageName) setAutoFilledPackageName(detected.packageName);
-
-              const statusMessage = detected.name && detected.packageName && detected.description
-                  ? 'App name, package name, and description detected automatically.'
-                  : detected.name && detected.packageName
-                      ? 'App name and package name detected automatically.'
-                  : detected.packageName
-                      ? 'Package name detected. Add a custom description if needed.'
-                      : detected.name
-                          ? 'App name detected. Orion still needs Android metadata.'
-                      : detected.description
-                          ? 'Description detected. Package name still needs confirmation.'
-                          : 'Repo found, but Orion could not detect Android metadata.';
-
-              setRepoAutofillState({
-                  status: detected.packageName || detected.description ? 'success' : 'error',
-                  message: statusMessage
-              });
-          } catch (error) {
-              if (cancelled) return;
-              setRepoAutofillState({ status: 'error', message: 'Could not auto-detect repo metadata right now.' });
-          }
-      }, 650);
-
-      return () => {
-          cancelled = true;
-          window.clearTimeout(timer);
-      };
-  }, [activeTab, mode, repoSource, githubToken, autoFilledDescription, autoFilledName, autoFilledPackageName]);
-
-  // Derived Releases URL for Manual Mode Helper
-  const releasesUrl = useMemo(() => {
-      const url = formData.repoUrl;
-      if (!url) return null;
-      const clean = url.trim().replace(/\/$/, '');
-      if (clean.includes('github.com')) return `${clean}/releases`;
-      if (clean.includes('gitlab')) return `${clean}/-/releases`;
-      if (clean.includes('codeberg.org')) return `${clean}/releases`;
-      return null;
-  }, [formData.repoUrl]);
-
-  const releaseKeywordTooltip = `
+    const releaseKeywordTooltip = `
 1. Click the 'Check Releases' link below.
 2. Go to the 'Assets' section of the latest version.
 3. Look at the APK filename.
@@ -464,680 +505,533 @@ Keyword: "app-release"
 If the file is just "app.apk", simply use "apk".
   `.trim();
 
-  const handleInputChange = (field: string, value: string) => {
-      setFormData(prev => ({ ...prev, [field]: value }));
-  };
+    const handleInputChange = (field: string, value: string) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
 
-  const handleAddScreenshot = () => {
-      if (screenshotInput.trim()) {
-          if (!screenshotInput.startsWith('http')) {
-              setError("Screenshot must be a valid URL starting with http/https");
-              setTimeout(() => setError(''), 3000);
-              return;
-          }
-          // Automatically sanitize GitHub URLs
-          const fixedUrl = sanitizeGitHubImageUrl(screenshotInput.trim());
-          setAddedScreenshots([...addedScreenshots, fixedUrl]);
-          setScreenshotInput('');
-      }
-  };
+    const handleAddScreenshot = () => {
+        if (screenshotInput.trim()) {
+            if (!screenshotInput.startsWith('http')) {
+                setError('Screenshot must be a valid URL starting with http/https');
+                setTimeout(() => setError(''), 3000);
+                return;
+            }
+            const fixedUrl = sanitizeGitHubImageUrl(screenshotInput.trim());
+            setAddedScreenshots(prev => [...prev, fixedUrl]);
+            setScreenshotInput('');
+        }
+    };
 
-  const handleRemoveScreenshot = (index: number) => {
-      setAddedScreenshots(prev => prev.filter((_, i) => i !== index));
-  };
+    const handleRemoveScreenshot = (index: number) => {
+        setAddedScreenshots(prev => prev.filter((_, i) => i !== index));
+    };
 
-  const isValidRepoUrl = (url: string) => {
-      if (!url) return false;
-      const lower = url.toLowerCase();
-      return lower.includes('github.com') || lower.includes('gitlab') || lower.includes('codeberg.org');
-  };
+    const generateIssueUrl = useCallback((appsToSubmit: any[]) => {
+        const title = encodeURIComponent(`[Submission] ${appsToSubmit[0]?.name || 'New app'}`);
+        const body = encodeURIComponent(JSON.stringify(appsToSubmit, null, 2));
+        return `https://github.com/RookieEnough/Orion-Data/issues/new?title=${title}&body=${body}`;
+    }, []);
 
-  const generateIssueUrl = (appsData: any[]) => {
-      const jsonPayload = JSON.stringify(appsData, null, 2);
-      const title = `App Submission [${appsData.length} App${appsData.length > 1 ? 's' : ''}]`;
-      const body = `
-### App Submission Request
+    const handleSubmit = useCallback(() => {
+        setError('');
+        if (addedScreenshots.length < 3) {
+            setError('At least 3 screenshots are required.');
+            return;
+        }
+        for (let i = 0; i < addedScreenshots.length; i++) {
+            const screenshot = addedScreenshots[i];
+            if (!screenshot) continue;
+            const reason = explainRejectedImageLink(screenshot);
+            if (reason) {
+                setError(`Screenshot #${i + 1}: ${reason}`);
+                return;
+            }
+        }
 
-I would like to submit the following apps to Orion Store.
+        let appsToSubmit: any[] = [];
+        try {
+            if (mode === 'obtainium' && activeTab === 'android') {
+                if (!jsonInput.trim()) { setError('Please paste JSON content.'); return; }
+                if (!obtainiumIcon.trim()) { setError('Icon URL is required.'); return; }
+                const obtainiumIconReason = explainRejectedImageLink(obtainiumIcon);
+                if (obtainiumIconReason) { setError(`Icon: ${obtainiumIconReason}`); return; }
+                const parsed = JSON.parse(jsonInput);
+                appsToSubmit = [{
+                    ...parsed,
+                    icon: sanitizeGitHubImageUrl(obtainiumIcon.trim()),
+                    releaseKeyword: obtainiumKeyword.trim() || 'apk',
+                    description: obtainiumDescription.trim(),
+                    screenshots: addedScreenshots
+                }];
+            } else {
+                if (!formData.name.trim()) { setError('App name is required.'); return; }
+                if (!formData.description.trim()) { setError('Description is required.'); return; }
+                if (!formData.icon.trim()) { setError('Icon URL is required.'); return; }
+                const iconReason = explainRejectedImageLink(formData.icon);
+                if (iconReason) { setError(`Icon: ${iconReason}`); return; }
+                if (activeTab === 'android') {
+                    if (!formData.repoUrl.trim()) { setError('Repo URL is required.'); return; }
+                    if (!formData.packageName.trim()) { setError('Package name is required.'); return; }
+                } else if (!formData.officialSite.trim()) {
+                    setError('Official website / repo link is required.');
+                    return;
+                }
 
-\`\`\`json
-${jsonPayload}
-\`\`\`
+                appsToSubmit = [{
+                    ...formData,
+                    icon: sanitizeGitHubImageUrl(formData.icon.trim()),
+                    releaseKeyword: activeTab === 'android' ? (isManualKeyword ? formData.releaseKeyword.trim() || 'apk' : 'apk') : formData.releaseKeyword,
+                    screenshots: addedScreenshots,
+                    platform: activeTab
+                }];
+            }
 
-*Generated by Orion Store v${currentStoreVersion}*
-      `.trim();
+            const issueUrl = generateIssueUrl(appsToSubmit);
+            startTransition(() => setIssueUrlToOpen(issueUrl));
+            onSuccess?.();
+        } catch (e) {
+            setError('Failed to parse data. Please check inputs.');
+        }
+    }, [activeTab, addedScreenshots, formData, generateIssueUrl, isManualKeyword, jsonInput, mode, obtainiumDescription, obtainiumIcon, obtainiumKeyword, onSuccess, startTransition]);
 
-      return `https://github.com/RookieEnough/Orion-Data/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
-  };
-
-  const handleSubmit = () => {
-      setError('');
-      
-      if (addedScreenshots.length < 3) {
-          setError("At least 3 screenshots are required.");
-          return;
-      }
-
-      let appsToSubmit: any[] = [];
-
-      try {
-          if (mode === 'obtainium') {
-              if (!jsonInput.trim()) { setError("Please paste JSON content."); return; }
-              if (!obtainiumIcon.trim()) { setError("Icon URL is required."); return; }
-
-              const parsed = JSON.parse(jsonInput);
-              
-              let rawList = [];
-              if (Array.isArray(parsed)) rawList = parsed;
-              else if (parsed.apps && Array.isArray(parsed.apps)) rawList = parsed.apps;
-              else if (parsed.url) rawList = [parsed];
-              else throw new Error("Invalid format");
-
-              appsToSubmit = rawList.filter((item: any) => item.url && isValidRepoUrl(item.url)).map((item: any) => {
-                  let owner = 'unknown';
-                  let repo = 'unknown';
-                  let githubPath = undefined;
-                  let gitlabPath = undefined;
-                  let gitlabDomain = undefined;
-                  let codebergPath = undefined;
-                  
-                  if (item.url.includes('github.com')) {
-                      const parts = item.url.split('github.com/')[1]?.split('/');
-                      owner = parts ? parts[0] : 'unknown';
-                      repo = parts ? parts[1].replace('.git', '').replace(/\/$/, '') : 'unknown';
-                      githubPath = `${owner}/${repo}`;
-                  } else if (item.url.includes('gitlab')) {
-                      // GitLab Parsing Logic
-                      try {
-                          const urlObj = new URL(item.url);
-                          const pathParts = urlObj.pathname.split('/').filter((p: string) => p);
-                          if (pathParts.length >= 2) {
-                              // FIX: Provide fallbacks for potentially undefined array items
-                              owner = pathParts[0] || 'unknown';
-                              repo = pathParts[pathParts.length - 1] || 'unknown';
-                              gitlabPath = pathParts.join('/');
-                              gitlabDomain = urlObj.hostname;
-                          }
-                      } catch(e) {}
-                  } else if (item.url.includes('codeberg.org')) {
-                      // Codeberg Parsing Logic
-                      try {
-                          const urlObj = new URL(item.url);
-                          const pathParts = urlObj.pathname.split('/').filter((p: string) => p);
-                          if (pathParts.length >= 2) {
-                              owner = pathParts[0] || 'unknown';
-                              repo = pathParts[pathParts.length - 1] || 'unknown';
-                              codebergPath = pathParts.join('/');
-                          }
-                      } catch(e) {}
-                  }
-
-                  let desc = obtainiumDescription;
-                  let author = item.author || owner;
-
-                  if (item.additionalSettings) {
-                      try {
-                          const sub = typeof item.additionalSettings === 'string' ? JSON.parse(item.additionalSettings) : item.additionalSettings;
-                          if (!desc) desc = sub.about || '';
-                          if (sub.appAuthor) author = sub.appAuthor;
-                      } catch(e) {}
-                  }
-
-                  if (!desc) desc = `A new app discovered via Obtainium${item.overrideSource === 'GitLab' ? ' (GitLab)' : ''}.`;
-
-                  return {
-                      id: item.id || `sub-${owner}-${repo}`.toLowerCase(),
-                      name: item.name || repo,
-                      description: desc, 
-                      icon: sanitizeGitHubImageUrl(obtainiumIcon), 
-                      version: "Latest",
-                      latestVersion: "Latest",
-                      downloadUrl: "#",
-                      repoUrl: item.url,
-                      githubRepo: githubPath,
-                      gitlabRepo: gitlabPath,
-                      gitlabDomain: gitlabDomain,
-                      codebergRepo: codebergPath,
-                      releaseKeyword: obtainiumKeyword || '',
-                      packageName: item.packageName || item.id || '',
-                      category: AppCategory.UTILITY, 
-                      platform: Platform.ANDROID,
-                      size: "Varies",
-                      author: author,
-                      screenshots: addedScreenshots 
-                  };
-              });
-
-              if (appsToSubmit.length === 0) {
-                  setError("No valid repositories found in the pasted JSON.");
-                  return;
-              }
-
-          } else {
-              // MANUAL MODE
-              if (activeTab === 'android') {
-                  if (!formData.repoUrl) { setError("Repo URL is required."); return; }
-                  if (!isValidRepoUrl(formData.repoUrl)) { setError("Only GitHub, GitLab, or Codeberg repositories are allowed."); return; }
-                  if (!formData.packageName) { setError("Package Name is required."); return; }
-                  if (isManualKeyword && !formData.releaseKeyword) { setError("Release Keyword is required when manual mode is on."); return; }
-              } else {
-                  if (!formData.officialSite) { setError("Official Website Link is required."); return; }
-              }
-
-              if (!formData.name) { setError("App Name is required."); return; }
-              if (!formData.category) { setError("Category is required."); return; }
-              if (!formData.author) { setError("Author is required."); return; }
-              if (!formData.description) { setError("Description is required."); return; }
-              if (!formData.icon) { setError("Icon URL is required."); return; }
-              if (!formData.id) { setError("App ID is required."); return; }
-
-              const platform = activeTab === 'pc' ? Platform.PC : activeTab === 'tv' ? Platform.TV : Platform.ANDROID;
-
-              appsToSubmit = [{
-                  id: formData.id,
-                  name: formData.name,
-                  description: formData.description,
-                  icon: sanitizeGitHubImageUrl(formData.icon),
-                  version: "Latest", 
-                  latestVersion: "Latest",
-                  downloadUrl: formData.officialSite || "#", 
-                  repoUrl: formData.repoUrl,
-                  githubRepo: formData.githubRepo || undefined,
-                  gitlabRepo: formData.gitlabRepo || undefined,
-                  gitlabDomain: formData.gitlabDomain || undefined,
-                  codebergRepo: formData.codebergRepo || undefined,
-                  releaseKeyword: isManualKeyword ? formData.releaseKeyword : 'apk',
-                  packageName: formData.packageName,
-                  category: formData.category,
-                  platform: platform,
-                  size: "Varies",
-                  author: formData.author,
-                  officialSite: formData.officialSite,
-                  screenshots: addedScreenshots
-              }];
-          }
-
-          const url = generateIssueUrl(appsToSubmit);
-          if (onSuccess) onSuccess();
-          setIssueUrlToOpen(url);
-
-      } catch (e) {
-          console.error(e);
-          setError("Failed to parse data. Please check inputs.");
-      }
-  };
-
-  const renderScreenshotSection = () => (
-      <div>
-          <LabelWithTooltip 
-              label="Screenshots (Min 3)" 
-              tooltip="Add direct image URLs. Copy links from the repo's Readme, Play Store, or F-Droid." 
-              required
-              onHelp={setActiveHelpText}
-          />
-          <div className="flex gap-2 mb-2">
-              <input 
-                  type="text"
-                  className="flex-1 bg-theme-input border border-theme-border rounded-lg px-2 py-2 text-xs focus:border-primary outline-none"
-                  placeholder="https://image.url/screenshot.jpg"
-                  value={screenshotInput}
-                  onChange={(e) => setScreenshotInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddScreenshot()}
-              />
-              <button 
-                  onClick={handleAddScreenshot}
-                  className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
-              >
-                  <i className="fas fa-plus text-xs"></i>
-              </button>
-          </div>
-          
-          {addedScreenshots.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                  {addedScreenshots.map((url, idx) => (
-                      <div key={idx} className="flex items-center gap-2 bg-card border border-theme-border px-2 py-1.5 rounded-md animate-fade-in">
-                          <img src={url} alt={`Screenshot ${idx + 1}`} className="w-8 h-8 rounded object-cover bg-theme-element" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                          <span className="text-[10px] font-bold text-theme-text">Screenshot {idx + 1}</span>
-                          <button 
-                              onClick={() => handleRemoveScreenshot(idx)}
-                              className="w-4 h-4 flex items-center justify-center text-red-500 hover:bg-red-500/10 rounded-full transition-colors"
-                          >
-                              <i className="fas fa-times text-[8px]"></i>
-                          </button>
-                      </div>
-                  ))}
-              </div>
-          ) : (
-              <p className="text-[10px] text-theme-sub italic opacity-50 pl-1">No screenshots added yet.</p>
-          )}
-      </div>
-  );
-
-  const resetForm = () => {
-      setError('');
-      setAddedScreenshots([]);
-      setObtainiumDescription('');
-      setObtainiumIcon('');
-      setObtainiumKeyword('');
-      setJsonInput('');
-      setAutoFilledName('');
-      setIssueUrlToOpen(null);
-      clearDraft();
-  };
-
-  const isAndroid = activeTab === 'android';
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in">
-        <div className="backdrop-scrim absolute inset-0 bg-black/80 backdrop-blur-md touch-none" onClick={onClose}></div>
-        
-        {/* Main Content Modal */}
-        <div className="bg-surface border border-theme-border rounded-3xl p-0 w-full max-w-lg relative z-10 animate-slide-up shadow-2xl overflow-hidden flex flex-col max-h-[90vh] compact-allow">
-            
-            {/* Header */}
-            <div className="p-6 pb-4 border-b border-theme-border flex justify-between items-center bg-surface/95 backdrop-blur-xl z-20">
-                <div>
-                    <h3 className="text-2xl font-black text-theme-text">Submit {activeTab === 'android' ? 'App' : activeTab === 'tv' ? 'TV App' : 'Software'}</h3>
-                    <p className="text-xs text-theme-sub">Contribute to the Orion Library</p>
-                </div>
-                <button onClick={onClose} className="w-8 h-8 rounded-full bg-theme-element border border-theme-border flex items-center justify-center text-theme-text hover:bg-theme-hover transition-colors">
-                    <i className="fas fa-times"></i>
-                </button>
+    const renderScreenshotSection = () => (
+        <div className="mt-1">
+            <div className="mb-3 flex items-center justify-between">
+                <LabelWithTooltip
+                    label="Screenshots (Min 3)"
+                    tooltip="Add direct image URLs. Copy links from the repo's Readme, Play Store, or F-Droid."
+                    required
+                />
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300">
+                    {addedScreenshots.length}/3+
+                </span>
             </div>
-
-            {/* Scrollable Content - Added overscroll-contain */}
-            <div className="overflow-y-auto p-6 flex-1 no-scrollbar overscroll-contain">
-                
-                {/* TRUST LEVEL BANNER */}
-                <div className={`bg-gradient-to-r ${currentLevel >= 10 ? 'from-acid/10 to-primary/10' : 'from-primary/10 to-blue-500/10'} border border-primary/20 rounded-2xl p-4 mb-6 relative overflow-hidden`}>
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 rounded-full blur-xl -translate-y-1/2 translate-x-1/2"></div>
-                    <div className="relative z-10">
-                        <div className="flex justify-between items-start mb-1">
-                            <div className="flex items-center gap-1.5">
-                                <span className={`text-[10px] font-black uppercase tracking-widest ${rank.color}`}>
-                                    {rank.title} (Lvl {currentLevel})
-                                </span>
-                                {currentLevel >= 10 && <i className="fas fa-crown text-[10px] text-acid animate-bounce"></i>}
-                            </div>
-                            {currentReduction > 0 && (
-                                <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded-full">
-                                    -{currentReduction}m Cooldown
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-baseline gap-1 mb-2">
-                            <h4 className="text-2xl font-black text-theme-text">{Math.floor(currentCooldown / 60)}h {currentCooldown % 60}m</h4>
-                            <span className="text-xs text-theme-sub font-medium">wait time</span>
-                        </div>
-                        <div className="w-full bg-theme-element h-1.5 rounded-full overflow-hidden">
-                            <div 
-                                className={`h-full rounded-full transition-all duration-500 ${currentLevel >= 10 ? 'bg-gradient-to-r from-acid to-primary' : 'bg-gradient-to-r from-primary to-blue-400'}`}
-                                style={{ width: `${Math.min((currentLevel / 10) * 100, 100)}%` }}
-                            ></div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Tabs - Only show for Android */}
-                {isAndroid ? (
-                    <div className="flex p-1 bg-theme-input rounded-xl mb-6 sticky top-0 z-10 shadow-sm border border-theme-border">
-                        <button 
-                            onClick={() => { setMode('obtainium'); resetForm(); }}
-                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'obtainium' ? 'bg-surface shadow-sm text-primary' : 'text-theme-sub hover:text-theme-text'}`}
-                        >
-                            Obtainium Import
-                        </button>
-                        <button 
-                            onClick={() => { setMode('manual'); resetForm(); }}
-                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'manual' ? 'bg-surface shadow-sm text-primary' : 'text-theme-sub hover:text-theme-text'}`}
-                        >
-                            Direct Repo
-                        </button>
-                    </div>
-                ) : (
-                    <div className="mb-4">
-                        <p className="text-xs font-bold text-theme-text bg-theme-element p-3 rounded-xl border border-theme-border">
-                            Submitting request for <span className="text-primary uppercase">{activeTab}</span>
-                        </p>
-                    </div>
-                )}
-
-                {error && (
-                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs font-bold flex items-center gap-2 animate-pulse">
-                        <i className="fas fa-exclamation-circle"></i>
-                        {error}
-                    </div>
-                )}
-
-                {mode === 'obtainium' && isAndroid ? (
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-bold text-theme-sub mb-2 uppercase">Paste JSON Export</label>
-                            <textarea 
-                                className="w-full h-40 bg-theme-input border border-theme-border rounded-xl p-3 text-xs font-mono focus:border-primary outline-none resize-none"
-                                placeholder='{"apps": [{"url": "https://gitlab.com/..."}]}'
-                                value={jsonInput}
-                                onChange={(e) => setJsonInput(e.target.value)}
-                            ></textarea>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                                <LabelWithTooltip 
-                                    label="Icon URL" 
-                                    tooltip="Override the default avatar." 
-                                    required 
-                                    onHelp={setActiveHelpText}
-                                />
-                                <input 
-                                    type="text"
-                                    className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none"
-                                    placeholder="https://..."
-                                    value={obtainiumIcon}
-                                    onChange={(e) => setObtainiumIcon(e.target.value)}
-                                />
-                            </div>
-                            <div>
-                                <LabelWithTooltip 
-                                    label="Release Keyword" 
-                                    tooltip="Filter releases by this keyword." 
-                                    onHelp={setActiveHelpText}
-                                />
-                                <input 
-                                    type="text"
-                                    className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none"
-                                    placeholder="e.g. app-release"
-                                    value={obtainiumKeyword}
-                                    onChange={(e) => setObtainiumKeyword(e.target.value)}
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <LabelWithTooltip label="Description Override" tooltip="Optional short description. If empty, Orion will try to extract it from the JSON metadata." onHelp={setActiveHelpText} />
-                            <textarea 
-                                className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none h-20 resize-none"
-                                placeholder="What does this app do?"
-                                value={obtainiumDescription}
-                                onChange={(e) => setObtainiumDescription(e.target.value)}
-                            />
-                        </div>
-                        <div className="p-4 bg-theme-element/50 rounded-xl space-y-3 border border-theme-border">
-                            <p className="text-[10px] font-bold text-theme-sub uppercase tracking-wider mb-2">Media</p>
-                            {renderScreenshotSection()}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        {/* Conditional URL Field */}
-                        <div>
-                            {isAndroid ? (
-                                <>
-                                    <LabelWithTooltip label="Repo URL" tooltip="GitHub or GitLab URL." required onHelp={setActiveHelpText} />
-                                    <input 
-                                        type="text"
-                                        className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none"
-                                        placeholder="https://gitlab.com/owner/repo"
-                                        value={formData.repoUrl}
-                                        onChange={(e) => handleInputChange('repoUrl', e.target.value)}
-                                    />
-                                    {formData.repoUrl.trim() && (
-                                        <div className={`mt-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-bold ${
-                                            repoAutofillState.status === 'error'
-                                                ? 'border-red-500/20 bg-red-500/10 text-red-500'
-                                                : repoAutofillState.status === 'success'
-                                                    ? 'border-green-500/20 bg-green-500/10 text-green-600'
-                                                    : 'border-theme-border bg-theme-element/50 text-theme-sub'
-                                        }`}>
-                                            <i className={`fas ${
-                                                repoAutofillState.status === 'loading'
-                                                    ? 'fa-spinner fa-spin'
-                                                    : repoAutofillState.status === 'success'
-                                                        ? 'fa-check-circle'
-                                                        : repoAutofillState.status === 'error'
-                                                            ? 'fa-triangle-exclamation'
-                                                            : 'fa-wand-magic-sparkles'
-                                            }`}></i>
-                                            <span>
-                                                {repoAutofillState.message || 'Orion will try to detect the package name and description from this repo.'}
-                                            </span>
-                                        </div>
-                                    )}
-                                    {formData.githubRepo && (
-                                        <p className="text-[10px] text-green-500 mt-1 font-mono flex items-center gap-1">
-                                            <i className="fab fa-github"></i> GitHub: {formData.githubRepo}
-                                        </p>
-                                    )}
-                                    {formData.gitlabRepo && (
-                                        <p className="text-[10px] text-orange-500 mt-1 font-mono flex items-center gap-1">
-                                            <i className="fab fa-gitlab"></i> GitLab: {formData.gitlabRepo}
-                                        </p>
-                                    )}
-                                    {formData.codebergRepo && (
-                                        <p className="text-[10px] text-blue-500 mt-1 font-mono flex items-center gap-1">
-                                            <svg viewBox="0 0 512 512" fill="currentColor" className="w-3 h-3">
-                                                <path d="M256 48l240 416H16L256 48zm0 128L96 400h320L256 176z" />
-                                            </svg>
-                                            Codeberg: {formData.codebergRepo}
-                                        </p>
-                                    )}
-                                </>
-                            ) : (
-                                <>
-                                    <LabelWithTooltip 
-                                      label="Official Website / Repo Link" 
-                                      tooltip="The source URL for this software (Website, GitHub, etc)." 
-                                      required 
-                                      onHelp={setActiveHelpText} 
-                                    />
-                                    <input 
-                                        type="text"
-                                        className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none"
-                                        placeholder="https://example.com/download"
-                                        value={formData.officialSite}
-                                        onChange={(e) => handleInputChange('officialSite', e.target.value)}
-                                    />
-                                </>
-                            )}
-                        </div>
-
-                        {/* Name & ID */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <LabelWithTooltip label="App Name" tooltip="Display name." required onHelp={setActiveHelpText} />
-                                <input 
-                                    type="text"
-                                    className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none"
-                                    value={formData.name}
-                                    onChange={(e) => handleInputChange('name', e.target.value)}
-                                />
-                            </div>
-                            <div>
-                                <LabelWithTooltip label="App ID (Auto)" tooltip="Internal unique ID." onHelp={setActiveHelpText} />
-                                <input 
-                                    type="text"
-                                    className="w-full bg-theme-element border border-theme-border rounded-xl px-3 py-3 text-sm font-mono opacity-70 focus:outline-none"
-                                    value={formData.id}
-                                    readOnly
-                                />
-                            </div>
-                        </div>
-
-                        {/* Category & Author */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <LabelWithTooltip label="Category" tooltip="Select category." required onHelp={setActiveHelpText} />
-                                <select 
-                                    className="w-full bg-theme-input border border-theme-border rounded-xl px-2 py-3 text-sm focus:border-primary outline-none appearance-none"
-                                    value={formData.category}
-                                    onChange={(e) => handleInputChange('category', e.target.value)}
-                                >
-                                    {Object.values(AppCategory).map(c => (
-                                        <option key={c} value={c}>{c}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <LabelWithTooltip label="Author" tooltip="Developer name." required onHelp={setActiveHelpText} />
-                                <input 
-                                    type="text"
-                                    className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none"
-                                    value={formData.author}
-                                    onChange={(e) => handleInputChange('author', e.target.value)}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Description */}
-                        <div>
-                            <LabelWithTooltip label="Description" tooltip="Short summary." required onHelp={setActiveHelpText} />
-                            <textarea 
-                                className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none h-20 resize-none"
-                                value={formData.description}
-                                onChange={(e) => handleInputChange('description', e.target.value)}
-                            />
-                        </div>
-
-                        {/* Icon */}
-                        <div>
-                            <LabelWithTooltip label="Icon URL" tooltip="Direct link to icon image." required onHelp={setActiveHelpText} />
-                            <input 
-                                type="text"
-                                className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none"
-                                placeholder="https://..."
-                                value={formData.icon}
-                                onChange={(e) => handleInputChange('icon', e.target.value)}
-                            />
-                        </div>
-
-                        {/* Release Keyword & Package Name (New Mandatory Fields for Android) */}
-                        {isAndroid && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <LabelWithTooltip 
-                                        label="Package Name" 
-                                        tooltip="The Android package identifier (e.g. com.example.app)."
-                                        required 
-                                        onHelp={setActiveHelpText}
-                                    />
-                                    <input 
-                                        type="text"
-                                        className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none font-mono"
-                                        placeholder="com.example.app"
-                                        value={formData.packageName}
-                                        onChange={(e) => handleInputChange('packageName', e.target.value)}
-                                    />
-                                </div>
-                                <div>
-                                    <div className="flex items-center justify-between mb-1.5">
-                                        <LabelWithTooltip 
-                                            label="Release Keyword" 
-                                            tooltip={releaseKeywordTooltip} 
-                                            required
-                                            onHelp={setActiveHelpText} 
-                                        />
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[10px] font-bold text-theme-sub uppercase">Manual</span>
-                                            <button 
-                                                type="button"
-                                                onClick={() => setIsManualKeyword(!isManualKeyword)}
-                                                className={`relative h-4 w-8 overflow-hidden rounded-full transition-colors ${isManualKeyword ? 'bg-primary' : 'bg-theme-border'}`}
-                                                aria-pressed={isManualKeyword}
-                                            >
-                                                <div className={`absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${isManualKeyword ? 'translate-x-4' : 'translate-x-0'}`}></div>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <input 
-                                        type="text"
-                                        className={`w-full bg-theme-input border border-theme-border rounded-xl px-3 py-3 text-sm focus:border-primary outline-none ${!isManualKeyword ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        placeholder="e.g. arm64, universal"
-                                        value={isManualKeyword ? formData.releaseKeyword : 'apk'}
-                                        onChange={(e) => handleInputChange('releaseKeyword', e.target.value)}
-                                        disabled={!isManualKeyword}
-                                    />
-                                </div>
-                            </div>
-                        )}
-                        {isAndroid && releasesUrl && (
-                             <a 
-                                href={releasesUrl} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-primary hover:underline bg-primary/5 px-2 py-1 rounded-lg border border-primary/10 transition-colors hover:bg-primary/10 mb-2"
-                            >
-                                <i className="fas fa-external-link-alt"></i>
-                                Check Releases Page
-                            </a>
-                        )}
-
-                        {/* Media Section */}
-                        <div className="p-4 bg-theme-element/50 rounded-xl space-y-3 border border-theme-border">
-                            <p className="text-[10px] font-bold text-theme-sub uppercase tracking-wider mb-2">Media</p>
-                            {renderScreenshotSection()}
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Footer Buttons */}
-            <div className="p-6 border-t border-theme-border bg-surface/95 backdrop-blur-xl z-20">
-                <button 
-                    onClick={handleSubmit}
-                    className="w-full py-4 rounded-2xl bg-primary text-white font-bold text-lg shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 mb-2"
+            <div className="mb-4 flex gap-2">
+                <input
+                    type="text"
+                    className="h-9 flex-1 rounded-xl border border-white/5 bg-[#2d3147] px-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-primary/70"
+                    placeholder="https://image.url/screenshot.jpg"
+                    value={screenshotInput}
+                    onChange={(e) => setScreenshotInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddScreenshot()}
+                />
+                <button
+                    onClick={handleAddScreenshot}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-slate-200 transition hover:bg-white/20"
                 >
-                    <i className="fas fa-paper-plane"></i>
-                    <span>Generate Request</span>
+                    <i className="fas fa-plus text-sm"></i>
                 </button>
-                <p className="text-[10px] text-center text-theme-sub opacity-60">
-                    This will open a pre-filled GitHub issue.
-                </p>
+            </div>
+
+            <div className="grid grid-cols-4 gap-1.5 max-w-xs mx-auto">
+                {addedScreenshots.map((url, idx) => (
+                    <div key={idx} className="relative aspect-[9/19] overflow-hidden rounded-xl bg-[#2d3147]">
+                        <img
+                            src={url}
+                            alt={`Screenshot ${idx + 1}`}
+                            className="h-full w-full object-cover"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                        <div className="absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-black/40 to-transparent" />
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 pb-1 pt-4">
+                            <span className="text-[9px] font-bold text-white/90">#{idx + 1}</span>
+                        </div>
+                        <button
+                            onClick={() => handleRemoveScreenshot(idx)}
+                            className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-red-500/80"
+                        >
+                            <i className="fas fa-times text-[8px]"></i>
+                        </button>
+                    </div>
+                ))}
+
+                {Array.from({ length: Math.max(4 - addedScreenshots.length, 1) }).map((_, num) => {
+                    const displayNum = addedScreenshots.length + num + 1;
+                    return (
+                        <div key={`empty-${num}`} className="relative flex aspect-[9/19] items-center justify-center rounded-xl border border-dashed border-white/10 bg-[#2d3147]/20">
+                            <div className="text-center">
+                                <i className="fas fa-image mb-1 block text-sm text-slate-600"></i>
+                                <span className="text-[10px] font-medium text-slate-600">{displayNum}</span>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         </div>
-        
-        {/* Help Tooltip */}
-        {activeHelpText && (
-            <div className="absolute inset-0 z-[70] flex items-center justify-center p-8 animate-fade-in" onClick={() => setActiveHelpText(null)}>
-                <div className="bg-black/90 text-white p-4 rounded-2xl max-w-xs text-center shadow-2xl border border-white/10 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                    <i className="fas fa-info-circle text-2xl text-primary mb-2"></i>
-                    <p className="text-sm font-medium whitespace-pre-wrap leading-relaxed">{activeHelpText}</p>
-                    <button onClick={() => setActiveHelpText(null)} className="mt-4 text-xs font-bold text-theme-sub uppercase tracking-widest hover:text-white">Close</button>
-                </div>
-            </div>
-        )}
+    );
 
-        {issueUrlToOpen && (
-            <div className="absolute inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 animate-fade-in" onClick={() => setIssueUrlToOpen(null)}>
-                <div className="w-full max-w-sm rounded-[2rem] border border-theme-border bg-surface p-6 shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
-                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <i className="fas fa-triangle-exclamation text-xl"></i>
+    const resetForm = () => {
+        setError('');
+        setAddedScreenshots([]);
+        setObtainiumDescription('');
+        setObtainiumIcon('');
+        setObtainiumKeyword('');
+        setJsonInput('');
+        setAutoFilledName('');
+        setIssueUrlToOpen(null);
+        clearDraft();
+    };
+
+    const isAndroid = activeTab === 'android';
+
+    return (
+        <div className="fixed inset-0 z-[60] animate-fade-in bg-[#232634] text-white">
+            <div className="flex h-full w-full flex-col overflow-y-auto">
+                <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-5 pt-[calc(1rem+env(safe-area-inset-top))] sm:px-5">
+                    {/* Header */}
+                    <div className="mb-5 flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-center">
+                                {activeTab === 'android' ? (
+                                    <i className="fab fa-android text-3xl text-emerald-400 drop-shadow-md"></i>
+                                ) : activeTab === 'pc' ? (
+                                    <i className="fab fa-windows text-3xl text-blue-500 drop-shadow-md"></i>
+                                ) : (
+                                    <i className="fas fa-tv text-3xl text-purple-400 drop-shadow-md"></i>
+                                )}
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-black leading-tight tracking-tight text-white">Submit {activeTab === 'android' ? 'App' : activeTab === 'tv' ? 'TV App' : 'Software'}</h3>
+                                <div className="mt-1.5 flex flex-wrap gap-2">
+                                    <div className={`flex items-center gap-1.5 rounded-full ${rank.bg} px-2 py-0.5 text-[10px] font-bold ${rank.color}`}>
+                                        <i className={`fas ${rank.icon} text-xs`}></i>
+                                        <span>{rank.title}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-bold text-slate-300">
+                                        <i className="fas fa-clock text-[10px] text-blue-400"></i>
+                                        <span>{Math.floor(currentCooldown / 60)}h {currentCooldown % 60}m</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-slate-300 transition hover:bg-white/10">
+                            <i className="fas fa-times text-xs"></i>
+                        </button>
                     </div>
-                    <h3 className="text-center text-xl font-black text-theme-text">Before You Continue</h3>
-                    <p className="mt-3 text-center text-sm leading-relaxed text-theme-sub">
-                        Orion already generated the correct JSON for your submission. Please do not manually edit the JSON block on the GitHub issue page, or the submission may break.
-                    </p>
-                    <div className="mt-5 flex flex-col gap-2">
+
+                    <div className="no-scrollbar">
+                        {isAndroid ? (
+                            <div className="mb-6 rounded-xl bg-white/5 p-1">
+                                <div className="grid grid-cols-2 gap-1">
+                                    <button
+                                        onClick={() => { setMode('obtainium'); resetForm(); }}
+                                        className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all ${mode === 'obtainium' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                    >
+                                        <i className="fas fa-file-import text-xs"></i>
+                                        <span>Obtainium</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setMode('manual'); resetForm(); }}
+                                        className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all ${mode === 'manual' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                    >
+                                        <i className="fas fa-code-branch text-xs"></i>
+                                        <span>Repo</span>
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="mb-6 rounded-xl bg-white/5 px-4 py-2 text-center text-xs font-bold text-slate-300">
+                                Submitting request for <span className="uppercase text-white">{activeTab}</span>
+                            </div>
+                        )}
+
+                        {error && (
+                            <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-xs font-bold text-red-400">
+                                <i className="fas fa-exclamation-circle"></i>
+                                <span>{error}</span>
+                            </div>
+                        )}
+
+                        {mode === 'obtainium' && isAndroid ? (
+                            <div className="space-y-5">
+                                <Section title="Obtainium import" subtitle="Paste your export and add the Orion-specific metadata needed for review.">
+                                    <textarea
+                                        className="h-32 w-full resize-none rounded-xl bg-[#2d3147] p-3 text-xs font-mono text-slate-200 outline-none focus:ring-1 focus:ring-primary/50"
+                                        placeholder='{"apps": [{"url": "https://gitlab.com/..."}]}'
+                                        value={jsonInput}
+                                        onChange={(e) => setJsonInput(e.target.value)}
+                                    ></textarea>
+                                </Section>
+
+                                <Section title="Overrides" subtitle="Optional tweaks for how the submission appears in Orion.">
+                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                        <div>
+                                            <SimpleLabel label="Icon URL" required />
+                                            <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                                <input
+                                                    type="text"
+                                                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                    placeholder="https://..."
+                                                    value={obtainiumIcon}
+                                                    onChange={(e) => setObtainiumIcon(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <SimpleLabel label="Release Keyword" />
+                                            <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                                <input
+                                                    type="text"
+                                                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                    placeholder="e.g. app-release"
+                                                    value={obtainiumKeyword}
+                                                    onChange={(e) => setObtainiumKeyword(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-3">
+                                        <SimpleLabel label="Description Override" />
+                                        <textarea
+                                            className="h-20 w-full resize-none rounded-xl bg-[#2d3147] px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50"
+                                            placeholder="What does this app do?"
+                                            value={obtainiumDescription}
+                                            onChange={(e) => setObtainiumDescription(e.target.value)}
+                                        />
+                                    </div>
+                                </Section>
+
+                                <Section title="Media">
+                                    {renderScreenshotSection()}
+                                </Section>
+                            </div>
+                        ) : (
+                            <div className="space-y-5">
+                                <Section title="Source" innerClassName="space-y-3">
+                                    {isAndroid ? (
+                                        <>
+                                            <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                                <input
+                                                    type="text"
+                                                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                    placeholder="https://github.com/owner/repo"
+                                                    value={formData.repoUrl}
+                                                    onChange={(e) => handleInputChange('repoUrl', e.target.value)}
+                                                />
+                                            </div>
+                                            {formData.repoUrl.trim() && (
+                                                <div className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${repoAutofillState.status === 'error'
+                                                    ? 'bg-red-500/10 text-red-300'
+                                                    : repoAutofillState.status === 'success'
+                                                        ? 'bg-emerald-500/10 text-emerald-200'
+                                                        : 'bg-white/5 text-slate-300'
+                                                    }`}>
+                                                    <i className={`fas ${repoAutofillState.status === 'loading'
+                                                        ? 'fa-spinner fa-spin'
+                                                        : repoAutofillState.status === 'success'
+                                                            ? 'fa-check-circle'
+                                                            : repoAutofillState.status === 'error'
+                                                                ? 'fa-triangle-exclamation'
+                                                                : 'fa-wand-magic-sparkles'
+                                                        } text-xs`}></i>
+                                                    <span>{repoAutofillState.message || 'Orion will try to detect the package name and description from this repo.'}</span>
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                            <input
+                                                type="text"
+                                                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                placeholder="https://example.com/download"
+                                                value={formData.officialSite}
+                                                onChange={(e) => handleInputChange('officialSite', e.target.value)}
+                                            />
+                                        </div>
+                                    )}
+                                </Section>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <SimpleLabel label="Name" required />
+                                        <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                            <input
+                                                type="text"
+                                                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                placeholder="App name"
+                                                value={formData.name}
+                                                onChange={(e) => handleInputChange('name', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <SimpleLabel label="Category" required />
+                                        <div className="rounded-xl bg-[#2d3147] px-3 py-2 text-slate-200">
+                                            <select
+                                                className="w-full appearance-none bg-transparent text-sm outline-none"
+                                                value={formData.category}
+                                                onChange={(e) => handleInputChange('category', e.target.value)}
+                                            >
+                                                {Object.values(AppCategory).map(c => (
+                                                    <option key={c} value={c} className="bg-[#2d3147] text-white">{c}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <SimpleLabel label="Author" required />
+                                        <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                            <input
+                                                type="text"
+                                                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                placeholder="Developer / publisher"
+                                                value={formData.author}
+                                                onChange={(e) => handleInputChange('author', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <SimpleLabel label="APP ID" />
+                                        <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                            <input
+                                                type="text"
+                                                className="w-full bg-transparent text-sm outline-none"
+                                                value={formData.id}
+                                                readOnly
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Section title="Description" innerClassName="space-y-3">
+                                    <textarea
+                                        className="h-24 w-full resize-none rounded-xl bg-[#2d3147] px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:ring-1 focus:ring-primary/50"
+                                        placeholder="A short summary users will read first."
+                                        value={formData.description}
+                                        onChange={(e) => handleInputChange('description', e.target.value)}
+                                    />
+                                </Section>
+
+                                <Section title="Icon URL" innerClassName="space-y-3">
+                                    <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                        <input
+                                            type="text"
+                                            className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                            placeholder="https://..."
+                                            value={formData.icon}
+                                            onChange={(e) => handleInputChange('icon', e.target.value)}
+                                        />
+                                    </div>
+                                </Section>
+
+                                {isAndroid && (
+                                    <Section title="Release" innerClassName="space-y-3">
+                                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                            <div>
+                                                <SimpleLabel label="Package Name" required />
+                                                <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                                    <input
+                                                        type="text"
+                                                        className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                        placeholder="com.example.app"
+                                                        value={formData.packageName}
+                                                        onChange={(e) => handleInputChange('packageName', e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div className="mb-1.5 flex items-center justify-between">
+                                                    <SimpleLabel label="Release Keyword" required />
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-bold uppercase text-slate-400">Auto</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setIsManualKeyword(!isManualKeyword)}
+                                                            className={`relative h-4 w-8 rounded-full transition-colors ${isManualKeyword ? 'bg-blue-500' : 'bg-white/10'}`}
+                                                            aria-pressed={isManualKeyword}
+                                                        >
+                                                            <div className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform ${isManualKeyword ? 'left-4' : 'left-0.5'}`}></div>
+                                                        </button>
+                                                        <span className="text-[10px] font-bold uppercase text-slate-400">Manual</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                                    <input
+                                                        type="text"
+                                                        className={`w-full bg-transparent text-sm outline-none placeholder:text-slate-500 ${!isManualKeyword ? 'cursor-not-allowed opacity-60' : ''}`}
+                                                        placeholder="apk"
+                                                        value={isManualKeyword ? formData.releaseKeyword : 'apk'}
+                                                        onChange={(e) => handleInputChange('releaseKeyword', e.target.value)}
+                                                        disabled={!isManualKeyword}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {releasesUrl && (
+                                            <a
+                                                href={releasesUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 text-xs font-medium text-slate-300 transition hover:bg-white/10"
+                                            >
+                                                <i className="fas fa-external-link-alt text-[10px]"></i>
+                                                Check Releases Page
+                                            </a>
+                                        )}
+                                    </Section>
+                                )}
+
+                                <Section title="Screenshots">
+                                    {renderScreenshotSection()}
+                                </Section>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Sticky footer */}
+                    <div className="sticky bottom-0 mt-6 border-t border-white/5 bg-[#232634] pb-1 pt-3 outline-none">
                         <button
-                            onClick={() => {
-                                window.open(issueUrlToOpen, '_blank');
-                                clearDraft();
-                                setIssueUrlToOpen(null);
-                                onClose();
-                            }}
-                            className="w-full rounded-2xl bg-primary px-4 py-3 font-bold text-white shadow-lg shadow-primary/20 transition-all active:scale-95"
+                            onClick={handleSubmit}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white transition hover:bg-blue-700 active:scale-[0.99] focus:outline-none"
                         >
-                            Open GitHub Issue
+                            <i className="fas fa-arrow-right text-xs"></i>
+                            <span>Generate GitHub Issue</span>
                         </button>
-                        <button
-                            onClick={() => setIssueUrlToOpen(null)}
-                            className="w-full rounded-2xl bg-theme-element px-4 py-3 text-sm font-bold text-theme-text transition-colors hover:bg-theme-hover"
-                        >
-                            Go Back
-                        </button>
+                        <p className="mt-2 text-center text-[10px] text-slate-500">
+                            Opens GitHub Issues in a new tab.
+                        </p>
                     </div>
                 </div>
             </div>
-        )}
-    </div>
-  );
+
+            {/* Confirmation modal */}
+            {issueUrlToOpen && (
+                <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/70 p-6 animate-fade-in" onClick={() => setIssueUrlToOpen(null)}>
+                    <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1e1f2c] p-5 shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+                        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/10 text-white">
+                            <i className="fas fa-triangle-exclamation text-lg"></i>
+                        </div>
+                        <h3 className="text-center text-base font-black text-white">Before You Continue</h3>
+                        <p className="mt-2 text-center text-xs leading-relaxed text-slate-300">
+                            Orion already generated the correct JSON for your submission. Please do not manually edit the JSON block on the GitHub issue page, or the submission may break.
+                        </p>
+                        <div className="mt-5 flex flex-col gap-2">
+                            <button
+                                onClick={() => {
+                                    window.open(issueUrlToOpen, '_blank');
+                                    clearDraft();
+                                    setIssueUrlToOpen(null);
+                                    onClose();
+                                }}
+                                className="w-full rounded-xl bg-white/10 px-4 py-2.5 font-bold text-white transition hover:bg-white/20 active:scale-[0.99]"
+                            >
+                                Open GitHub Issue
+                            </button>
+                            <button
+                                onClick={() => setIssueUrlToOpen(null)}
+                                className="w-full rounded-xl bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10"
+                            >
+                                Go Back
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };
 
 export default SubmissionModal;
