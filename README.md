@@ -26,7 +26,12 @@
   <a href="https://www.buymeacoffee.com/rookiez" target="_blank">
     <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="120" alt="Buy Me A Coffee">
   </a>
+  <br>
+  <a href="https://buymeachai.ezee.li/RookieZ">
+    <img src="https://i.ibb.co/fd83zYrT/1782281531688.jpg" width="120" alt="Buy Me A Chai">
+  </a>
 </p>
+
 
 <br>
 
