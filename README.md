@@ -21,7 +21,6 @@
   <img src="https://img.shields.io/badge/Capacitor-119EFF?style=for-the-badge&logo=capacitor&logoColor=white" alt="Capacitor">
   <img src="https://img.shields.io/badge/Tailwind-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind">
 </p>
-
 <p align="center">
   <a href="https://www.buymeacoffee.com/rookiez" target="_blank">
     <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="120" alt="Buy Me A Coffee">
@@ -30,12 +29,7 @@
   <a href="https://buymeachai.ezee.li/RookieZ">
     <img src="https://i.ibb.co/fd83zYrT/1782281531688.jpg" width="120" alt="Buy Me A Chai">
   </a>
-</p>
-
-
 <br>
-
-<p align="center">
   <a href="https://github.com/RookieEnough/Orion-Store/releases">
     <img src="https://img.shields.io/github/v/release/RookieEnough/Orion-Store?style=for-the-badge&logo=github&label=Version&color=6366f1" alt="Latest Version">
   </a>
