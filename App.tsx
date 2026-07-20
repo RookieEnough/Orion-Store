@@ -11,7 +11,7 @@
         } else {
             root.classList.add(theme);
         }
-    } catch (e) {}
+    } catch (e) { }
 })();
 
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy, useDeferredValue, startTransition } from 'react';
@@ -22,9 +22,10 @@ import { LocalNotifications, ActionPerformed } from '@capacitor/local-notificati
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { UnityAds } from 'capacitor-unity-ads';
 import { shallow } from 'zustand/shallow';
-import { DEV_SOCIALS, DEFAULT_FAQS, DEFAULT_DEV_PROFILE, DEFAULT_SUPPORT_EMAIL, DEFAULT_EASTER_EGG, CACHE_VERSION, NETWORK_TIMEOUT_MS, getAppFontDefinition } from './constants';
+import { DEV_SOCIALS, DEFAULT_FAQS, DEFAULT_DEV_PROFILE, DEFAULT_SUPPORT_EMAIL, DEFAULT_EASTER_EGG, DEFAULT_DONATION, CACHE_VERSION, NETWORK_TIMEOUT_MS, getAppFontDefinition } from './constants';
 import { Platform, AppItem, AppFontKey, Tab, StoreConfig, SortOption, StoreCollection, BundleItem, UpdateStream } from './types';
 import ClassicAppList from './components/ClassicAppList';
+import ExpandedNewUpdatedGrid from './components/ExpandedNewUpdatedGrid';
 const ModernAppList = lazy(() => import('./components/ModernAppList').then(m => ({ default: m.default })));
 const ModernHomeSkeleton = lazy(() => import('./components/ModernAppList').then(m => ({ default: m.ModernHomeSkeleton })));
 import Header from './components/Header';
@@ -32,14 +33,29 @@ import BottomNav from './components/BottomNav';
 import StoreFilters from './components/StoreFilters';
 import ModernUITutorial from './components/ModernUITutorial';
 import MaintenanceMode from './components/MaintenanceMode';
+import SpotlightOverlay from './components/SpotlightOverlay';
 import AppTracker, { AppInfoResult } from './plugins/AppTracker';
+import { useTutorialStore, TutorialStep } from './store/useTutorialStore';
 import { useSettingsStore, useDataStore, CleanupEntry, Theme, TabViewState } from './store/useAppStore';
+import { useDevConfigStore } from './store/useDevConfigStore';
 import { getAvailableFilterCategories } from './utils/discovery';
 import { compareVersions, getPreferredVersion, isComparableVersion, isSameVersion } from './utils/appVersioning';
+import { sanitizeDownloadUrl } from './utils/downloadUrl';
 import useAvailableUpdates from './hooks/useAvailableUpdates';
+import ForcedStoreUpdateGate from './components/ForcedStoreUpdateGate';
+import {
+    ForcedStoreUpdateStatus,
+    buildForcedStoreFileName,
+    canResumeForcedStoreUpdate,
+    createForcedStoreUpdateSnapshot,
+    isStoreUpdateAvailable,
+    shouldForceStoreUpdate
+} from './utils/forcedStoreUpdate';
 
 import { useScrollLock } from './hooks/useScrollLock';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
+import { useVirusTotalScan } from './hooks/useVirusTotalScan';
+import type { VirusTotalResult } from './hooks/useVirusTotalScan';
 import CoreWorker from './workers/core.worker?worker';
 
 const FAQModal = lazy(() => import('./components/FAQModal'));
@@ -55,11 +71,11 @@ const SettingsModal = lazy(() => import('./components/SettingsModal'));
 let settingsModalPreloadPromise: Promise<unknown> | null = null;
 const preloadSettingsModal = () => {
     if (!settingsModalPreloadPromise) {
-        settingsModalPreloadPromise = import('./components/SettingsModal').catch(() => {});
+        settingsModalPreloadPromise = import('./components/SettingsModal').catch(() => { });
     }
     return settingsModalPreloadPromise;
 };
-const StoreUpdateModal = lazy(() => import('./components/StoreUpdateModal'));
+
 const NoticeModal = lazy(() => import('./components/NoticeModal'));
 const SplashScreenPreview = lazy(() => import('./components/SplashScreenPreview'));
 const ReleaseNotesModal = lazy(() => import('./components/ReleaseNotesModal'));
@@ -67,7 +83,7 @@ const BundlePreviewModal = lazy(() => import('./components/BundlePreviewModal'))
 const ProfileStatsModal = lazy(() => import('./components/ProfileStatsModal'));
 const VirusTotalScanModal = lazy(() => import('./components/VirusTotalScanModal'));
 
-const CURRENT_STORE_VERSION = '1.3.2';
+const CURRENT_STORE_VERSION = '1.3.4';
 const UNITY_GAME_ID = '5996387';
 const ADS_TEST_MODE = false;
 
@@ -115,12 +131,6 @@ type ViewTransitionCapableDocument = Document & {
 const loadEmbeddedApps = async (): Promise<AppItem[]> => {
     const module = await import('./localData');
     return module.localAppsData as unknown as AppItem[];
-};
-
-const sanitizeUrl = (url?: string): string => {
-    if (!url) return '#';
-    if (url.trim().toLowerCase().startsWith('javascript:')) return '#';
-    return url;
 };
 
 const fetchWithTimeout = async (resource: string, options: RequestInit & { timeout?: number } = {}) => {
@@ -269,7 +279,7 @@ const injectCollectionAfterHero = (collections: StoreCollection[], injectedColle
 };
 
 const scheduleBackgroundTask = (callback: () => void, timeout = 800) => {
-    if (typeof window === 'undefined') return () => {};
+    if (typeof window === 'undefined') return () => { };
 
     const callbackWindow = window as Window & {
         requestIdleCallback?: (fn: () => void, options?: { timeout?: number }) => number;
@@ -341,6 +351,7 @@ const App: React.FC = () => {
         disableAnimations: state.disableAnimations,
         compactMode: state.compactMode,
         highRefreshRate: state.highRefreshRate,
+        pullToRefreshCharacter: state.pullToRefreshCharacter,
         hapticEnabled: state.hapticEnabled,
         glassEffect: state.glassEffect,
         useShizuku: state.useShizuku,
@@ -356,6 +367,9 @@ const App: React.FC = () => {
         hasSeenModernUITutorial: state.hasSeenModernUITutorial,
         customBundles: state.customBundles,
         localMaintenanceMode: state.localMaintenanceMode,
+        virusTotalApiKey: state.virusTotalApiKey,
+        forcedStoreUpdate: state.forcedStoreUpdate,
+        setVirusTotalApiKey: state.setVirusTotalApiKey,
         setTheme: state.setTheme,
         setAppStream: state.setAppStream,
         setInstalledVersions: state.setInstalledVersions,
@@ -369,7 +383,9 @@ const App: React.FC = () => {
         setIsLegend: state.setIsLegend,
         registerSubmission: state.registerSubmission,
         setHasSeenModernUITutorial: state.setHasSeenModernUITutorial,
-        userProfile: state.userProfile
+        userProfile: state.userProfile,
+        setForcedStoreUpdate: state.setForcedStoreUpdate,
+        clearForcedStoreUpdate: state.clearForcedStoreUpdate
     }), shallow);
     const data = useDataStore((state) => ({
         apps: state.apps,
@@ -411,9 +427,25 @@ const App: React.FC = () => {
     const [showCustomBundleModal, setShowCustomBundleModal] = useState(false);
     const [submissionCooldown, setSubmissionCooldown] = useState<string | null>(null);
     const [storeUpdateAvailable, setStoreUpdateAvailable] = useState(false);
-    const [showStoreUpdateModal, setShowStoreUpdateModal] = useState(false);
-    const [isTestingUpdate, setIsTestingUpdate] = useState(false);
+
     const [storeUpdateUrl, setStoreUpdateUrl] = useState('');
+    const [forcedStoreUpdateStatus, setForcedStoreUpdateStatus] = useState<ForcedStoreUpdateStatus>('inactive');
+    const forcedStoreUpdateStatusRef = useRef<ForcedStoreUpdateStatus>('inactive');
+    // Keep the ref in sync so stale closures (e.g. evaluateStoreUpdateState
+    // inside loadApps) can always read the latest value.
+    useEffect(() => { forcedStoreUpdateStatusRef.current = forcedStoreUpdateStatus; }, [forcedStoreUpdateStatus]);
+    const commitForcedStoreUpdateStatus = useCallback((status: ForcedStoreUpdateStatus) => {
+        forcedStoreUpdateStatusRef.current = status;
+        setForcedStoreUpdateStatus(status);
+    }, []);
+    const [forcedStoreProgress, setForcedStoreProgress] = useState(0);
+    const [forcedStoreStatusText, setForcedStoreStatusText] = useState('');
+    const [forcedStoreError, setForcedStoreError] = useState('');
+    const [forcedStoreExportPath, setForcedStoreExportPath] = useState('');
+    const [forcedStoreScanResult, setForcedStoreScanResult] = useState<VirusTotalResult | null>(null);
+    const [forcedStorePollingActive, setForcedStorePollingActive] = useState(false);
+    const [isTestingForcedUpdate, setIsTestingForcedUpdate] = useState(false);
+    const [testForcedStatus, setTestForcedStatus] = useState<ForcedStoreUpdateStatus>('ready_to_scan_or_install');
     const [devClickCount, setDevClickCount] = useState(0);
     const [devToast, setDevToast] = useState<string | null>(null);
     const [easterEggCount, setEasterEggCount] = useState(0);
@@ -421,6 +453,10 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [remoteConfig, setRemoteConfig] = useState<StoreConfig | null>(null);
+    const effectiveRemoteConfig = remoteConfig;
+    const devConfigEnabled = useDevConfigStore((state) => state.enabled);
+    const devConfigHasHydrated = useDevConfigStore((state) => state.hasHydrated);
+    const [isForcedUpdateBypassedForSession, setIsForcedUpdateBypassedForSession] = useState(false);
     const [mirrorSource, setMirrorSource] = useState<string>('Checking...');
     const [pendingInstallRetry, setPendingInstallRetry] = useState<{ app: AppItem, file: string } | null>(null);
     const [showCleanupPill, setShowCleanupPill] = useState(false);
@@ -432,6 +468,9 @@ const App: React.FC = () => {
     const [profileBadgeSelectionIndex, setProfileBadgeSelectionIndex] = useState<number | null>(null);
     const [showAllSorted, setShowAllSorted] = useState(false);
     const [viewAllApps, setViewAllApps] = useState<AppItem[] | null>(null);
+    const [expandedModernView, setExpandedModernView] = useState<null | 'new_updated'>(null);
+    const [expandedModernApps, setExpandedModernApps] = useState<AppItem[]>([]);
+    const [returnToExpandedView, setReturnToExpandedView] = useState<null | 'new_updated'>(null);
     const [visibleApps, setVisibleApps] = useState<AppItem[]>([]);
     const [storeCollections, setStoreCollections] = useState<StoreCollection[]>([]);
     const [bypassMaintenance, setBypassMaintenance] = useState(false);
@@ -455,13 +494,53 @@ const App: React.FC = () => {
     const backgroundTaskCleanupRef = useRef<(() => void) | null>(null);
     const pendingInstallExpectationsRef = useRef<Record<string, { appId: string; version?: string }>>({});
     const appListScrollRef = useRef<HTMLDivElement | null>(null);
+    const forcedStoreDownloadIdRef = useRef<string | null>(null);
+    const forcedStoreDownloadTriggered = useRef(false);
+    const forcedStoreDownloadUrlRef = useRef('');
+    const forcedStorePendingScanAfterKeyRef = useRef(false);
+    // VirusTotal scan hook for the forced self-update flow. Driven inline by
+    // the ForcedStoreUpdateGate (no modal hand-off). The package name mirrors
+    // the synthetic app identity used in the gate render block below.
+    const forcedStorePackageName = Capacitor.isNativePlatform()
+        ? (window as any)?.orionStorePackageName || 'com.orion.store'
+        : 'com.orion.store';
+    const forcedStoreVt = useVirusTotalScan({
+        apiKey: settings.virusTotalApiKey,
+        appId: '__orion_store_self_update__',
+        appName: 'Orion Store',
+        packageName: forcedStorePackageName
+    });
+    // Destructure the stable fields used by handlers/effects. We read them here
+    // (rather than spreading forcedStoreVt in deps) so the scan handler and the
+    // result/error watcher don't churn identity on every hook-driven re-render.
+    const { startScan: forcedStoreVtStartScan } = forcedStoreVt;
     // Pull-to-refresh is only enabled on the app data tabs (Android / PC / TV).
     // The About tab is excluded so that pulling on it is a no-op.
     const isAppDataTab = activeTab === 'android' || activeTab === 'pc' || activeTab === 'tv';
-    const syncInstalledAppsRef = useRef<() => Promise<void>>(async () => {});
+    const syncInstalledAppsRef = useRef<() => Promise<void>>(async () => { });
 
     const pendingCleanupCount = useMemo(() => Object.keys(data.pendingCleanup).length, [data.pendingCleanup]);
-    const isAnyModalOpen = !!selectedApp || !!selectedBundle || showSettingsModal || showAdDonation || showSubmissionModal || showStoreUpdateModal || showFAQ || showNotice || showReleaseNotes;
+    const hasForcedStoreScanResult =
+        !!forcedStoreScanResult ||
+        forcedStoreVt.view === 'results' ||
+        settings.forcedStoreUpdate?.status === 'scan_complete';
+    const shouldBlockWithForcedStoreUpdate =
+        (forcedStoreUpdateStatus !== 'inactive' || hasForcedStoreScanResult) &&
+        !isForcedUpdateBypassedForSession;
+    const isAnyModalOpen = !!selectedApp
+        || !!selectedBundle
+        || !!vtScanTarget
+        || showSettingsModal
+        || showAdDonation
+        || showSubmissionModal
+
+        || showFAQ
+        || showNotice
+        || showReleaseNotes
+        || showModernUITutorial
+        || showCustomBundleModal
+        || showProfileStats
+        || shouldBlockWithForcedStoreUpdate;
 
     useScrollLock(isAnyModalOpen);
 
@@ -473,6 +552,55 @@ const App: React.FC = () => {
             return () => clearTimeout(timer);
         }
     }, [showSplashPreview]);
+
+    const startTutorial = useTutorialStore(state => state.startTutorial);
+
+    // One-time Spotlight tutorial for users updating to 1.3.4
+    useEffect(() => {
+        const tutorialKey = `orion_tutorial_shown_1_3_4`;
+        
+        // Wait until other dialogs and splash screens are dismissed
+        if (isAnyModalOpen || showSplashPreview) return;
+
+        if (!localStorage.getItem(tutorialKey)) {
+            const timer = setTimeout(() => {
+                if (isMounted.current) {
+                    const steps: TutorialStep[] = [
+                        {
+                            targetId: 'nav-tab-about',
+                            title: 'Developer Menu',
+                            description: "Click the Dev tab to see what's new under the hood.",
+                            onTargetClick: () => { 
+                                document.getElementById('nav-tab-about')?.click();
+                                useTutorialStore.getState().nextStep();
+                            }
+                        },
+                        {
+                            targetId: 'btn-donate-coffee',
+                            title: 'Support Orion',
+                            description: "We've added new ways to donate. Check them out!",
+                            onTargetClick: () => { 
+                                document.getElementById('btn-donate-coffee')?.click();
+                                useTutorialStore.getState().nextStep();
+                            }
+                        },
+                        {
+                            targetId: undefined, // no target -> centered mode
+                            title: 'Thank You!',
+                            description: "You can now support Orion via Ko-fi, UPI, or PayPal.",
+                            buttonLabel: "Got it!",
+                            onTargetClick: () => { 
+                                localStorage.setItem(tutorialKey, '1');
+                                useTutorialStore.getState().endTutorial();
+                            }
+                        }
+                    ];
+                    startTutorial(steps);
+                }
+            }, 750);
+            return () => clearTimeout(timer);
+        }
+    }, [startTutorial, isAnyModalOpen, showSplashPreview]);
 
     // One-time Modern UI tutorial for classic users updating to 1.3.1
     useEffect(() => {
@@ -501,6 +629,7 @@ const App: React.FC = () => {
         ? SortOption.NEWEST
         : effectiveSort;
     const canResetCurrentBrowseState = useMemo(() => {
+        if (expandedModernView) return true;
         if (settings.storeLayout === 'modern') {
             return effectiveSort !== SortOption.HOME;
         }
@@ -513,6 +642,11 @@ const App: React.FC = () => {
     const restorePrimaryBrowseState = useCallback(() => {
         const root = document.getElementById('root');
         if (root) root.scrollTop = 0;
+
+        setExpandedModernView(null);
+        setExpandedModernApps([]);
+        setViewAllApps(null);
+        setShowAllSorted(false);
 
         startTransition(() => {
             data.setSearchQuery(activeTab, '');
@@ -531,6 +665,19 @@ const App: React.FC = () => {
         return () => clearTimeout(handler);
     }, [currentTabState.query]);
     const allKnownApps = useMemo(() => [...data.apps, ...data.importedApps], [data.apps, data.importedApps]);
+    const appsByPlatform = useMemo(() => {
+        const grouped: Record<Platform, AppItem[]> = {
+            [Platform.ANDROID]: [],
+            [Platform.PC]: [],
+            [Platform.TV]: []
+        };
+        allKnownApps.forEach((app) => {
+            if (grouped[app.platform]) {
+                grouped[app.platform].push(app);
+            }
+        });
+        return grouped;
+    }, [allKnownApps]);
     const appsByPackageName = useMemo(() => {
         const grouped = new Map<string, AppItem[]>();
         allKnownApps.forEach((app) => {
@@ -545,6 +692,11 @@ const App: React.FC = () => {
     const appLookup = useMemo(() => new Map(allKnownApps.map((app) => [app.id, app])), [allKnownApps]);
     const favoriteIdSet = useMemo(() => new Set(data.favorites), [data.favorites]);
     const activeDownloadCount = useMemo(() => Object.keys(data.activeDownloads).length, [data.activeDownloads]);
+    const appCounts = useMemo(() => ({
+        android: appsByPlatform[Platform.ANDROID].length,
+        pc: appsByPlatform[Platform.PC].length,
+        tv: appsByPlatform[Platform.TV].length
+    }), [appsByPlatform]);
 
     useEffect(() => {
         const storeState = useDataStore.getState();
@@ -771,6 +923,7 @@ const App: React.FC = () => {
         const expectedVersion = packageKey ? pendingInstallExpectationsRef.current[packageKey]?.version : undefined;
         const maxAttempts = expectedVersion && isComparableVersion(expectedVersion) ? 12 : 8;
         let attempts = 0;
+        const startTime = Date.now();
 
         const verifyInterval = setInterval(async () => {
             attempts++;
@@ -778,33 +931,38 @@ const App: React.FC = () => {
 
             if (result.matchesExpected) {
                 clearInterval(verifyInterval);
-                const currentData = useDataStore.getState();
-                const file = currentData.readyToInstall[app.id];
+                const elapsed = Date.now() - startTime;
+                const remaining = Math.max(0, 2500 - elapsed);
 
-                if (result.version) {
-                    settings.setLastRemoteVersion(app.id, result.version);
-                }
-                if (packageKey) {
-                    settings.setPackageOwner(packageKey, app.id);
-                    delete pendingInstallExpectationsRef.current[packageKey];
-                }
+                window.setTimeout(() => {
+                    const currentData = useDataStore.getState();
+                    const file = currentData.readyToInstall[app.id];
 
-                if (file || currentData.readyToInstall[app.id]) {
-                    const newReady = { ...currentData.readyToInstall };
-                    const targetFile = file || newReady[app.id];
-                    delete newReady[app.id];
-
-                    const newCleanup = { ...currentData.pendingCleanup };
-                    if (!newCleanup[app.id] && targetFile) {
-                        newCleanup[app.id] = { fileName: targetFile, timestamp: Date.now() };
+                    if (result.version) {
+                        settings.setLastRemoteVersion(app.id, result.version);
+                    }
+                    if (packageKey) {
+                        settings.setPackageOwner(packageKey, app.id);
+                        delete pendingInstallExpectationsRef.current[packageKey];
                     }
 
-                    useDataStore.setState({
-                        readyToInstall: newReady,
-                        pendingCleanup: newCleanup
-                    });
-                }
-                setScanningId(null);
+                    if (file || currentData.readyToInstall[app.id]) {
+                        const newReady = { ...currentData.readyToInstall };
+                        const targetFile = file || newReady[app.id];
+                        delete newReady[app.id];
+
+                        const newCleanup = { ...currentData.pendingCleanup };
+                        if (!newCleanup[app.id] && targetFile) {
+                            newCleanup[app.id] = { fileName: targetFile, timestamp: Date.now() };
+                        }
+
+                        useDataStore.setState({
+                            readyToInstall: newReady,
+                            pendingCleanup: newCleanup
+                        });
+                    }
+                    setScanningId(null);
+                }, remaining);
             } else if (attempts >= maxAttempts) {
                 clearInterval(verifyInterval);
                 if (packageKey) {
@@ -817,6 +975,14 @@ const App: React.FC = () => {
             }
         }, 1000);
     }, [performDeepScan, settings]);
+
+    const beginPostInstallVerification = useCallback((app: AppItem) => {
+        waitingForResumeId.current = null;
+        setInstallingId(null);
+        installingIdRef.current = null;
+        setScanningId(app.id);
+        startVerificationLoop(app);
+    }, [startVerificationLoop]);
 
     const syncInstalledApps = useCallback(async () => {
         if (!Capacitor.isNativePlatform()) return;
@@ -987,7 +1153,7 @@ const App: React.FC = () => {
                     category: currentTabState.category,
                     sort: effectiveSort,
                     platform: platformTarget,
-                    storefrontModules: remoteConfig?.storefrontModules || []
+                    storefrontModules: effectiveRemoteConfig?.storefrontModules || []
                 }
             });
         }
@@ -1277,15 +1443,20 @@ const App: React.FC = () => {
         let pendingRetryTimer: number | null = null;
         const resumeListener = CapacitorApp.addListener('resume', () => {
             syncDownloads();
-            syncInstalledAppsRef.current();
             if (waitingForResumeId.current) {
                 const appId = waitingForResumeId.current;
-                waitingForResumeId.current = null;
-                setInstallingId(null);
-                installingIdRef.current = null;
-                setScanningId(appId);
                 const app = appLookup.get(appId);
-                if (app) startVerificationLoop(app);
+                if (app) {
+                    // Begin verification FIRST — this sets scanningId before
+                    // syncInstalledApps can race ahead and show "Open".
+                    beginPostInstallVerification(app);
+                } else {
+                    // App not found in lookup, fall back to a full sync
+                    waitingForResumeId.current = null;
+                    syncInstalledAppsRef.current();
+                }
+            } else {
+                syncInstalledAppsRef.current();
             }
             if (pendingInstallRetry) {
                 // Capture by value & clear immediately to prevent double-install
@@ -1305,7 +1476,7 @@ const App: React.FC = () => {
             if (pendingRetryTimer !== null) window.clearTimeout(pendingRetryTimer);
             resumeListener.then(h => h.remove());
         };
-    }, [appLookup, data.activeDownloads, pendingInstallRetry, startVerificationLoop]);
+    }, [appLookup, beginPostInstallVerification, data.activeDownloads, pendingInstallRetry]);
 
     useEffect(() => {
         const root = document.getElementById('root');
@@ -1405,13 +1576,15 @@ const App: React.FC = () => {
     useEffect(() => {
         const root = document.documentElement;
         root.dataset.orionActiveTab = activeTab;
-        root.dataset.orionRefreshEligible = String(isAppDataTab && !isAnyModalOpen);
+        root.dataset.orionRefreshEligible = String(isAppDataTab && !isAnyModalOpen && !isRefreshing);
+        root.dataset.orionRefreshCharacter = settings.pullToRefreshCharacter;
 
         return () => {
             delete root.dataset.orionActiveTab;
             delete root.dataset.orionRefreshEligible;
+            delete root.dataset.orionRefreshCharacter;
         };
-    }, [activeTab, isAppDataTab, isAnyModalOpen]);
+    }, [activeTab, isAppDataTab, isAnyModalOpen, isRefreshing, settings.pullToRefreshCharacter]);
 
     useEffect(() => {
         const nav = navigator as Navigator & { deviceMemory?: number };
@@ -1438,7 +1611,7 @@ const App: React.FC = () => {
         else document.body.classList.remove('no-anim');
         if (settings.compactMode) document.body.classList.add('compact-mode');
         else document.body.classList.remove('compact-mode');
-        
+
         if (settings.storeLayout === 'modern') document.body.classList.add('modern-layout-active');
         else document.body.classList.remove('modern-layout-active');
     }, [settings.disableAnimations, settings.compactMode, settings.storeLayout]);
@@ -1476,27 +1649,27 @@ const App: React.FC = () => {
     }, [isLoading, isStartupUiReady, showSplashPreview, visibleApps.length]);
 
     useEffect(() => {
-        if (remoteConfig?.announcement) {
-            const hash = getStringHash(remoteConfig.announcement);
+        if (effectiveRemoteConfig?.announcement) {
+            const hash = getStringHash(effectiveRemoteConfig.announcement);
             const dismissedHash = localStorage.getItem('dismissed_announcement_hash');
             setIsAnnouncementDismissed(dismissedHash === String(hash));
         }
-    }, [remoteConfig]);
+    }, [effectiveRemoteConfig]);
 
     useEffect(() => {
         if (!isStartupUiReady) return;
-        if (remoteConfig?.notice?.show) {
+        if (effectiveRemoteConfig?.notice?.show) {
             const dismissedId = localStorage.getItem('dismissed_notice_id');
-            if (dismissedId !== remoteConfig.notice.id) {
+            if (dismissedId !== effectiveRemoteConfig.notice.id) {
                 setShowNotice(true);
             }
         }
-    }, [isStartupUiReady, remoteConfig]);
+    }, [isStartupUiReady, effectiveRemoteConfig]);
 
     const handleDismissNotice = () => {
         setShowNotice(false);
-        if (remoteConfig?.notice?.id) {
-            localStorage.setItem('dismissed_notice_id', remoteConfig.notice.id);
+        if (effectiveRemoteConfig?.notice?.id) {
+            localStorage.setItem('dismissed_notice_id', effectiveRemoteConfig.notice.id);
         }
         // Show Modern UI tutorial after delay if user hasn't seen it and is on classic layout
         if (!settings.hasSeenModernUITutorial && settings.storeLayout === 'classic') {
@@ -1519,14 +1692,36 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!Capacitor.isNativePlatform()) return;
         const handleBack = async () => {
+            if (shouldBlockWithForcedStoreUpdate) {
+                CapacitorApp.exitApp();
+                return;
+            }
             if (document.body.classList.contains('lightbox-open')) {
                 window.dispatchEvent(new Event('orion-close-lightbox'));
                 return;
             }
-            if (showAllSorted) { setShowAllSorted(false); setViewAllApps(null); return; }
             if (vtScanTarget) { setVtScanTarget(null); return; }
-            if (selectedApp) setSelectedApp(null);
-            else if (selectedBundle) setSelectedBundle(null);
+            if (selectedApp) { setSelectedApp(null); return; }
+            if (expandedModernView) {
+                setExpandedModernView(null);
+                setExpandedModernApps([]);
+                setReturnToExpandedView(null);
+                return;
+            }
+            if (showAllSorted) {
+                setShowAllSorted(false);
+                setViewAllApps(null);
+                if (returnToExpandedView === 'new_updated') {
+                    const targetPlat = activeTab === 'android' ? Platform.ANDROID : activeTab === 'pc' ? Platform.PC : Platform.TV;
+                    const { apps, importedApps } = useDataStore.getState();
+                    const appsToShow = [...apps, ...importedApps].filter(a => a.platform === targetPlat).reverse().slice(0, 18);
+                    setExpandedModernView('new_updated');
+                    setExpandedModernApps(appsToShow);
+                    setReturnToExpandedView(null);
+                }
+                return;
+            }
+            if (selectedBundle) setSelectedBundle(null);
             else if (showProfileStats) { setShowProfileStats(false); setProfileBadgeSelectionIndex(null); }
             else if (showCustomBundleModal) setShowCustomBundleModal(false);
             else if (showSettingsModal) setShowSettingsModal(false);
@@ -1534,7 +1729,8 @@ const App: React.FC = () => {
             else if (showFAQ) setShowFAQ(false);
             else if (showSubmissionModal) setShowSubmissionModal(false);
             else if (showAdDonation) setShowAdDonation(false);
-            else if (showStoreUpdateModal) setShowStoreUpdateModal(false);
+
+            else if (isTestingForcedUpdate) setIsTestingForcedUpdate(false);
             else if (showModernUITutorial) setShowModernUITutorial(false);
             else if (showNotice) handleDismissNotice();
             else if (canResetCurrentBrowseState) restorePrimaryBrowseState();
@@ -1543,7 +1739,7 @@ const App: React.FC = () => {
         };
         const backListener = CapacitorApp.addListener('backButton', handleBack);
         return () => { backListener.then(h => h.remove()); };
-    }, [selectedApp, selectedBundle, showSettingsModal, showFAQ, showSubmissionModal, showAdDonation, activeTab, showStoreUpdateModal, showNotice, showReleaseNotes, canResetCurrentBrowseState, restorePrimaryBrowseState, showAllSorted, vtScanTarget, showProfileStats, showCustomBundleModal, showModernUITutorial]);
+    }, [shouldBlockWithForcedStoreUpdate, selectedApp, selectedBundle, showSettingsModal, showFAQ, showSubmissionModal, showAdDonation, activeTab, showNotice, showReleaseNotes, canResetCurrentBrowseState, restorePrimaryBrowseState, showAllSorted, expandedModernView, vtScanTarget, showProfileStats, showCustomBundleModal, showModernUITutorial, isTestingForcedUpdate, returnToExpandedView]);
 
     const handleDownloadStart = useCallback((appId: string, downloadId: string, fileName: string) => {
         data.startDownload(appId, downloadId, fileName);
@@ -1621,10 +1817,7 @@ const App: React.FC = () => {
                 await AppTracker.installPackageShizuku({ fileName });
                 setShowInstallToast(null);
                 setDevToast("Installed via Shizuku");
-                setInstallingId(null);
-                installingIdRef.current = null;
-                setScanningId(app.id);
-                startVerificationLoop(app);
+                beginPostInstallVerification(app);
             } else {
                 waitingForResumeId.current = app.id;
                 await AppTracker.installPackage({
@@ -1633,11 +1826,29 @@ const App: React.FC = () => {
                     installerPackage: settings.installerPreference === 'package' ? settings.installerPackage : undefined
                 });
                 setShowInstallToast(null);
-                // Do NOT optimistically mark as installed here — the resume listener + 
-                // verification loop will detect actual installation status when the user 
-                // returns from the native installer.
+                if (waitingForResumeId.current === app.id) {
+                    beginPostInstallVerification(app);
+                }
             }
         } catch (e: any) {
+            const msg = e?.message || JSON.stringify(e);
+            const shouldVerifyAmbiguousInstallerResult =
+                !settings.useShizuku &&
+                waitingForResumeId.current === app.id &&
+                (
+                    msg.includes('INSTALL_CANCELED') ||
+                    msg.includes('INSTALL_FAILED') ||
+                    msg.includes('Activity')
+                ) &&
+                !msg.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE') &&
+                !msg.includes('INSTALL_PARSE_FAILED');
+
+            if (shouldVerifyAmbiguousInstallerResult) {
+                setShowInstallToast(null);
+                beginPostInstallVerification(app);
+                return;
+            }
+
             setInstallingId(null);
             installingIdRef.current = null;
             setScanningId(null);
@@ -1645,7 +1856,6 @@ const App: React.FC = () => {
             if (packageKey) {
                 delete pendingInstallExpectationsRef.current[packageKey];
             }
-            const msg = e?.message || JSON.stringify(e);
             if (msg.includes("CORRUPT") || msg.includes("PARSE_ERROR")) {
                 setErrorMsg('File corrupted. Deleting...');
                 setShowErrorToast(true);
@@ -1701,6 +1911,393 @@ const App: React.FC = () => {
         }
     }, [data, triggerHaptic]);
 
+    const startForcedStoreDownload = useCallback(async () => {
+        if (!Capacitor.isNativePlatform()) return;
+        const snapshot = useSettingsStore.getState().forcedStoreUpdate;
+        if (!snapshot) return;
+        const downloadUrl = forcedStoreDownloadUrlRef.current;
+        if (!downloadUrl) {
+            setForcedStoreUpdateStatus('download_failed');
+            setForcedStoreError('No download URL found for this update.');
+            return;
+        }
+        try {
+            const result = await AppTracker.downloadFile({ url: downloadUrl, fileName: snapshot.downloadFileName });
+            forcedStoreDownloadIdRef.current = result.downloadId || snapshot.downloadFileName;
+            forcedStoreDownloadTriggered.current = true;
+            setForcedStoreUpdateStatus('downloading');
+            setForcedStoreError('');
+            setForcedStoreStatusText('Downloading the latest Orion build...');
+            setForcedStorePollingActive(true);
+            useSettingsStore.getState().setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                ...snapshot,
+                status: 'downloading',
+                downloadCompleted: false
+            }));
+        } catch (downloadError: any) {
+            setForcedStoreUpdateStatus('download_failed');
+            setForcedStoreError(downloadError?.message || 'Download failed. Check your connection and retry.');
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!forcedStorePollingActive || !forcedStoreDownloadIdRef.current) return;
+        const id = forcedStoreDownloadIdRef.current;
+        let active = true;
+        const poll = async () => {
+            while (active) {
+                try {
+                    const progress = await AppTracker.getDownloadProgress({ downloadId: id });
+                    if (!active) return;
+                    setForcedStoreProgress(progress.progress || 0);
+                    if (progress.status === 'SUCCESSFUL') {
+                        const snapshot = useSettingsStore.getState().forcedStoreUpdate;
+                        if (snapshot) {
+                            useSettingsStore.getState().setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                                ...snapshot,
+                                status: 'ready_to_scan_or_install',
+                                downloadCompleted: true
+                            }));
+                        }
+                        setForcedStoreUpdateStatus('ready_to_scan_or_install');
+                        setForcedStoreStatusText('Download complete.');
+                        setForcedStoreProgress(100);
+                        forcedStoreDownloadIdRef.current = null;
+                        forcedStoreDownloadTriggered.current = false;
+                        setForcedStorePollingActive(false);
+                        return;
+                    }
+                    if (progress.status === 'FAILED') {
+                        const snapshot = useSettingsStore.getState().forcedStoreUpdate;
+                        if (snapshot) {
+                            useSettingsStore.getState().setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                                ...snapshot,
+                                status: 'download_failed',
+                                downloadCompleted: false
+                            }));
+                        }
+                        setForcedStoreUpdateStatus('download_failed');
+                        setForcedStoreError('Download failed. Check your connection and retry.');
+                        forcedStoreDownloadIdRef.current = null;
+                        forcedStoreDownloadTriggered.current = false;
+                        setForcedStorePollingActive(false);
+                        return;
+                    }
+                } catch {
+                    const snapshot = useSettingsStore.getState().forcedStoreUpdate;
+                    if (snapshot) {
+                        useSettingsStore.getState().setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                            ...snapshot,
+                            status: 'download_failed',
+                            downloadCompleted: false
+                        }));
+                    }
+                    setForcedStoreUpdateStatus('download_failed');
+                    setForcedStoreError('Download failed. Check your connection and retry.');
+                    forcedStoreDownloadIdRef.current = null;
+                    forcedStoreDownloadTriggered.current = false;
+                    setForcedStorePollingActive(false);
+                    return;
+                }
+                await new Promise((resolve) => window.setTimeout(resolve, 800));
+            }
+        };
+        poll();
+        return () => { active = false; };
+    }, [forcedStorePollingActive]);
+
+    useEffect(() => {
+        if (forcedStoreUpdateStatus === 'downloading' && !forcedStoreDownloadIdRef.current && !forcedStoreDownloadTriggered.current) {
+            startForcedStoreDownload();
+        }
+    }, [forcedStoreUpdateStatus, startForcedStoreDownload]);
+
+    const handleForcedStoreInstall = useCallback(async () => {
+        if (!Capacitor.isNativePlatform()) return;
+        let snapshot = useSettingsStore.getState().forcedStoreUpdate || settings.forcedStoreUpdate;
+        if (!snapshot) {
+            const targetVersion = effectiveRemoteConfig?.latestStoreVersion || effectiveRemoteConfig?.minStoreVersion;
+            if (targetVersion) {
+                snapshot = createForcedStoreUpdateSnapshot({
+                    targetVersion,
+                    downloadFileName: buildForcedStoreFileName(targetVersion),
+                    status: 'scan_complete',
+                    downloadCompleted: true,
+                    exported: false
+                });
+                settings.setForcedStoreUpdate(snapshot);
+            }
+        }
+        if (!snapshot || !snapshot.downloadFileName) {
+            commitForcedStoreUpdateStatus('ready_to_scan_or_install');
+            setForcedStoreError('Update package metadata is missing. Retry the download, then install again.');
+            return;
+        }
+        commitForcedStoreUpdateStatus('installing');
+        setForcedStoreStatusText('Opening installer...');
+        settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+            ...snapshot,
+            status: 'installing'
+        }));
+        try {
+            const permission = await AppTracker.canRequestPackageInstalls();
+            if (!permission.value) {
+                await AppTracker.openInstallPermissionSettings();
+                // Drop back to a ready state so the user can retry once the
+                // system settings page hands control back to Orion.
+                commitForcedStoreUpdateStatus('ready_to_scan_or_install');
+                setForcedStoreStatusText('Grant install permission, then tap Install Now again.');
+                settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                    ...snapshot,
+                    status: 'ready_to_scan_or_install'
+                }));
+                return;
+            }
+            await AppTracker.installPackage({ fileName: snapshot.downloadFileName });
+            // Installer returned RESULT_OK. Auto-delete the downloaded APK
+            // so it doesn't linger in the app's private downloads folder.
+            AppTracker.deleteFile({ fileName: snapshot.downloadFileName }).catch(() => { });
+            settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                ...snapshot,
+                status: 'installed',
+                downloadCompleted: false
+            }));
+        } catch (installError: any) {
+            const code = installError?.message;
+            const message =
+                code === 'INSTALL_CANCELED'
+                    ? 'Install cancelled. Save the APK to install it manually.'
+                    : code === 'INSTALL_FAILED'
+                        ? 'Install failed. Save the APK to install it manually.'
+                        : (code || 'Install failed. Save the APK to install it manually.');
+            settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                ...snapshot,
+                status: 'install_failed'
+            }));
+            commitForcedStoreUpdateStatus('install_failed');
+            setForcedStoreError(message);
+        }
+    }, [commitForcedStoreUpdateStatus, effectiveRemoteConfig?.latestStoreVersion, effectiveRemoteConfig?.minStoreVersion, settings]);
+
+    const handleForcedStoreRetryInstall = useCallback(() => {
+        handleForcedStoreInstall();
+    }, [handleForcedStoreInstall]);
+
+    const handleForcedStoreExport = useCallback(async () => {
+        if (!Capacitor.isNativePlatform()) return;
+        const snapshot = settings.forcedStoreUpdate;
+        if (!snapshot || snapshot.exported) return;
+        try {
+            const result = await AppTracker.exportFile({ fileName: snapshot.downloadFileName });
+            // Keep the status as 'install_failed' so the gate stays on the
+            // "Install needs attention" view, but flip `exported` to true
+            // so the action button morphs into a "Saved to Downloads" pill.
+            settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                ...snapshot,
+                status: 'install_failed',
+                exported: true
+            }));
+            setForcedStoreExportPath(result.path);
+            setForcedStoreError('');
+            setForcedStoreStatusText('Saved to your downloads folder.');
+            triggerHaptic('notification', undefined, NotificationType.Success);
+        } catch (exportError: any) {
+            setForcedStoreError(exportError?.message || 'Export failed. Try again.');
+        }
+    }, [settings, triggerHaptic]);
+
+    const getForcedStoreSnapshotForAction = useCallback((status: ForcedStoreUpdateStatus = forcedStoreUpdateStatusRef.current) => {
+        const existingSnapshot = useSettingsStore.getState().forcedStoreUpdate || settings.forcedStoreUpdate;
+        if (existingSnapshot) return existingSnapshot;
+
+        const targetVersion = effectiveRemoteConfig?.latestStoreVersion || effectiveRemoteConfig?.minStoreVersion;
+        if (!targetVersion && !storeUpdateUrl) return null;
+
+        const rebuiltSnapshot = createForcedStoreUpdateSnapshot({
+            targetVersion: targetVersion || '0.0.0',
+            downloadFileName: targetVersion ? buildForcedStoreFileName(targetVersion) : '',
+            status,
+            downloadCompleted: status !== 'downloading',
+            exported: false
+        });
+        settings.setForcedStoreUpdate(rebuiltSnapshot);
+        return rebuiltSnapshot;
+    }, [effectiveRemoteConfig?.latestStoreVersion, effectiveRemoteConfig?.minStoreVersion, settings, storeUpdateUrl]);
+
+    const handleForcedStoreScan = useCallback((apiKeyOverride?: string) => {
+        const snapshot = getForcedStoreSnapshotForAction('ready_to_scan_or_install');
+        if (!snapshot) {
+            setForcedStoreError('Update package metadata is missing. Retry the download, then scan again.');
+            return;
+        }
+        const apiKeyForScan = (typeof apiKeyOverride === 'string' ? apiKeyOverride : settings.virusTotalApiKey).trim();
+        if (!apiKeyForScan) {
+            forcedStorePendingScanAfterKeyRef.current = true;
+            commitForcedStoreUpdateStatus('byok_required');
+            setForcedStoreStatusText('Add your VirusTotal API key below, then scan the update.');
+            settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                ...snapshot,
+                status: 'byok_required'
+            }));
+            return;
+        }
+        forcedStorePendingScanAfterKeyRef.current = false;
+        commitForcedStoreUpdateStatus('scanning');
+        setForcedStoreStatusText('Scanning the APK with VirusTotal.');
+        setForcedStoreError('');
+        setForcedStoreScanResult(null);
+        settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+            ...snapshot,
+            status: 'scanning'
+        }));
+        // Run the scan inline via the hook — the gate shows live progress.
+        const target = snapshot.downloadFileName && snapshot.downloadCompleted
+            ? { type: 'downloaded-apk' as const, label: 'Orion Store APK', detail: snapshot.downloadFileName }
+            : { type: 'remote-apk' as const, label: 'Orion Store APK', detail: storeUpdateUrl };
+        forcedStoreVtStartScan(target, apiKeyForScan).then((result) => {
+            if (!result) return;
+            commitForcedStoreUpdateStatus('scan_complete');
+            setForcedStoreScanResult(result);
+            setForcedStoreStatusText('Scan complete. Install whenever you are ready.');
+            setForcedStoreError('');
+            const latestSnapshot = useSettingsStore.getState().forcedStoreUpdate;
+            if (latestSnapshot) {
+                useSettingsStore.getState().setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                    ...latestSnapshot,
+                    status: 'scan_complete'
+                }));
+            }
+        }).catch((err) => {
+            const latestSnapshot = useSettingsStore.getState().forcedStoreUpdate;
+            if (latestSnapshot) {
+                useSettingsStore.getState().setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                    ...latestSnapshot,
+                    status: 'ready_to_scan_or_install'
+                }));
+            }
+            commitForcedStoreUpdateStatus('ready_to_scan_or_install');
+            setForcedStoreError(err?.message || 'Scan failed. Try again.');
+        });
+    }, [commitForcedStoreUpdateStatus, getForcedStoreSnapshotForAction, settings, forcedStoreVtStartScan, storeUpdateUrl]);
+
+    // Watch the inline VT scan: on results move to scan_complete, on error revert.
+    // Depend on the primitive fields the effect reads (not the whole hook object,
+    // which has a new identity each render) to avoid runaway re-runs mid-scan.
+    const { view: forcedStoreVtView, result: forcedStoreVtResult, error: forcedStoreVtError, setError: forcedStoreVtSetError } = forcedStoreVt;
+    useEffect(() => {
+        if (forcedStoreUpdateStatus !== 'scanning') return;
+        if (forcedStoreVtView === 'results' && forcedStoreVtResult) {
+            commitForcedStoreUpdateStatus('scan_complete');
+            setForcedStoreScanResult(forcedStoreVtResult);
+            setForcedStoreStatusText('Scan complete. Install whenever you are ready.');
+            setForcedStoreError('');
+            const snapshot = settings.forcedStoreUpdate;
+            if (snapshot) {
+                settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                    ...snapshot,
+                    status: 'scan_complete'
+                }));
+            }
+        } else if (forcedStoreVtView === 'error' && forcedStoreVtError) {
+            if (forcedStoreVtResult) {
+                commitForcedStoreUpdateStatus('scan_complete');
+                setForcedStoreScanResult(forcedStoreVtResult);
+                setForcedStoreStatusText('Scan complete. Install whenever you are ready.');
+                setForcedStoreError('');
+                forcedStoreVtSetError('');
+                return;
+            }
+            const snapshot = settings.forcedStoreUpdate;
+            if (snapshot) {
+                settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                    ...snapshot,
+                    status: 'ready_to_scan_or_install'
+                }));
+            }
+            commitForcedStoreUpdateStatus('ready_to_scan_or_install');
+            setForcedStoreError(forcedStoreVtError);
+            forcedStoreVtSetError('');
+        }
+    }, [commitForcedStoreUpdateStatus, forcedStoreUpdateStatus, forcedStoreVtView, forcedStoreVtResult, forcedStoreVtError, forcedStoreVtSetError, settings]);
+
+    const handleForcedStoreOpenReport = useCallback(() => {
+        const permalink = forcedStoreScanResult?.permalink || forcedStoreVt.result?.permalink;
+        if (permalink) window.open(permalink, '_blank');
+    }, [forcedStoreScanResult, forcedStoreVt.result]);
+
+    const handleForcedStoreByokRedirect = useCallback(() => {
+        setSettingsInitialMenu('network');
+        setShowSettingsModal(true);
+    }, []);
+
+    const handleForcedStoreSaveApiKey = useCallback((key: string) => {
+        const trimmed = key.trim();
+        if (!trimmed) return;
+        settings.setVirusTotalApiKey(trimmed);
+        if (forcedStoreUpdateStatusRef.current === 'byok_required' || forcedStorePendingScanAfterKeyRef.current) {
+            handleForcedStoreScan(trimmed);
+        }
+    }, [handleForcedStoreScan, settings]);
+
+    useEffect(() => {
+        if (
+            forcedStoreUpdateStatus === 'byok_required' &&
+            settings.virusTotalApiKey
+        ) {
+            if (forcedStorePendingScanAfterKeyRef.current && settings.forcedStoreUpdate) {
+                handleForcedStoreScan();
+                return;
+            }
+            setForcedStoreUpdateStatus('ready_to_scan_or_install');
+            const snapshot = settings.forcedStoreUpdate;
+            if (snapshot) {
+                settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                    ...snapshot,
+                    status: 'ready_to_scan_or_install'
+                }));
+            }
+        }
+    }, [forcedStoreUpdateStatus, handleForcedStoreScan, settings]);
+
+    const handleForcedStoreRetryDownload = useCallback(() => {
+        setForcedStoreError('');
+        setForcedStoreProgress(0);
+        setForcedStoreScanResult(null);
+        forcedStoreDownloadIdRef.current = null;
+        forcedStoreDownloadTriggered.current = false;
+        const snapshot = settings.forcedStoreUpdate;
+        if (snapshot) {
+            settings.setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                ...snapshot,
+                status: 'downloading',
+                downloadCompleted: false
+            }));
+        }
+        setForcedStoreUpdateStatus('downloading');
+        setForcedStoreStatusText('Retrying download...');
+    }, [settings]);
+
+    useEffect(() => {
+        if (!Capacitor.isNativePlatform()) return;
+        const resume = async () => {
+            const snapshot = settings.forcedStoreUpdate;
+            if (!snapshot || !snapshot.downloadCompleted) return;
+            try {
+                await AppTracker.resolveDownloadFile({ fileName: snapshot.downloadFileName });
+            } catch {
+                const updated = createForcedStoreUpdateSnapshot({
+                    ...snapshot,
+                    status: 'download_failed',
+                    downloadCompleted: false
+                });
+                settings.setForcedStoreUpdate(updated);
+                setForcedStoreUpdateStatus('download_failed');
+                setForcedStoreError('Previously downloaded file not found. Please retry.');
+            }
+        };
+        resume();
+    }, [settings]);
+
     const handleDownloadAction = async (app: AppItem, url?: string, isAuto: boolean = false) => {
         if (data.readyToInstall[app.id]) {
             if (!isAuto) handleInstallFile(app, data.readyToInstall[app.id] || '');
@@ -1735,7 +2332,16 @@ const App: React.FC = () => {
             return;
         }
 
-        const safe = sanitizeUrl(targetUrl);
+        const safe = sanitizeDownloadUrl(targetUrl);
+        if (safe === '#') {
+            if (!isAuto) {
+                setErrorMsg('Download link is invalid or unsupported.');
+                setShowErrorToast(true);
+                triggerHaptic('notification', undefined, NotificationType.Error);
+            }
+            initializingDownloads.current.delete(app.id);
+            return;
+        }
         const isAndroid = app.platform === Platform.ANDROID;
         const isStandardFile = safe.toLowerCase().endsWith('.apk') || safe.toLowerCase().endsWith('.exe') || safe.toLowerCase().endsWith('.zip');
 
@@ -1781,7 +2387,7 @@ const App: React.FC = () => {
         const removedIds = new Set(settingsSnapshot.removedBundleApps[bundle.id] || []);
         const extraIds = settingsSnapshot.extraBundleApps[bundle.id] || [];
         const extraApps = extraIds
-            .map((id) => allKnownApps.find((a) => a.id === id))
+            .map((id) => appLookup.get(id))
             .filter((a): a is AppItem => !!a);
         const baseApps = (bundle.apps || []).filter((app) => !removedIds.has(app.id));
         const merged = [...baseApps, ...extraApps];
@@ -1832,7 +2438,7 @@ const App: React.FC = () => {
         } else {
             setDevToast(`Everything in ${bundle.title} is already queued or installed.`);
         }
-    }, [handleDownloadAction, triggerHaptic, allKnownApps]);
+    }, [handleDownloadAction, triggerHaptic, appLookup]);
 
     const handleDownloadComplete = useCallback((appId: string, success: boolean) => {
         // Read fresh state to avoid stale closure over activeDownloads / apps
@@ -1915,8 +2521,133 @@ const App: React.FC = () => {
 
         const loadGeneration = ++loadGenerationRef.current;
         let primaryPayloadDispatched = false;
+        const currentSettings = useSettingsStore.getState();
+        const devConfigStore = useDevConfigStore.getState();
+        const devConfigUrl = devConfigStore.url.trim();
+        const shouldUseDevConfig = devConfigStore.enabled;
+        const shouldUseRemoteConfig = shouldUseDevConfig || currentSettings.useRemoteJson;
+        const configTs = `?t=${Date.now()}`;
+        const appsTs = isManualRefresh ? `?t=${Date.now()}` : '';
+        const appendCacheBust = (url: string, cacheBust: string) => `${url}${url.includes('?') ? '&' : '?'}${cacheBust.slice(1)}`;
+        const clearConfigDrivenState = () => {
+            if (!isMounted.current) return;
+            // Guard FIRST: never wipe state while the user is mid-scan/install.
+            const activeCleanupGuard: ForcedStoreUpdateStatus[] = [
+                'scanning', 'scan_complete', 'installing',
+                'install_failed', 'export_ready', 'byok_required',
+                'ready_to_scan_or_install'
+            ];
+            if (activeCleanupGuard.includes(forcedStoreUpdateStatusRef.current)) {
+                return;
+            }
+            setRemoteConfig(null);
+            setStoreUpdateAvailable(false);
+            setStoreUpdateUrl('');
+            forcedStoreDownloadUrlRef.current = '';
+            setForcedStoreUpdateStatus('inactive');
+            setForcedStoreStatusText('');
+            setForcedStoreExportPath('');
+            setForcedStoreScanResult(null);
+            if (useSettingsStore.getState().forcedStoreUpdate) {
+                useSettingsStore.getState().clearForcedStoreUpdate();
+            }
+        };
+        const evaluateStoreUpdateState = (config: StoreConfig | null) => {
+            if (!isMounted.current) return;
 
-        if (settings.useRemoteJson && settings.loadLocalData && !isManualRefresh && useDataStore.getState().apps.length === 0 && workerRef.current) {
+            // Guard: never clobber an active scan / install / export state.
+            // evaluateStoreUpdateState re-runs on every config refresh.
+            const GUARD_STATES: ForcedStoreUpdateStatus[] = [
+                'scanning', 'scan_complete', 'installing',
+                'install_failed', 'export_ready', 'byok_required',
+                'ready_to_scan_or_install'
+            ];
+            if (GUARD_STATES.includes(forcedStoreUpdateStatusRef.current)) {
+                if (config?.storeDownloadUrl) {
+                    forcedStoreDownloadUrlRef.current = config.storeDownloadUrl;
+                }
+                return;
+            }
+
+            setStoreUpdateAvailable(false);
+            setStoreUpdateUrl('');
+
+            forcedStoreDownloadUrlRef.current = '';
+
+            const latestVersion = config?.latestStoreVersion || config?.minStoreVersion;
+            const minStoreVersion = config?.minStoreVersion;
+            const hasStoreUpdate = isStoreUpdateAvailable(CURRENT_STORE_VERSION, latestVersion);
+
+            if (!hasStoreUpdate || !latestVersion) {
+                setIsForcedUpdateBypassedForSession(false);
+                setForcedStoreUpdateStatus('inactive');
+                setForcedStoreStatusText('');
+                if (useSettingsStore.getState().forcedStoreUpdate) {
+                    useSettingsStore.getState().clearForcedStoreUpdate();
+                }
+                return;
+            }
+
+            setStoreUpdateAvailable(true);
+            setStoreUpdateUrl(config?.storeDownloadUrl || '');
+            forcedStoreDownloadUrlRef.current = config?.storeDownloadUrl || '';
+
+            // With the legacy update modal removed, the ForcedStoreUpdateGate is
+            // the sole update mechanism.  Trigger it for ANY available update that
+            // has a download URL — not just when below minStoreVersion.
+            if (hasStoreUpdate && config?.storeDownloadUrl) {
+                const fileName = buildForcedStoreFileName(latestVersion);
+
+                if (
+                    canResumeForcedStoreUpdate(useSettingsStore.getState().forcedStoreUpdate, {
+                        targetVersion: latestVersion,
+                        minStoreVersion,
+                        currentVersion: CURRENT_STORE_VERSION
+                    })
+                ) {
+                    const snapshot = useSettingsStore.getState().forcedStoreUpdate;
+                    if (snapshot?.status === 'export_ready') {
+                        setForcedStoreUpdateStatus('export_ready');
+                        setForcedStoreExportPath('');
+                    } else {
+                        setForcedStoreUpdateStatus('ready_to_scan_or_install');
+                    }
+                    setForcedStoreStatusText('The Orion update is already downloaded.');
+                    return;
+                }
+
+                // Guard: never overwrite an active scan / install / export
+                // state with a fresh download.  evaluateStoreUpdateState can
+                // re-run on config refresh or app resume — it must not clobber
+                // states that the user is actively interacting with.
+                const ACTIVE_STATES: ForcedStoreUpdateStatus[] = [
+                    'scanning', 'scan_complete', 'installing',
+                    'install_failed', 'export_ready', 'byok_required',
+                    'ready_to_scan_or_install'
+                ];
+                if (ACTIVE_STATES.includes(forcedStoreUpdateStatusRef.current)) {
+                    return;
+                }
+
+                useSettingsStore.getState().setForcedStoreUpdate(createForcedStoreUpdateSnapshot({
+                    targetVersion: latestVersion,
+                    downloadFileName: fileName,
+                    status: 'downloading',
+                    downloadCompleted: false,
+                    exported: false
+                }));
+                setForcedStoreUpdateStatus('downloading');
+                setForcedStoreStatusText('Downloading the latest Orion build...');
+                return;
+            }
+
+            setForcedStoreUpdateStatus('inactive');
+            if (useSettingsStore.getState().forcedStoreUpdate) {
+                useSettingsStore.getState().clearForcedStoreUpdate();
+            }
+        };
+
+        if (shouldUseRemoteConfig && currentSettings.loadLocalData && !isManualRefresh && useDataStore.getState().apps.length === 0 && workerRef.current) {
             const warmupWorker = workerRef.current;
             const currentImported = useDataStore.getState().importedApps;
 
@@ -1942,10 +2673,7 @@ const App: React.FC = () => {
             let rawApps: AppItem[] = [];
             let mirrorData: Record<string, any> | null = null;
 
-            if (settings.useRemoteJson) {
-                const configTs = `?t=${Date.now()}`;
-                const appsTs = isManualRefresh ? `?t=${Date.now()}` : '';
-
+            if (shouldUseRemoteConfig) {
                 const SOURCES = [
                     { name: 'GitHub', config: CONFIG_URL_PRIMARY, apps: APPS_URL_PRIMARY },
                     { name: 'GitLab', config: CONFIG_URL_GITLAB, apps: APPS_URL_GITLAB },
@@ -1955,58 +2683,100 @@ const App: React.FC = () => {
 
                 let remoteLoaded = false;
 
-                for (const source of SOURCES) {
+                if (shouldUseDevConfig) {
                     try {
-                        const configReq = await fetchWithRetry(`${source.config}${configTs}`, { cache: 'no-store' }, 1);
-                        if (!configReq.ok) continue;
+                        if (!devConfigUrl) {
+                            throw new Error('Enter a developer config URL before reloading.');
+                        }
 
+                        devConfigStore.setStatus('loading');
+                        devConfigStore.setLastError(null);
+
+                        const configReq = await fetchWithRetry(appendCacheBust(devConfigUrl, configTs), { cache: 'no-store' }, 1);
+                        if (!configReq.ok) {
+                            throw new Error(`Dev config request failed with ${configReq.status}`);
+                        }
                         const config = await configReq.json();
-                        const activeAppsUrl = config?.appsJsonUrl || source.apps;
-                        const activeMirrorUrl = config?.mirrorJsonUrl || DEFAULT_MIRROR_JSON;
+                        if (!config?.appsJsonUrl) {
+                            throw new Error('Dev config is missing appsJsonUrl.');
+                        }
 
+                        const activeAppsUrl = config.appsJsonUrl;
+                        const activeMirrorUrl = config?.mirrorJsonUrl || DEFAULT_MIRROR_JSON;
                         const [appsResponse, mirrorReq] = await Promise.all([
-                            fetchWithRetry(`${activeAppsUrl}${appsTs}`, { cache: 'no-store' }, 1),
-                            fetchWithRetry(`${activeMirrorUrl}${appsTs}`, {}, 1).catch(() => null)
+                            fetchWithRetry(appendCacheBust(activeAppsUrl, appsTs || configTs), { cache: 'no-store' }, 1),
+                            fetchWithRetry(appendCacheBust(activeMirrorUrl, appsTs || configTs), {}, 1).catch(() => null)
                         ]);
 
-                        if (!appsResponse.ok) continue;
+                        if (!appsResponse.ok) {
+                            throw new Error(`Dev apps request failed with ${appsResponse.status}`);
+                        }
 
-                        const sourceApps = await appsResponse.json();
-                        const sourceMirror = mirrorReq && mirrorReq.ok ? await mirrorReq.json() : null;
+                        rawApps = await appsResponse.json();
+                        mirrorData = mirrorReq && mirrorReq.ok ? await mirrorReq.json() : null;
+                        remoteLoaded = true;
+                        devConfigStore.markLoaded(devConfigUrl);
 
                         if (isMounted.current) {
                             setRemoteConfig(config);
-                            setMirrorSource(source.name);
+                            setMirrorSource('Developer Config');
+                            evaluateStoreUpdateState(config);
                         }
+                    } catch (error) {
+                        const message = error instanceof Error ? error.message : 'Failed to load developer config.';
+                        devConfigStore.setStatus('error');
+                        devConfigStore.setLastError(message);
+                        clearConfigDrivenState();
+                    }
+                } else {
+                    devConfigStore.clearRuntimeState();
+                    for (const source of SOURCES) {
+                        try {
+                            const configReq = await fetchWithRetry(`${source.config}${configTs}`, { cache: 'no-store' }, 1);
+                            if (!configReq.ok) continue;
 
-                        rawApps = sourceApps;
-                        mirrorData = sourceMirror;
-                        remoteLoaded = true;
+                            const config = await configReq.json();
+                            const activeAppsUrl = config?.appsJsonUrl || source.apps;
+                            const activeMirrorUrl = config?.mirrorJsonUrl || DEFAULT_MIRROR_JSON;
 
-                        if (config?.latestStoreVersion && compareVersions(config.latestStoreVersion, CURRENT_STORE_VERSION) > 0) {
-                            setStoreUpdateAvailable(true);
-                            setStoreUpdateUrl(config.storeDownloadUrl!);
-                            if (!sessionStorage.getItem('store_update_notified')) {
-                                setShowStoreUpdateModal(true);
-                                sessionStorage.setItem('store_update_notified', 'true');
+                            const [appsResponse, mirrorReq] = await Promise.all([
+                                fetchWithRetry(appendCacheBust(activeAppsUrl, appsTs || configTs), { cache: 'no-store' }, 1),
+                                fetchWithRetry(appendCacheBust(activeMirrorUrl, appsTs || configTs), {}, 1).catch(() => null)
+                            ]);
+
+                            if (!appsResponse.ok) continue;
+
+                            rawApps = await appsResponse.json();
+                            mirrorData = mirrorReq && mirrorReq.ok ? await mirrorReq.json() : null;
+                            remoteLoaded = true;
+
+                            if (isMounted.current) {
+                                setRemoteConfig(config);
+                                setMirrorSource(source.name);
+                                evaluateStoreUpdateState(config);
                             }
+                            break;
+                        } catch (e) {
+                            continue;
                         }
-                        break;
-                    } catch (e) {
-                        continue;
                     }
                 }
 
                 if (!remoteLoaded) {
-                    if (settings.loadLocalData) {
+                    clearConfigDrivenState();
+                    if (currentSettings.loadLocalData) {
                         rawApps = await loadEmbeddedApps();
-                        if (isMounted.current) setMirrorSource('Offline (Local)');
+                        if (isMounted.current) {
+                            setMirrorSource(shouldUseDevConfig ? 'Developer Config Failed (Local Fallback)' : 'Offline (Local)');
+                        }
                     } else if (isMounted.current) {
-                        setMirrorSource('Failed (Offline)');
+                        setMirrorSource(shouldUseDevConfig ? 'Developer Config Failed' : 'Failed (Offline)');
                     }
                 }
             } else {
-                if (settings.loadLocalData) {
+                devConfigStore.clearRuntimeState();
+                clearConfigDrivenState();
+                if (currentSettings.loadLocalData) {
                     rawApps = await loadEmbeddedApps();
                     if (isMounted.current) setMirrorSource('Disabled');
                 } else if (isMounted.current) {
@@ -2029,15 +2799,23 @@ const App: React.FC = () => {
             if (isMounted.current && useDataStore.getState().apps.length === 0) {
                 setErrorMsg('Failed to load apps');
                 setShowErrorToast(true);
+                clearConfigDrivenState();
+                if (shouldUseDevConfig) {
+                    const message = error instanceof Error ? error.message : 'Failed to load developer config.';
+                    devConfigStore.setStatus('error');
+                    devConfigStore.setLastError(message);
+                }
                 triggerHaptic('notification', undefined, NotificationType.Error);
                 setIsLoading(false); setIsRefreshing(false);
             }
         }
-    }, [settings.useRemoteJson, triggerHaptic]);
+    }, [triggerHaptic]);
 
     useEffect(() => {
-        loadApps(false);
-    }, [loadApps]);
+        if (devConfigHasHydrated) {
+            loadApps(false);
+        }
+    }, [loadApps, devConfigHasHydrated]);
 
     // Preload SettingsModal chunk after initial render so it opens instantly on Android
     useEffect(() => {
@@ -2054,22 +2832,28 @@ const App: React.FC = () => {
         if (activeTab === 'tv') return Platform.TV;
         return Platform.ANDROID;
     }, [activeTab]);
+    const platformAppsForTab = appsByPlatform[targetPlatform] || [];
 
     const dynamicCategories = useMemo(() => {
-        const platformApps = allKnownApps.filter((app) => app.platform === targetPlatform);
-        return getAvailableFilterCategories(platformApps);
-    }, [allKnownApps, targetPlatform]);
+        return getAvailableFilterCategories(platformAppsForTab);
+    }, [platformAppsForTab]);
 
     const visibleAppsForTab = useMemo(() => {
-        let filtered = visibleApps;
+        let filtered = visibleApps.filter((app) => app.platform === targetPlatform);
         if (currentTabState.filterFavorites) {
             filtered = filtered.filter((app) => favoriteIdSet.has(app.id));
         }
         return filtered;
-    }, [visibleApps, currentTabState.filterFavorites, favoriteIdSet]);
+    }, [visibleApps, targetPlatform, currentTabState.filterFavorites, favoriteIdSet]);
 
-    // Defer the expensive app list to keep input responsive during transitions
-    const deferredVisibleAppsForTab = useDeferredValue(visibleAppsForTab);
+    const classicAppsForCurrentView = showAllSorted && viewAllApps
+        ? viewAllApps
+        : visibleAppsForTab;
+
+    // Defer the expensive app list to keep input responsive during transitions.
+    // Modern "Show All" intentionally falls back to this classic renderer to
+    // avoid loading every app into the heavier Modern card grid.
+    const deferredClassicAppsForCurrentView = useDeferredValue(classicAppsForCurrentView);
 
     const shouldShowModernHome = settings.storeLayout === 'modern'
         && isModernHomeState(currentTabState);
@@ -2103,8 +2887,8 @@ const App: React.FC = () => {
         const list = settings.customBundles || [];
         if (list.length === 0) return [];
         const platformAppMap = new Map<string, AppItem>();
-        for (const app of allKnownApps) {
-            if (app.platform === targetPlatform) platformAppMap.set(app.id, app);
+        for (const app of platformAppsForTab) {
+            platformAppMap.set(app.id, app);
         }
         return list.map((cb) => {
             const apps = cb.appIds.map((id) => platformAppMap.get(id)).filter(Boolean) as AppItem[];
@@ -2118,13 +2902,11 @@ const App: React.FC = () => {
                 badge: 'Local',
             };
         }).filter((b) => b.apps && b.apps.length > 0);
-    }, [settings.customBundles, allKnownApps, targetPlatform]);
+    }, [settings.customBundles, platformAppsForTab]);
 
     const activeModernCollections = useMemo(() => {
-        // View All: render specific collection apps as a sorted_grid for Modern UI
         if (showAllSorted) {
-            const appsToShow = viewAllApps || visibleAppsForTab;
-            return buildSortedModernCollections(appsToShow, SortOption.NEWEST, true);
+            return [];
         }
 
         if (!shouldShowModernHome) return [];
@@ -2161,7 +2943,7 @@ const App: React.FC = () => {
         }
 
         return buildSortedModernCollections(visibleAppsForTab, effectiveSort);
-    }, [shouldShowModernHome, showAllSorted, viewAllApps, effectiveSort, storeCollections, updatesAvailableCollection, visibleAppsForTab, customLocalBundles]);
+    }, [shouldShowModernHome, showAllSorted, effectiveSort, storeCollections, updatesAvailableCollection, visibleAppsForTab, customLocalBundles]);
 
     const updateCount = availableUpdates.length;
 
@@ -2176,14 +2958,6 @@ const App: React.FC = () => {
             if (candidates.length > 0) candidates.forEach(app => handleDownloadAction(app, undefined, true));
         }
     }, [settings.autoUpdateEnabled, availableUpdates, data.activeDownloads, data.readyToInstall]);
-
-    const appCounts = useMemo(() => {
-        return {
-            android: allKnownApps.filter((app) => app.platform === Platform.ANDROID).length,
-            pc: allKnownApps.filter((app) => app.platform === Platform.PC).length,
-            tv: allKnownApps.filter((app) => app.platform === Platform.TV).length
-        };
-    }, [allKnownApps]);
 
     const toggleTheme = useCallback(() => {
         const newTheme: Theme = settings.theme === 'light' ? 'dusk' : settings.theme === 'dusk' ? 'dark' : 'light';
@@ -2215,6 +2989,11 @@ const App: React.FC = () => {
         const root = document.getElementById('root');
         if (root) root.scrollTop = 0;
         triggerHaptic('selection');
+        setExpandedModernView(null);
+        setExpandedModernApps([]);
+        setReturnToExpandedView(null);
+        setShowAllSorted(false);
+        setViewAllApps(null);
         startTransition(() => {
             data.setSelectedCategory(activeTab, category);
             // When navigating to a specific category, switch sort from Home to Newest
@@ -2241,15 +3020,13 @@ const App: React.FC = () => {
         setShowReleaseNotes(true);
     }, []);
 
-    const handleOpenStoreUpdate = useCallback(() => {
-        setShowStoreUpdateModal(true);
-    }, []);
 
-    const devProfile = remoteConfig?.devProfile || DEFAULT_DEV_PROFILE;
-    const supportEmail = remoteConfig?.supportEmail || DEFAULT_SUPPORT_EMAIL;
-    const socialLinks = remoteConfig?.socials || DEV_SOCIALS;
-    const faqs = remoteConfig?.faqs || DEFAULT_FAQS;
-    const easterEggUrl = remoteConfig?.easterEggUrl || DEFAULT_EASTER_EGG;
+
+    const devProfile = effectiveRemoteConfig?.devProfile || DEFAULT_DEV_PROFILE;
+    const supportEmail = effectiveRemoteConfig?.supportEmail || DEFAULT_SUPPORT_EMAIL;
+    const socialLinks = effectiveRemoteConfig?.socials || DEV_SOCIALS;
+    const faqs = effectiveRemoteConfig?.faqs || DEFAULT_FAQS;
+    const easterEggUrl = effectiveRemoteConfig?.easterEggUrl || DEFAULT_EASTER_EGG;
 
     const handleBottomNavChange = useCallback((tab: Tab) => {
         if (tab !== 'about' && settings.hiddenTabs.includes(tab)) return;
@@ -2325,9 +3102,36 @@ const App: React.FC = () => {
         }
     }, [appLookup]);
 
+    // ── Deep Link Handler ──────────────────────────────────────────────
+    // Handles orionstore://app/{appId} deep links from external sources.
+    useEffect(() => {
+        const listener = CapacitorApp.addListener('appUrlOpen', ({ url }) => {
+            try {
+                // orionstore://app/youtube-revanced → hostname="app", pathname="/youtube-revanced"
+                // orionstore://app//youtube-revanced → pathname="/youtube-revanced"
+                const parsed = new URL(url);
+                const scheme = parsed.protocol.replace(':', '');
+                if (scheme !== 'orionstore') return;
+                const segments = (parsed.hostname + parsed.pathname).split('/').filter(Boolean);
+                // Expected: ["app", "{appId}"]
+                if (segments[0] === 'app' && segments[1]) {
+                    const appId = decodeURIComponent(segments[1]);
+                    const target = appLookup.get(appId);
+                    if (target) {
+                        setSelectedApp(target);
+                    } else {
+                        setDevToast(`App "${appId}" not found in store`);
+                    }
+                }
+            } catch { /* ignore malformed URLs */ }
+        });
+        return () => { listener.then(l => l.remove()); };
+    }, [appLookup]);
+
     const handleReloadApps = useCallback(() => {
+        if (isRefreshing) return;
         loadApps(true);
-    }, [loadApps]);
+    }, [isRefreshing, loadApps]);
 
     useEffect(() => {
         const handler = () => handleReloadApps();
@@ -2343,14 +3147,26 @@ const App: React.FC = () => {
     });
 
     const handleSearchQueryChange = useCallback((query: string) => {
+        setExpandedModernView(null);
+        setExpandedModernApps([]);
+        setReturnToExpandedView(null);
+        setShowAllSorted(false);
+        setViewAllApps(null);
         startTransition(() => data.setSearchQuery(activeTab, query));
     }, [activeTab, data.setSearchQuery]);
 
     const handleFilterCategoryChange = useCallback((category: string) => {
+        setExpandedModernView(null);
+        setExpandedModernApps([]);
+        setShowAllSorted(false);
+        setViewAllApps(null);
         startTransition(() => data.setSelectedCategory(activeTab, category));
     }, [activeTab, data.setSelectedCategory]);
 
     const handleSortChange = useCallback((sort: SortOption) => {
+        setExpandedModernView(null);
+        setExpandedModernApps([]);
+        setViewAllApps(null);
         setShowAllSorted(false);
         if (settings.storeLayout === 'modern' && sort === SortOption.HOME) {
             restorePrimaryBrowseState();
@@ -2376,27 +3192,65 @@ const App: React.FC = () => {
     }, []);
 
     const handleShowAllSorted = useCallback(() => {
+        setExpandedModernView(null);
+        setExpandedModernApps([]);
+        setReturnToExpandedView(null);
+        setViewAllApps(null);
         setShowAllSorted(true);
     }, []);
 
     const handleShowCollectionAll = useCallback((collection: StoreCollection) => {
+        if (collection.id === 'new_updated') {
+            const appsToShow = [...platformAppsForTab].reverse().slice(0, 18);
+            if (appsToShow.length === 0) {
+                setExpandedModernView(null);
+                setExpandedModernApps([]);
+                setViewAllApps(null);
+                setShowAllSorted(true);
+                startTransition(() => data.setSelectedSort(activeTab, SortOption.NEWEST));
+                return;
+            }
+
+            setShowAllSorted(false);
+            setViewAllApps(null);
+            setExpandedModernView('new_updated');
+            setExpandedModernApps(appsToShow);
+            setTimeout(() => {
+                document.getElementById('root')?.scrollTo({ top: 0, behavior: 'instant' });
+            }, 10);
+            return;
+        }
+
         let appsIdToShow: AppItem[] = [];
         if (collection.id === 'updates-available') {
             appsIdToShow = availableUpdatesForTab;
-        } else if (collection.id === 'new_updated') {
-            appsIdToShow = [...allKnownApps].filter(a => a.platform === targetPlatform).reverse().slice(0, 18);
         } else {
             appsIdToShow = collection.apps || [];
         }
-        
+
+        setExpandedModernView(null);
+        setExpandedModernApps([]);
         setViewAllApps(appsIdToShow);
         setShowAllSorted(true);
-        
+
         // Asynchronous scroll to prevent layout collision glitch during unmount
         setTimeout(() => {
             document.getElementById('root')?.scrollTo({ top: 0, behavior: 'instant' });
         }, 10);
-    }, [allKnownApps, availableUpdatesForTab, targetPlatform]);
+    }, [activeTab, availableUpdatesForTab, data.setSelectedSort, platformAppsForTab]);
+
+    const handleExpandedNewUpdatedMore = useCallback(() => {
+        const appsToShow = [...platformAppsForTab].reverse();
+        setReturnToExpandedView(expandedModernView);
+        setExpandedModernView(null);
+        // Retain apps state or clear it, doesn't matter since back restores it
+        setViewAllApps(appsToShow);
+        setShowAllSorted(true);
+        setTimeout(() => {
+            document.getElementById('root')?.scrollTo({ top: 0, behavior: 'instant' });
+        }, 10);
+        startTransition(() => data.setSelectedSort(activeTab, SortOption.NEWEST));
+    }, [activeTab, data.setSelectedSort, platformAppsForTab, expandedModernView]);
 
     const renderModernSuspenseFallback = () => (
         <div className="relative flex w-full flex-col animate-fade-in pb-12 lg:pb-16">
@@ -2413,7 +3267,7 @@ const App: React.FC = () => {
                 </div>
             </div>
             <div className="px-4">
-                <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-2.5">
                     {[...Array(6)].map((_, index) => (
                         <div key={index} className="orion-shadow-frame rounded-[1.6rem]">
                             <div className="orion-shadow-surface flex flex-col items-center gap-2 rounded-[inherit] bg-card p-3">
@@ -2430,7 +3284,7 @@ const App: React.FC = () => {
 
     const renderAppGrid = (platform: Platform) => {
         const isFullBleedModernHome = settings.storeLayout === 'modern'
-            && (shouldShowModernHome || showAllSorted);
+            && ((!showAllSorted && shouldShowModernHome) || expandedModernView !== null);
         const shellClassName = isFullBleedModernHome
             ? 'w-full'
             : 'mx-auto w-full max-w-[34rem] px-4 sm:max-w-[48rem] sm:px-6 lg:max-w-[82rem] lg:px-8 2xl:max-w-[94rem]';
@@ -2488,16 +3342,20 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     )
-                ) : visibleAppsForTab.length === 0 ? (
+                ) : classicAppsForCurrentView.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-theme-sub animate-fade-in">
                         <i className={`fas ${currentTabState.filterFavorites ? 'fa-heart-broken' : 'fa-search'} text-5xl mb-4 opacity-10`}></i>
                         <p className="text-lg font-bold">{currentTabState.filterFavorites ? 'No favorites found' : `No ${platform} apps found`}</p>
                         {currentTabState.filterFavorites && <p className="text-xs mt-2 opacity-50">Tap the heart on any app card to add it here.</p>}
                     </div>
-                ) : settings.storeLayout === 'modern' && activeModernCollections.length > 0 && (shouldShowModernHome || showAllSorted) ? (
+                ) : settings.storeLayout === 'modern'
+                    && activeModernCollections.length > 0
+                    && shouldShowModernHome
+                    && !showAllSorted
+                    && expandedModernView === null ? (
                     <Suspense fallback={renderModernSuspenseFallback()}>
-                        <ModernAppList 
-                            collections={activeModernCollections} 
+                        <ModernAppList
+                            collections={activeModernCollections}
                             onAppClick={handleAppSelect}
                             onSeeAllCategory={handleCategoryNavigate}
                             onBundleClick={setSelectedBundle}
@@ -2505,10 +3363,21 @@ const App: React.FC = () => {
                             onShowCollectionAll={handleShowCollectionAll}
                         />
                     </Suspense>
+                ) : settings.storeLayout === 'modern'
+                    && expandedModernView === 'new_updated'
+                    && expandedModernApps.length > 0 ? (
+                    <div className={insetListClassName}>
+                        <ExpandedNewUpdatedGrid
+                            title="New & Updated"
+                            apps={expandedModernApps}
+                            onAppClick={handleAppSelect}
+                            onViewMore={handleExpandedNewUpdatedMore}
+                        />
+                    </div>
                 ) : (
                     <div className={insetListClassName}>
                         <ClassicAppList
-                            apps={deferredVisibleAppsForTab}
+                            apps={deferredClassicAppsForCurrentView}
                             onAppClick={handleAppSelect}
                         />
                     </div>
@@ -2517,11 +3386,140 @@ const App: React.FC = () => {
         );
     };
 
-    if ((remoteConfig?.maintenanceMode || settings.localMaintenanceMode) && !bypassMaintenance) {
+    const forcedStoreCompletedScanResult = forcedStoreScanResult || forcedStoreVtResult || null;
+    const forcedStoreSnapshotIsScanComplete = settings.forcedStoreUpdate?.status === 'scan_complete';
+    const forcedStoreInlineResultBlockedStatus: ForcedStoreUpdateStatus[] = [
+        'checking',
+        'downloading',
+        'download_failed',
+        'byok_required',
+        'installing',
+        'install_failed',
+        'export_ready',
+        'installed'
+    ];
+    const forcedStoreInlineResultEligibleStatus =
+        forcedStoreSnapshotIsScanComplete ||
+        !forcedStoreInlineResultBlockedStatus.includes(forcedStoreUpdateStatus);
+    const shouldShowForcedStoreInlineScanResult =
+        !isTestingForcedUpdate &&
+        !isForcedUpdateBypassedForSession &&
+        forcedStoreInlineResultEligibleStatus &&
+        (
+            forcedStoreUpdateStatus === 'scan_complete' ||
+            forcedStoreVtView === 'results' ||
+            forcedStoreSnapshotIsScanComplete ||
+            Boolean(forcedStoreCompletedScanResult)
+        );
+
+    if (shouldShowForcedStoreInlineScanResult) {
+        const activeTargetVersion =
+            settings.forcedStoreUpdate?.targetVersion ||
+            effectiveRemoteConfig?.latestStoreVersion ||
+            effectiveRemoteConfig?.minStoreVersion ||
+            '0.0.0';
+
+        return (
+            <ForcedStoreInlineScanResult
+                currentVersion={CURRENT_STORE_VERSION}
+                targetVersion={activeTargetVersion}
+                result={forcedStoreCompletedScanResult}
+                canInstall={true}
+                onInstallNow={handleForcedStoreInstall}
+                onOpenReport={handleForcedStoreOpenReport}
+            />
+        );
+    }
+
+    if (shouldBlockWithForcedStoreUpdate || isTestingForcedUpdate) {
+        const isTest = isTestingForcedUpdate;
+        const activeStatus: ForcedStoreUpdateStatus = isTest
+            ? testForcedStatus
+            : (forcedStoreUpdateStatus === 'inactive' && hasForcedStoreScanResult ? 'scan_complete' : forcedStoreUpdateStatus);
+        const activeProgress = isTest
+            ? (FORCED_UPDATE_TEST_PROGRESS[activeStatus] ?? 0)
+            : forcedStoreProgress;
+        const activeError = isTest ? '' : forcedStoreError;
+        const activeStatusText = isTest ? (FORCED_UPDATE_TEST_STATUS_TEXT[activeStatus] || '') : forcedStoreStatusText;
+        const activeExportPath = isTest
+            ? '/storage/emulated/0/Download/OrionStore_9.9.9.apk'
+            : forcedStoreExportPath;
+        const activeCanInstall = activeStatus === 'ready_to_scan_or_install' || activeStatus === 'scan_complete';
+        const activeCanScan = activeStatus === 'ready_to_scan_or_install' || activeStatus === 'scan_complete';
+        const activeIsExported = isTest
+            ? activeStatus === 'install_failed'
+            : Boolean(settings.forcedStoreUpdate?.exported);
+        const activeTargetVersion = isTest
+            ? '9.9.9'
+            : (settings.forcedStoreUpdate?.targetVersion || effectiveRemoteConfig?.latestStoreVersion || effectiveRemoteConfig?.minStoreVersion || '0.0.0');
+        // In test mode, supply a sample scan result so the scan_complete UI can be previewed.
+        const activeScanResult = isTest
+            ? (activeStatus === 'scan_complete'
+                ? { type: 'downloaded-apk' as const, stats: { harmless: 70, malicious: 0, suspicious: 0, undetected: 2, timeout: 0 }, results: {}, source: 'existing-report' as const, permalink: 'https://www.virustotal.com/gui/file/test' }
+                : null)
+            : (forcedStoreScanResult || forcedStoreVt.result);
+        const activeScanProgress = isTest
+            ? (activeStatus === 'scanning' ? 42 : 0)
+            : forcedStoreVt.scanProgress;
+        const activeScanNote = isTest
+            ? (activeStatus === 'scanning' ? 'Hashing the APK and querying VirusTotal…' : '')
+            : forcedStoreVt.scanNote;
+
+        const noop = () => { };
+
+        return (
+            <>
+                <ForcedStoreUpdateGate
+                    currentVersion={CURRENT_STORE_VERSION}
+                    targetVersion={activeTargetVersion}
+                    status={activeStatus}
+                    progress={activeProgress}
+                    statusText={activeStatusText}
+                    errorText={activeError}
+                    exportPath={activeExportPath}
+                    canInstall={activeCanInstall}
+                    canScan={activeCanScan}
+                    isExported={activeIsExported}
+                    apiKey={isTest ? '' : settings.virusTotalApiKey}
+                    scanProgress={activeScanProgress}
+                    scanResult={activeScanResult}
+                    scanNote={activeScanNote}
+                    onRetryDownload={isTest ? () => setTestForcedStatus('downloading') : handleForcedStoreRetryDownload}
+                    onScanBeforeInstall={isTest ? () => setTestForcedStatus('scanning') : handleForcedStoreScan}
+                    onInstallNow={isTest ? () => setTestForcedStatus('installing') : handleForcedStoreInstall}
+                    onRetryInstall={isTest ? () => setTestForcedStatus('installing') : handleForcedStoreRetryInstall}
+                    onExportApk={isTest ? () => setTestForcedStatus('export_ready') : handleForcedStoreExport}
+                    onOpenByokSettings={isTest ? noop : handleForcedStoreByokRedirect}
+                    onSaveApiKey={isTest ? noop : handleForcedStoreSaveApiKey}
+                    onRevokeApiKey={isTest ? noop : () => useSettingsStore.getState().setVirusTotalApiKey('')}
+                    onOpenReport={isTest ? noop : handleForcedStoreOpenReport}
+                    showDeveloperBypass={!isTest && useDevConfigStore.getState().enabled}
+                    onDeveloperBypass={() => {
+                        setIsForcedUpdateBypassedForSession(true);
+                        setForcedStoreUpdateStatus('inactive');
+                        setForcedStoreStatusText('');
+                        setForcedStoreScanResult(null);
+                    }}
+                />
+                {isTest && (
+                    <ForcedUpdateDevPanel
+                        status={activeStatus}
+                        progress={activeProgress}
+                        statusText={activeStatusText}
+                        onStatusChange={setTestForcedStatus}
+                        onClose={() => setIsTestingForcedUpdate(false)}
+                    />
+                )}
+            </>
+        );
+    }
+
+    if ((effectiveRemoteConfig?.maintenanceMode || settings.localMaintenanceMode) && !bypassMaintenance) {
         return (
             <MaintenanceMode
-                maintenanceMessage={remoteConfig?.maintenanceMessage}
+                maintenanceMessage={effectiveRemoteConfig?.maintenanceMessage}
                 socialLinks={socialLinks}
+                donation={effectiveRemoteConfig?.donation ?? DEFAULT_DONATION}
                 onBypass={() => { setBypassMaintenance(true); triggerHaptic('notification', undefined, NotificationType.Success); }}
                 triggerHaptic={triggerHaptic}
                 version={CURRENT_STORE_VERSION}
@@ -2535,7 +3533,7 @@ const App: React.FC = () => {
                 {showSplashPreview && <SplashScreenPreview />}
             </Suspense>
 
-            {!showSplashPreview && (
+            {!showSplashPreview && !shouldBlockWithForcedStoreUpdate && (
                 <>
                     {!isAnyModalOpen && (
                         <div className="fixed top-28 left-0 right-0 z-[200] pointer-events-none flex flex-col items-center gap-2">
@@ -2563,10 +3561,11 @@ const App: React.FC = () => {
                         </div>
                     )}
 
+                    <div className="w-full max-w-[1400px] mx-auto">
                     <Header
                         onTitleClick={handleTitleClick}
                         storeUpdateAvailable={storeUpdateAvailable}
-                        onUpdateStore={handleOpenStoreUpdate}
+                        onUpdateStore={() => { }}
                         theme={settings.theme}
                         toggleTheme={toggleTheme}
                         activeTab={activeTab}
@@ -2577,25 +3576,61 @@ const App: React.FC = () => {
                         activeDownloadCount={activeDownloadCount}
                     />
 
-                    {isStartupUiReady && remoteConfig?.announcement && !isAnnouncementDismissed && activeTab !== 'about' && (
+                    {isStartupUiReady && effectiveRemoteConfig?.announcement && !isAnnouncementDismissed && activeTab !== 'about' && (
                         <div className="px-3 mb-2 animate-fade-in w-full">
                             <div className={`relative group border-2 border-blue-500/40 rounded-[2rem] p-4 flex items-center gap-4 group ${settings.theme === 'light' ? 'bg-blue-600/10' : 'bg-blue-600/15'} isolate before:absolute before:inset-0 before:rounded-[inherit] before:-z-10 before:shadow-glow before:shadow-blue-500/20`}>
                                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-indigo-500/5 to-blue-500/10 opacity-70 animate-shine bg-[length:200%_100%] pointer-events-none"></div>
                                 <div className="shrink-0 w-11 h-11 rounded-2xl bg-blue-500 text-white flex items-center justify-center text-xl shadow-lg shadow-blue-500/30 transform -rotate-3 group-hover:rotate-0 transition-transform"><i className="fas fa-bullhorn"></i></div>
-                                <div className="flex-1 min-w-0 text-left"><p className={`text-xs font-black leading-relaxed ${settings.theme === 'light' ? 'text-blue-800' : 'text-blue-300'}`}>{remoteConfig.announcement}</p></div>
-                                <button onClick={() => { const hash = getStringHash(remoteConfig.announcement || ''); localStorage.setItem('dismissed_announcement_hash', String(hash)); setIsAnnouncementDismissed(true); triggerHaptic('selection'); }} className={`shrink-0 w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm ${settings.theme === 'light' ? 'text-blue-700' : 'text-blue-300'}`}><i className="fas fa-times text-xs"></i></button>
+                                <div className="flex-1 min-w-0 text-left"><p className={`text-xs font-black leading-relaxed ${settings.theme === 'light' ? 'text-blue-800' : 'text-blue-300'}`}>{effectiveRemoteConfig.announcement}</p></div>
+                                <button onClick={() => { const hash = getStringHash(effectiveRemoteConfig.announcement || ''); localStorage.setItem('dismissed_announcement_hash', String(hash)); setIsAnnouncementDismissed(true); triggerHaptic('selection'); }} className={`shrink-0 w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm ${settings.theme === 'light' ? 'text-blue-700' : 'text-blue-300'}`}><i className="fas fa-times text-xs"></i></button>
                             </div>
                         </div>
                     )}
 
-                    <main ref={appListScrollRef} className="relative w-full min-h-[50vh] pb-[calc(env(safe-area-inset-bottom)+5.35rem)]">
+                    <main ref={appListScrollRef} className="relative w-full min-h-[50vh] pb-[calc(env(safe-area-inset-bottom,0px)+6.5rem)]">
                         <div key={activeTab} className="animate-tab-enter">
                             {activeTab === 'android' && renderAppGrid(Platform.ANDROID)}
                             {activeTab === 'pc' && renderAppGrid(Platform.PC)}
                             {activeTab === 'tv' && renderAppGrid(Platform.TV)}
                             {activeTab === 'about' && (
                                 <Suspense fallback={<div className="flex justify-center p-12"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div></div>}>
-                                    <AboutTabContainer devProfile={devProfile} socialLinks={socialLinks} faqs={faqs} handleProfileClick={handleAboutProfileClick} setShowFAQ={setShowFAQ} onOpenAdDonation={() => setShowAdDonation(true)} currentStoreVersion={CURRENT_STORE_VERSION} onWipeCache={() => { localStorage.clear(); window.location.reload(); }} onTestStoreUpdate={() => { setIsTestingUpdate(true); setShowStoreUpdateModal(true); triggerHaptic('impact', ImpactStyle.Medium); }} mirrorSource={mirrorSource} availableUpdates={availableUpdates} onTriggerUpdate={(app) => handleDownloadAction(app)} onTriggerDebugToast={(type) => { if (type === 'install') { const fallbackApp = allKnownApps[0]; if (fallbackApp) setShowInstallToast({ app: fallbackApp, file: 'test.apk' }); } if (type === 'error') { setShowErrorToast(true); setErrorMsg("This is a test error message for alignment checking."); } if (type === 'cleanup') data.setPendingCleanup({ 'test-1': { fileName: 'a', timestamp: Date.now() }, 'test-2': { fileName: 'b', timestamp: Date.now() }, 'test-3': { fileName: 'c', timestamp: Date.now() } }); }} onTriggerModernUITutorial={() => { settings.setHasSeenModernUITutorial(false); setShowModernUITutorial(true); }} onReloadApps={handleReloadApps} />
+                                    <AboutTabContainer
+                                        devProfile={devProfile}
+                                        socialLinks={socialLinks}
+                                        donation={effectiveRemoteConfig?.donation ?? DEFAULT_DONATION}
+                                        faqs={faqs}
+                                        handleProfileClick={handleAboutProfileClick}
+                                        setShowFAQ={setShowFAQ}
+                                        onOpenAdDonation={() => setShowAdDonation(true)}
+                                        currentStoreVersion={CURRENT_STORE_VERSION}
+                                        onWipeCache={() => { localStorage.clear(); window.location.reload(); }}
+                                        mirrorSource={mirrorSource}
+                                        availableUpdates={availableUpdates}
+                                        onTriggerUpdate={(app) => handleDownloadAction(app)}
+                                        onTriggerDebugToast={(type) => {
+                                            if (type === 'install') {
+                                                const fallbackApp = allKnownApps[0];
+                                                if (fallbackApp) setShowInstallToast({ app: fallbackApp, file: 'test.apk' });
+                                            }
+                                            if (type === 'error') {
+                                                setShowErrorToast(true);
+                                                setErrorMsg("This is a test error message for alignment checking.");
+                                            }
+                                            if (type === 'cleanup') {
+                                                data.setPendingCleanup({
+                                                    'test-1': { fileName: 'a', timestamp: Date.now() },
+                                                    'test-2': { fileName: 'b', timestamp: Date.now() },
+                                                    'test-3': { fileName: 'c', timestamp: Date.now() }
+                                                });
+                                            }
+                                        }}
+                                        onTriggerModernUITutorial={() => {
+                                            settings.setHasSeenModernUITutorial(false);
+                                            setShowModernUITutorial(true);
+                                        }}
+                                        onReloadApps={handleReloadApps}
+                                        onTriggerForcedUpdateTest={() => setIsTestingForcedUpdate(true)}
+                                    />
                                 </Suspense>
                             )}
                         </div>
@@ -2627,6 +3662,7 @@ const App: React.FC = () => {
                         </svg>
                     </button>
 
+                    </div>
                     <BottomNav activeTab={activeTab} onTabChange={handleBottomNavChange} hiddenTabs={settings.hiddenTabs} glassEffect={settings.glassEffect} />
 
                     <Suspense fallback={null}>
@@ -2659,13 +3695,13 @@ const App: React.FC = () => {
                             />
                         )}
                         {vtScanTarget && (
-                            <VirusTotalScanModal 
-                                app={vtScanTarget} 
-                                onClose={() => setVtScanTarget(null)} 
+                            <VirusTotalScanModal
+                                app={vtScanTarget}
+                                onClose={() => setVtScanTarget(null)}
                             />
                         )}
                         {showFAQ && <FAQModal onClose={() => setShowFAQ(false)} items={faqs} />}
-                        {showNotice && remoteConfig?.notice && <NoticeModal title={remoteConfig.notice.title} message={remoteConfig.notice.message} onClose={handleDismissNotice} />}
+                        {showNotice && effectiveRemoteConfig?.notice && <NoticeModal title={effectiveRemoteConfig.notice.title} message={effectiveRemoteConfig.notice.message} onClose={handleDismissNotice} />}
                         {showModernUITutorial && <ModernUITutorial onOpenSettings={() => { preloadSettingsModal(); setShowSettingsModal(true); }} onClose={() => setShowModernUITutorial(false)} />}
                         {showReleaseNotes && <ReleaseNotesModal onClose={() => setShowReleaseNotes(false)} />}
                         {showSettingsModal && (
@@ -2679,6 +3715,7 @@ const App: React.FC = () => {
                                 installingId={installingId}
                                 onUpdateAll={handleBatchInstall}
                                 onNavigateToApp={handleNavigateToAppFromSettings}
+                                onReloadDevConfig={() => { void loadApps(true); }}
                                 initialMenu={settingsInitialMenu}
                             />
                         )}
@@ -2696,10 +3733,218 @@ const App: React.FC = () => {
                                 selectionIndex={profileBadgeSelectionIndex}
                             />
                         )}
-                        {isStartupUiReady && showStoreUpdateModal && (isTestingUpdate || (remoteConfig?.latestStoreVersion)) && <StoreUpdateModal currentVersion={CURRENT_STORE_VERSION} newVersion={isTestingUpdate ? "9.9.9" : (remoteConfig?.latestStoreVersion || "Unknown")} downloadUrl={isTestingUpdate ? "#" : storeUpdateUrl} onClose={() => { setShowStoreUpdateModal(false); setIsTestingUpdate(false); }} />}
+
                     </Suspense>
+                    <SpotlightOverlay />
                 </>
             )}
+        </div>
+    );
+};
+
+interface ForcedStoreInlineScanResultProps {
+    currentVersion: string;
+    targetVersion: string;
+    result: VirusTotalResult | null;
+    canInstall: boolean;
+    onInstallNow: () => void;
+    onOpenReport: () => void;
+}
+
+const readForcedStoreScanStat = (value: unknown) => (
+    typeof value === 'number' && Number.isFinite(value) ? value : 0
+);
+
+const ForcedStoreInlineScanResult: React.FC<ForcedStoreInlineScanResultProps> = ({
+    currentVersion,
+    targetVersion,
+    result,
+    canInstall,
+    onInstallNow,
+    onOpenReport
+}) => {
+    const stats = result?.stats ?? {};
+    const malicious = readForcedStoreScanStat(stats.malicious);
+    const suspicious = readForcedStoreScanStat(stats.suspicious);
+    const harmless = readForcedStoreScanStat(stats.harmless);
+    const undetected = readForcedStoreScanStat(stats.undetected);
+    const timeout = readForcedStoreScanStat(stats.timeout);
+    const flagged = malicious + suspicious;
+    const total = harmless + malicious + suspicious + undetected + timeout;
+    const hasReport = Boolean(result?.permalink);
+    const isClean = flagged === 0;
+    const summary = total > 0
+        ? `${flagged} of ${total} VirusTotal engines flagged this update.`
+        : 'VirusTotal finished scanning this update. You can continue installing.';
+
+    return (
+        <main
+            className="fixed inset-0 z-[260] flex overflow-y-auto bg-surface px-6 text-theme-text"
+            aria-live="polite"
+            style={{
+                paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))',
+                paddingTop: 'calc(1.5rem + env(safe-area-inset-top))'
+            }}
+        >
+            <section className="m-auto flex w-full max-w-[440px] flex-col gap-6 py-4">
+                <div className={`grid h-20 w-20 place-items-center rounded-[1.6rem] ${isClean ? 'bg-emerald-500/12 text-emerald-500' : 'bg-amber-500/12 text-amber-500'}`}>
+                    <i className={`fas ${isClean ? 'fa-circle-check' : 'fa-triangle-exclamation'} text-3xl`} aria-hidden="true" />
+                </div>
+
+                <div className="flex flex-col gap-3">
+                    <h1 className="m-0 text-[2rem] font-bold leading-[1.05] tracking-tight text-theme-text">
+                        {isClean ? 'Scan complete' : 'Scan complete with caution'}
+                    </h1>
+                    <p className="m-0 max-w-[40ch] text-[0.95rem] leading-relaxed text-theme-sub">
+                        {summary}
+                    </p>
+                    <p className="m-0 font-mono text-xs text-theme-sub">
+                        v{currentVersion} <span className="text-theme-sub/60">-&gt;</span> v{targetVersion}
+                    </p>
+                </div>
+
+                <div className={`flex items-center gap-2.5 rounded-2xl px-4 py-3 text-sm font-semibold ${isClean ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                    <i className={`fas ${isClean ? 'fa-circle-check' : 'fa-shield-halved'}`} aria-hidden="true" />
+                    <span>{isClean ? 'No engines flagged the APK' : 'Review the report before installing'}</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-2xl bg-theme-element px-3 py-3 text-center">
+                        <p className="m-0 text-lg font-black text-red-500">{flagged}</p>
+                        <p className="m-0 text-[10px] font-bold uppercase tracking-wider text-theme-sub">Flagged</p>
+                    </div>
+                    <div className="rounded-2xl bg-theme-element px-3 py-3 text-center">
+                        <p className="m-0 text-lg font-black text-emerald-500">{harmless}</p>
+                        <p className="m-0 text-[10px] font-bold uppercase tracking-wider text-theme-sub">Clean</p>
+                    </div>
+                    <div className="rounded-2xl bg-theme-element px-3 py-3 text-center">
+                        <p className="m-0 text-lg font-black text-theme-text">{total}</p>
+                        <p className="m-0 text-[10px] font-bold uppercase tracking-wider text-theme-sub">Engines</p>
+                    </div>
+                </div>
+
+                <div className="mt-1 flex flex-col gap-2.5">
+                    {hasReport && (
+                        <button
+                            type="button"
+                            onClick={onOpenReport}
+                            className="inline-flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-2xl bg-theme-element px-5 text-[0.95rem] font-bold tracking-tight text-theme-text transition-colors duration-200 hover:bg-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                        >
+                            <i className="fas fa-arrow-up-right-from-square text-sm" aria-hidden="true" />
+                            <span>Open VirusTotal report</span>
+                        </button>
+                    )}
+                    {canInstall && (
+                        <button
+                            type="button"
+                            onClick={onInstallNow}
+                            className="inline-flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-2xl bg-primary px-5 text-[0.95rem] font-bold tracking-tight text-white shadow-lg shadow-primary/20 transition-colors duration-200 hover:brightness-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                        >
+                            <i className="fas fa-arrow-up-right-from-square text-sm" aria-hidden="true" />
+                            <span>Install now</span>
+                        </button>
+                    )}
+                </div>
+            </section>
+        </main>
+    );
+};
+
+const FORCED_UPDATE_TEST_STATUSES: { id: ForcedStoreUpdateStatus; label: string }[] = [
+    { id: 'checking', label: 'Checking' },
+    { id: 'downloading', label: 'Downloading' },
+    { id: 'download_failed', label: 'Download failed' },
+    { id: 'ready_to_scan_or_install', label: 'Ready' },
+    { id: 'byok_required', label: 'BYOK required' },
+    { id: 'scanning', label: 'Scanning' },
+    { id: 'scan_complete', label: 'Scan complete' },
+    { id: 'installing', label: 'Installing' },
+    { id: 'install_failed', label: 'Install failed' },
+    { id: 'export_ready', label: 'Export ready' },
+    { id: 'installed', label: 'Installed' }
+];
+
+const FORCED_UPDATE_TEST_PROGRESS: Partial<Record<ForcedStoreUpdateStatus, number>> = {
+    checking: 8,
+    downloading: 64,
+    download_failed: 32,
+    scanning: 72,
+    installing: 96
+};
+
+const FORCED_UPDATE_TEST_STATUS_TEXT: Partial<Record<ForcedStoreUpdateStatus, string>> = {
+    checking: 'Checking Orion Store for the newest build.',
+    downloading: 'Downloading OrionStore_9.9.9.apk from the update source.',
+    download_failed: 'Download interrupted. Retry the transfer or save it later.',
+    ready_to_scan_or_install: 'The update package is ready. Choose the next step.',
+    byok_required: 'A VirusTotal API key is required before you can scan.',
+    scanning: 'Scanning the APK before install.',
+    scan_complete: 'The scan completed and the APK is ready to install.',
+    installing: 'Android is taking over the installation flow.',
+    install_failed: 'The installer paused. Export the APK and install it manually.',
+    export_ready: 'The APK is saved to your Downloads folder.',
+    installed: 'The update finished successfully.'
+};
+
+interface ForcedUpdateDevPanelProps {
+    status: ForcedStoreUpdateStatus;
+    progress: number;
+    statusText: string;
+    onStatusChange: (status: ForcedStoreUpdateStatus) => void;
+    onClose: () => void;
+}
+
+const ForcedUpdateDevPanel: React.FC<ForcedUpdateDevPanelProps> = ({ status, progress, statusText, onStatusChange, onClose }) => {
+    const [isExpanded, setIsExpanded] = React.useState(false);
+
+    return (
+        <div className="fsug-dev" role="region" aria-label="Forced update dev panel" data-expanded={isExpanded ? 'true' : 'false'}>
+            <div className="fsug-dev-head">
+                <button
+                    type="button"
+                    className="fsug-dev-toggle"
+                    onClick={() => setIsExpanded((current) => !current)}
+                    aria-expanded={isExpanded}
+                    aria-controls="forced-update-dev-menu"
+                >
+                    <span className="fsug-dev-tag">DEV</span>
+                    <span className="fsug-dev-title">Forced update preview</span>
+                    <span className="fsug-dev-status">
+                        <span className="fsug-dev-status-dot" />
+                        <span className="fsug-dev-status-text">{status}</span>
+                    </span>
+                    <span className="fsug-dev-toggle-icon" aria-hidden="true">
+                        <i className={`fas ${isExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`} />
+                    </span>
+                </button>
+                <button type="button" className="fsug-dev-close" onClick={onClose} aria-label="Close preview">
+                    <i className="fas fa-xmark" aria-hidden="true" />
+                </button>
+            </div>
+            <div id="forced-update-dev-menu" className="fsug-dev-body" aria-hidden={!isExpanded}>
+                <div className="fsug-dev-preview">
+                    <div className="fsug-dev-preview-head">
+                        <span className="fsug-dev-preview-label">Mock preview</span>
+                        <span className="fsug-dev-preview-value">{Math.round(progress)}%</span>
+                    </div>
+                    <div className="fsug-dev-preview-track" aria-hidden="true">
+                        <div className="fsug-dev-preview-fill" style={{ width: `${Math.max(0, Math.min(progress, 100))}%` }} />
+                    </div>
+                    <p className="fsug-dev-preview-copy">{statusText || 'Preview the current forced update state.'}</p>
+                </div>
+                <div className="fsug-dev-grid">
+                    {FORCED_UPDATE_TEST_STATUSES.map((opt) => (
+                        <button
+                            key={opt.id}
+                            type="button"
+                            className={`fsug-dev-chip${opt.id === status ? ' fsug-dev-chip--active' : ''}`}
+                            onClick={() => onStatusChange(opt.id)}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 };

@@ -1,43 +1,45 @@
 import React, { useCallback, useState } from 'react';
 import { shallow } from 'zustand/shallow';
 import AboutView from './AboutView';
-import { AppItem, DevProfile, FAQItem, SocialLinks } from '../types';
+import { AppItem, DevProfile, DonationConfig, FAQItem, SocialLinks } from '../types';
 import { useSettingsStore } from '../store/useAppStore';
 
 interface AboutTabContainerProps {
   devProfile: DevProfile;
   socialLinks: SocialLinks;
+  donation?: DonationConfig;
   faqs: FAQItem[];
   handleProfileClick: (view?: 'profile' | 'badges', badgeIndex?: number) => void;
   setShowFAQ: (show: boolean) => void;
   onOpenAdDonation: () => void;
   currentStoreVersion: string;
   onWipeCache: () => void;
-  onTestStoreUpdate: () => void;
   mirrorSource: string;
   availableUpdates: AppItem[];
   onTriggerUpdate: (app: AppItem) => void;
   onTriggerDebugToast: (type: 'install' | 'error' | 'cleanup') => void;
   onTriggerModernUITutorial: () => void;
   onReloadApps: () => void;
+  onTriggerForcedUpdateTest: () => void;
 }
 
 const AboutTabContainer: React.FC<AboutTabContainerProps> = ({
   devProfile,
   socialLinks,
+  donation,
   faqs,
   handleProfileClick,
   setShowFAQ,
   onOpenAdDonation,
   currentStoreVersion,
   onWipeCache,
-  onTestStoreUpdate,
   mirrorSource,
   availableUpdates,
   onTriggerUpdate,
   onTriggerDebugToast,
   onTriggerModernUITutorial,
-  onReloadApps
+  onReloadApps,
+  onTriggerForcedUpdateTest
 }) => {
   const [isEditingToken, setIsEditingToken] = useState(false);
   const {
@@ -45,36 +47,36 @@ const AboutTabContainer: React.FC<AboutTabContainerProps> = ({
     isContributor,
     adWatchCount,
     isDevUnlocked,
-    useRemoteJson,
     githubToken,
     hiddenTabs,
     autoUpdateEnabled,
+    useRemoteJson,
     setDevUnlocked,
     toggleHiddenTab,
     toggleAutoUpdate,
-    setUseRemoteJson,
     setGithubToken,
+    setUseRemoteJson,
     unlockedBadges
   } = useSettingsStore((state) => ({
     isLegend: state.isLegend,
     isContributor: state.isContributor,
     adWatchCount: state.adWatchCount,
     isDevUnlocked: state.isDevUnlocked,
-    useRemoteJson: state.useRemoteJson,
     githubToken: state.githubToken,
     hiddenTabs: state.hiddenTabs,
     autoUpdateEnabled: state.autoUpdateEnabled,
+    useRemoteJson: state.useRemoteJson,
     setDevUnlocked: state.setDevUnlocked,
     toggleHiddenTab: state.toggleHiddenTab,
     toggleAutoUpdate: state.toggleAutoUpdate,
-    setUseRemoteJson: state.setUseRemoteJson,
     setGithubToken: state.setGithubToken,
+    setUseRemoteJson: state.setUseRemoteJson,
     unlockedBadges: state.unlockedBadges
   }), shallow);
 
-  const handleToggleSourceMode = useCallback(() => {
+  const toggleSourceMode = useCallback(() => {
     setUseRemoteJson(!useRemoteJson);
-  }, [setUseRemoteJson, useRemoteJson]);
+  }, [useRemoteJson, setUseRemoteJson]);
 
   const handleSaveGithubToken = useCallback((token: string) => {
     setGithubToken(token);
@@ -86,6 +88,7 @@ const AboutTabContainer: React.FC<AboutTabContainerProps> = ({
     <AboutView
       devProfile={devProfile}
       socialLinks={socialLinks}
+      donation={donation}
       faqs={faqs}
       isLegend={isLegend}
       isContributor={isContributor}
@@ -94,17 +97,16 @@ const AboutTabContainer: React.FC<AboutTabContainerProps> = ({
       setShowFAQ={setShowFAQ}
       onOpenAdDonation={onOpenAdDonation}
       isDevUnlocked={isDevUnlocked}
-      useRemoteJson={useRemoteJson}
-      toggleSourceMode={handleToggleSourceMode}
       githubToken={githubToken}
       isEditingToken={isEditingToken}
       setIsEditingToken={setIsEditingToken}
       saveGithubToken={handleSaveGithubToken}
       currentStoreVersion={currentStoreVersion}
       onWipeCache={onWipeCache}
-      onTestStoreUpdate={onTestStoreUpdate}
       mirrorSource={mirrorSource}
       hiddenTabs={hiddenTabs}
+      useRemoteJson={useRemoteJson}
+      toggleSourceMode={toggleSourceMode}
       toggleHiddenTab={toggleHiddenTab}
       autoUpdateEnabled={autoUpdateEnabled}
       toggleAutoUpdate={toggleAutoUpdate}
@@ -114,6 +116,7 @@ const AboutTabContainer: React.FC<AboutTabContainerProps> = ({
       setDevUnlocked={setDevUnlocked}
       onTriggerModernUITutorial={onTriggerModernUITutorial}
       unlockedBadges={unlockedBadges}
+      onTriggerForcedUpdateTest={onTriggerForcedUpdateTest}
     />
   );
 };

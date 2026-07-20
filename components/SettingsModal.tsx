@@ -1,9 +1,12 @@
 import React, { useState, useEffect, memo, useRef, lazy, Suspense } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useSettingsStore, useDataStore } from '../store/useAppStore';
+import { useDevConfigStore } from '../store/useDevConfigStore';
 import { AppItem } from '../types';
 import AppTracker from '../plugins/AppTracker';
 import { APP_FONT_OPTIONS, getAppFontDefinition } from '../constants';
+import { getPullToRefreshCharacter, PixelCharacterFace } from './PullToRefreshCharacter';
+import PullToRefreshCharacterPickerSheet from './PullToRefreshCharacterPickerSheet';
 
 // Lazy load heavy power modals
 const ShizukuPowerModal = lazy(() => import('./ShizukuPowerModal'));
@@ -19,6 +22,7 @@ interface SettingsModalProps {
     installingId: string | null;
     onUpdateAll: () => void;
     onNavigateToApp: (appId: string) => void;
+    onReloadDevConfig: () => void;
     initialMenu?: SubMenu;
 }
 
@@ -449,6 +453,96 @@ const IdentityPanel: React.FC<IdentityPanelProps> = memo(({ handleExportIdentity
     );
 });
 
+const formatDevConfigStatus = (status: string) => {
+    switch (status) {
+        case 'loading':
+            return 'loading';
+        case 'success':
+            return 'loaded';
+        case 'error':
+            return 'failed';
+        default:
+            return 'idle';
+    }
+};
+
+const DevConfigSourceEditor: React.FC<{ onReload: () => void }> = ({ onReload }) => {
+    const enabled = useDevConfigStore((s) => s.enabled);
+    const url = useDevConfigStore((s) => s.url);
+    const status = useDevConfigStore((s) => s.status);
+    const lastError = useDevConfigStore((s) => s.lastError);
+    const lastLoadedUrl = useDevConfigStore((s) => s.lastLoadedUrl);
+    const setEnabled = useDevConfigStore((s) => s.setEnabled);
+    const setUrl = useDevConfigStore((s) => s.setUrl);
+    const reset = useDevConfigStore((s) => s.reset);
+    const trimmedUrl = url.trim();
+    const canReload = enabled && trimmedUrl.length > 0 && status !== 'loading';
+
+    return (
+        <SettingsSection eyebrow="Developer" title="Developer Config Source">
+            <SettingsRow
+                icon="fa-flask"
+                accentClass="bg-yellow-500/10 text-yellow-400"
+                title="Enable Dev Config"
+                desc="Load an isolated config.json URL instead of the production config"
+                action={<Toggle checked={enabled} onChange={() => setEnabled(!enabled)} />}
+            />
+            <SettingsCard className="flex flex-col gap-4">
+                <label className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-theme-sub">Dev config URL</span>
+                    <input
+                        type="url"
+                        value={url}
+                        placeholder="https://example.com/config.json"
+                        onChange={(e) => setUrl(e.target.value)}
+                        className="h-11 rounded-xl border border-theme-border bg-theme-input px-3.5 text-sm text-theme-text placeholder:text-theme-sub/50 focus:border-primary focus:outline-none"
+                    />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                    <button
+                        type="button"
+                        onClick={onReload}
+                        disabled={!canReload}
+                        className="rounded-xl px-4 py-2.5 text-xs font-bold text-white bg-primary transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {status === 'loading' ? 'Reloading...' : 'Reload Dev Config'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            reset();
+                            onReload();
+                        }}
+                        className="rounded-xl px-4 py-2.5 text-xs font-bold text-theme-sub orion-shadow-surface bg-theme-element transition-colors hover:bg-theme-hover active:scale-[0.99]"
+                    >
+                        Disable and Clear
+                    </button>
+                </div>
+                <p className="text-[11px] font-bold leading-relaxed text-theme-sub">
+                    {enabled
+                        ? `Status: ${formatDevConfigStatus(status)}`
+                        : 'Status: production mode'}
+                </p>
+                {enabled && !trimmedUrl && (
+                    <p className="text-[11px] font-bold text-yellow-400">
+                        Enter a config URL to fully isolate testing from production config.
+                    </p>
+                )}
+                {lastLoadedUrl && (
+                    <p className="break-all text-[11px] font-mono text-theme-sub">
+                        Last loaded: {lastLoadedUrl}
+                    </p>
+                )}
+                {lastError && (
+                    <p className="text-[11px] font-bold text-red-400">
+                        {lastError}
+                    </p>
+                )}
+            </SettingsCard>
+        </SettingsSection>
+    );
+};
+
 const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose,
     allApps,
@@ -459,6 +553,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     installingId,
     onUpdateAll,
     onNavigateToApp,
+    onReloadDevConfig,
     initialMenu = 'none'
 }) => {
     const settings = useSettingsStore();
@@ -477,6 +572,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [activeModal, setActiveModal] = useState<'none' | 'guardian' | 'sentinel'>('none');
     const [isInstallerPickerOpen, setIsInstallerPickerOpen] = useState(false);
     const [installerPickerStep, setInstallerPickerStep] = useState<'mode' | 'specific'>('mode');
+    const [isRefreshCharacterPickerOpen, setIsRefreshCharacterPickerOpen] = useState(false);
     // Icons stored in a Map ref to avoid re-rendering the whole list when a single icon arrives.
     // State is only used to trigger a re-render; the Map keeps lookups cheap.
     const installerIconsRef = useRef<Map<string, string>>(new Map());
@@ -486,6 +582,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const activeDlCount = Object.keys(data.activeDownloads).length;
     const readyCount = Object.keys(data.readyToInstall).length;
     const selectedFont = getAppFontDefinition(settings.appFont);
+    const selectedRefreshCharacter = getPullToRefreshCharacter(settings.pullToRefreshCharacter);
     const menuTitleMap: Record<SubMenu, string> = {
         none: 'Settings',
         identity: 'Identity',
@@ -505,7 +602,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const menuItems = [
         { id: 'identity', icon: 'fa-id-card', color: 'text-pink-500', bg: 'bg-pink-500/10', title: 'Backup & Restore', desc: 'Protect progress and profile data' },
         { id: 'network', icon: 'fa-wifi', color: 'text-blue-500', bg: 'bg-blue-500/10', title: 'Network & Updates', desc: 'Download rules and update behavior' },
-        { id: 'installer', icon: 'fa-box-open', color: 'text-emerald-500', bg: 'bg-emerald-500/10', title: 'Orion Xtra', desc: 'Guardian, Sentinel, Shizuku, installers' },
+        { id: 'installer', icon: 'fa-box-open', color: 'text-emerald-500', bg: 'bg-emerald-500/10', title: 'Orion Xtra', desc: 'Guardian, Sentinel, pull refresh' },
         { id: 'storage', icon: 'fa-broom', color: 'text-orange-500', bg: 'bg-orange-500/10', title: 'Storage & Janitor', desc: 'Cleanup behavior and saved space' },
         { id: 'queue', icon: 'fa-download', color: 'text-indigo-500', bg: 'bg-indigo-500/10', title: 'Download Queue', desc: `${activeDlCount} active, ${readyCount} ready, ${pendingUpdatesCount} updates`, badge: totalQueueItems },
         { id: 'visuals', icon: 'fa-palette', color: 'text-purple-500', bg: 'bg-purple-500/10', title: 'Visuals & Theme', desc: 'Fonts, motion, glass, density' },
@@ -588,6 +685,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 disableAnimations: state.disableAnimations,
                 compactMode: state.compactMode,
                 highRefreshRate: state.highRefreshRate,
+                pullToRefreshCharacter: state.pullToRefreshCharacter,
                 hapticEnabled: state.hapticEnabled,
                 glassEffect: state.glassEffect,
                 // Network / installer
@@ -686,6 +784,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     disableAnimations: d.disableAnimations ?? currentState.disableAnimations,
                     compactMode: d.compactMode ?? currentState.compactMode,
                     highRefreshRate: d.highRefreshRate ?? currentState.highRefreshRate,
+                    pullToRefreshCharacter: d.pullToRefreshCharacter ?? currentState.pullToRefreshCharacter,
                     hapticEnabled: d.hapticEnabled ?? currentState.hapticEnabled,
                     glassEffect: d.glassEffect ?? currentState.glassEffect,
                     // Network/installer
@@ -779,6 +878,35 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         </SettingsSection>
     );
 
+    const renderRefreshCharacterSettings = () => (
+        <SettingsSection
+            eyebrow="Pull to Refresh"
+            title="Refresh Character"
+        >
+            <SettingsRow
+                icon="fa-wand-magic-sparkles"
+                accentClass="bg-fuchsia-500/10 text-fuchsia-400"
+                title="Pull to Refresh Character"
+                desc={selectedRefreshCharacter.name}
+                onClick={() => setIsRefreshCharacterPickerOpen(true)}
+                meta={
+                    <div className="flex items-center gap-2">
+                        <div
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-theme-border bg-card"
+                            style={{ backgroundImage: selectedRefreshCharacter.gradient }}
+                        >
+                            <PixelCharacterFace
+                                character={selectedRefreshCharacter}
+                                sizeClassName="h-7 w-7"
+                            />
+                        </div>
+                        <i className="fas fa-chevron-right text-xs text-theme-sub opacity-60"></i>
+                    </div>
+                }
+            />
+        </SettingsSection>
+    );
+
     const renderInstallerSettings = () => (
         <div className="space-y-4">
             <SettingsSection
@@ -800,6 +928,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() => setActiveModal('sentinel')}
                 />
             </SettingsSection>
+
+            {renderRefreshCharacterSettings()}
 
             <SettingsSection
                 eyebrow="Install Behavior"
@@ -953,7 +1083,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 icon="fa-compress"
                 accentClass="bg-lime-500/10 text-lime-300"
                 title="Compact Mode"
-                desc="Tighter spacing across the UI"
+                desc="Smaller cards with denser spacing"
                 action={<Toggle checked={settings.compactMode} onChange={settings.toggleCompactMode} />}
             />
         </SettingsSection>
@@ -1184,12 +1314,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         return (
                             <div key={appId} className="rounded-[1.6rem] bg-primary/15 px-4 py-4">
                                 <div className="flex items-center justify-between gap-4">
-                                    <div>
-                                        <div className="text-sm font-black text-primary">{app?.name || appId}</div>
+                                    <button
+                                        type="button"
+                                        onClick={() => app && onNavigateToApp(app.id)}
+                                        className="text-left min-w-0 flex-1 hover:opacity-80 transition-opacity active:scale-[0.98]"
+                                    >
+                                        <div className="text-sm font-black text-primary truncate">{app?.name || appId}</div>
                                         <div className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-primary/70">
                                             Ready to install
                                         </div>
-                                    </div>
+                                    </button>
                                     {isThisInstalling ? (
                                         <div className="flex items-center gap-2 px-3 py-2">
                                             <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
@@ -1215,9 +1349,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             <div key={appId} className="rounded-[1.6rem] bg-theme-element px-4 py-4">
                                 <div className="flex flex-col gap-3">
                                     <div className="flex items-center justify-between gap-3">
-                                        <span className="max-w-[190px] truncate text-sm font-black text-theme-text">
-                                            {app?.name || appId}
-                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => app && onNavigateToApp(app.id)}
+                                            className="max-w-[190px] text-left hover:opacity-80 transition-opacity active:scale-[0.98]"
+                                        >
+                                            <span className="block truncate text-sm font-black text-theme-text">
+                                                {app?.name || appId}
+                                            </span>
+                                        </button>
                                         <div className="flex items-center gap-2">
                                             <span className="text-[10px] font-black text-primary">{data.downloadProgress[appId] || 0}%</span>
                                             <button
@@ -1242,10 +1382,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     {availableUpdates.filter(u => !data.activeDownloads[u.id] && !data.readyToInstall[u.id]).map(app => (
                         <div key={app.id} className="rounded-[1.6rem] bg-theme-element px-4 py-4">
                             <div className="flex items-center justify-between gap-4">
-                                <div>
-                                    <div className="text-sm font-black text-theme-text">{app.name}</div>
+                                <button
+                                    type="button"
+                                    onClick={() => onNavigateToApp(app.id)}
+                                    className="text-left min-w-0 flex-1 hover:opacity-80 transition-opacity active:scale-[0.98]"
+                                >
+                                    <div className="text-sm font-black text-theme-text truncate">{app.name}</div>
                                     <div className="mt-1 text-[10px] text-theme-sub">Pending update v{app.latestVersion}</div>
-                                </div>
+                                </button>
                                 <button
                                     type="button"
                                     onClick={() => onTriggerUpdate(app)}
@@ -1286,20 +1430,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 desc="Work on bundles and data locally"
                 action={<Toggle checked={settings.localMaintenanceMode} onChange={settings.toggleLocalMaintenance} />}
             />
-            <SettingsRow
-                icon="fa-hourglass-half"
-                accentClass="bg-orange-500/10 text-orange-400"
-                title="Simulate Network Delay"
-                desc="Inject latency into network calls"
-                action={<Toggle checked={false} onChange={() => { }} />}
-            />
-            <SettingsRow
-                icon="fa-plug-circle-xmark"
-                accentClass="bg-red-500/10 text-red-400"
-                title="Mock Remote Failure"
-                desc="Force remote endpoints to fail"
-                action={<Toggle checked={false} onChange={() => { }} />}
-            />
+            <DevConfigSourceEditor onReload={onReloadDevConfig} />
             <button
                 type="button"
                 onClick={() => {
@@ -1361,7 +1492,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         {activeMenu !== 'none' && (
                             <button
                                 type="button"
-                                onClick={() => { setActiveMenu('none'); setImportStatus({ msg: '', type: 'neutral' }); setShizukuError(null); setIsFontPickerOpen(false); closeInstallerPicker(); }}
+                                onClick={() => {
+                                    setActiveMenu('none');
+                                    setImportStatus({ msg: '', type: 'neutral' });
+                                    setShizukuError(null);
+                                    setIsFontPickerOpen(false);
+                                    setIsRefreshCharacterPickerOpen(false);
+                                    closeInstallerPicker();
+                                }}
                                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-theme-element text-theme-text transition-colors hover:bg-theme-hover"
                             >
                                 <i className="fas fa-arrow-left"></i>
@@ -1433,6 +1571,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             {isInstallerPickerOpen && renderInstallerPicker()}
             {isFontPickerOpen && renderFontPicker()}
+            {isRefreshCharacterPickerOpen && (
+                <PullToRefreshCharacterPickerSheet
+                    selectedCharacter={settings.pullToRefreshCharacter}
+                    onClose={() => setIsRefreshCharacterPickerOpen(false)}
+                    onSelect={(character) => {
+                        settings.setPullToRefreshCharacter(character);
+                        setIsRefreshCharacterPickerOpen(false);
+                    }}
+                />
+            )}
             <Suspense fallback={null}>
                 {activeModal === 'guardian' && <ShizukuPowerModal onClose={() => setActiveModal('none')} />}
                 {activeModal === 'sentinel' && <SentinelModal onClose={() => setActiveModal('none')} />}

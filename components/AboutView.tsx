@@ -1,676 +1,734 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useCallback, useEffect, lazy, Suspense, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { DevProfile, SocialLinks, FAQItem, AppItem, Platform } from '../types';
+import { AppItem, DevProfile, DonationConfig, FAQItem, SocialLinks } from '../types';
 import AppTracker from '../plugins/AppTracker';
-import { useSettingsStore } from '../store/useAppStore'; 
-import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics'; 
+import { useSettingsStore } from '../store/useAppStore';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
+import DonationSheet from './DonationSheet';
 
 // Lazy load the new components
 const LeaderboardModal = lazy(() => import('./LeaderboardModal'));
 const LeaderboardSubmitModal = lazy(() => import('./LeaderboardSubmitModal'));
 
 interface AboutViewProps {
-  devProfile: DevProfile;
-  socialLinks: SocialLinks;
-  faqs: FAQItem[];
-  isLegend: boolean;
-  isContributor: boolean; 
-  adWatchCount: number;
-  handleProfileClick: (view?: 'profile' | 'badges', badgeIndex?: number) => void;
-  setShowFAQ: (show: boolean) => void;
-  onOpenAdDonation: () => void; 
-  isDevUnlocked: boolean;
-  useRemoteJson: boolean;
-  toggleSourceMode: () => void;
-  githubToken: string;
-  isEditingToken: boolean;
-  setIsEditingToken: (isEditing: boolean) => void;
-  saveGithubToken: (token: string) => void;
-  currentStoreVersion: string;
-  onWipeCache: () => void;
-  onTestStoreUpdate: () => void;
-  mirrorSource: string;
-  hiddenTabs: string[];
-  toggleHiddenTab: (tab: string) => void;
-  autoUpdateEnabled: boolean;
-  toggleAutoUpdate: () => void;
-  availableUpdates: AppItem[];
-  onTriggerUpdate: (app: AppItem) => void;
-  onTriggerDebugToast: (type: 'install' | 'error' | 'cleanup') => void;
-  setDevUnlocked: (isUnlocked: boolean) => void;
-  onTriggerModernUITutorial: () => void;
-  unlockedBadges: string[];
+    devProfile: DevProfile;
+    socialLinks: SocialLinks;
+    donation?: DonationConfig;
+    faqs: FAQItem[];
+    isLegend: boolean;
+    isContributor: boolean;
+    adWatchCount: number;
+    handleProfileClick: (view?: 'profile' | 'badges', badgeIndex?: number) => void;
+    setShowFAQ: (show: boolean) => void;
+    onOpenAdDonation: () => void;
+    isDevUnlocked: boolean;
+    useRemoteJson: boolean;
+    toggleSourceMode: () => void;
+    githubToken: string;
+    isEditingToken: boolean;
+    setIsEditingToken: (isEditing: boolean) => void;
+    saveGithubToken: (token: string) => void;
+    currentStoreVersion: string;
+    onWipeCache: () => void;
+    mirrorSource: string;
+    hiddenTabs: string[];
+    toggleHiddenTab: (tab: string) => void;
+    autoUpdateEnabled: boolean;
+    toggleAutoUpdate: () => void;
+    availableUpdates: AppItem[];
+    onTriggerUpdate: (app: AppItem) => void;
+    onTriggerDebugToast: (type: 'install' | 'error' | 'cleanup') => void;
+    setDevUnlocked: (isUnlocked: boolean) => void;
+    onTriggerModernUITutorial: () => void;
+    onTriggerForcedUpdateTest: () => void;
+    unlockedBadges: string[];
 }
 
 const WORKER_URL = "https://orion-relay.sarthaksinha5088.workers.dev/";
 
 const SwordIcon = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 24 24" 
-    fill="currentColor" 
-    className={className}
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path d="M12 2L14.5 16H9.5L12 2Z" />
-    <path d="M7 16H17L16.5 18H7.5L7 16Z" />
-    <rect x="11" y="18" width="2" height="3" />
-    <circle cx="12" cy="22" r="1.5" />
-  </svg>
+    <svg
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <path d="M12 2L14.5 16H9.5L12 2Z" />
+        <path d="M7 16H17L16.5 18H7.5L7 16Z" />
+        <rect x="11" y="18" width="2" height="3" />
+        <circle cx="12" cy="22" r="1.5" />
+    </svg>
 );
 
 const AboutView: React.FC<AboutViewProps> = ({
-  devProfile,
-  socialLinks,
-  isLegend,
-  adWatchCount,
-  handleProfileClick,
-  setShowFAQ,
-  onOpenAdDonation,
-  isDevUnlocked,
-  useRemoteJson,
-  toggleSourceMode,
-  githubToken,
-  isEditingToken,
-  setIsEditingToken,
-  saveGithubToken,
-  currentStoreVersion,
-  onWipeCache,
-  onTestStoreUpdate,
-  mirrorSource,
-  onTriggerDebugToast,
-  setDevUnlocked,
-  onTriggerModernUITutorial,
-  unlockedBadges
+    devProfile,
+    socialLinks,
+    donation,
+    isLegend,
+    adWatchCount,
+    handleProfileClick,
+    setShowFAQ,
+    onOpenAdDonation,
+    isDevUnlocked,
+    useRemoteJson,
+    toggleSourceMode,
+    githubToken,
+    isEditingToken,
+    setIsEditingToken,
+    saveGithubToken,
+    currentStoreVersion,
+    onWipeCache,
+    mirrorSource,
+    onTriggerDebugToast,
+    setDevUnlocked,
+    onTriggerModernUITutorial,
+    onTriggerForcedUpdateTest,
+    unlockedBadges
 }) => {
-  const hapticEnabled = useSettingsStore((state) => state.hapticEnabled); 
-  const userProfile = useSettingsStore((state) => state.userProfile);
-  const coinFlipHintCount = useSettingsStore((state) => state.coinFlipHintCount);
-  const incrementCoinFlipHint = useSettingsStore((state) => state.incrementCoinFlipHint);
-  
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [showSubmitRank, setShowSubmitRank] = useState(false);
-  const [isAvatarFlipped, setIsAvatarFlipped] = useState(false);
+    const hapticEnabled = useSettingsStore((state) => state.hapticEnabled);
+    const userProfile = useSettingsStore((state) => state.userProfile);
+    const coinFlipHintCount = useSettingsStore((state) => state.coinFlipHintCount);
+    const incrementCoinFlipHint = useSettingsStore((state) => state.incrementCoinFlipHint);
 
-  // --- AUTO FLIP BACK LOGIC (10 seconds) ---
-  useEffect(() => {
-    let timer: any;
-    if (isAvatarFlipped) {
-      timer = setTimeout(() => {
-        setIsAvatarFlipped(false);
-      }, 10000);
-    }
-    return () => clearTimeout(timer);
-  }, [isAvatarFlipped]);
+    const [showLeaderboard, setShowLeaderboard] = useState(false);
+    const [showSubmitRank, setShowSubmitRank] = useState(false);
+    const [isAvatarFlipped, setIsAvatarFlipped] = useState(false);
+    const [showDonationSheet, setShowDonationSheet] = useState(false);
 
-  // --- AUTO-FLIP HINT ON ABOUT TAB VISIT (max 3 times ever) ---
-  useEffect(() => {
-    if (coinFlipHintCount >= 3) return;
-    // Small delay so the tab has fully rendered before flipping
-    const flipTimer = setTimeout(() => {
-      setIsAvatarFlipped(true);
-      incrementCoinFlipHint();
-    }, 1200);
-    return () => clearTimeout(flipTimer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run only once per mount
+    // --- AUTO FLIP BACK LOGIC (10 seconds) ---
+    useEffect(() => {
+        let timer: any;
+        if (isAvatarFlipped) {
+            timer = setTimeout(() => {
+                setIsAvatarFlipped(false);
+            }, 10000);
+        }
+        return () => clearTimeout(timer);
+    }, [isAvatarFlipped]);
 
-  // Badge Logic
-  const hasBackerBadge = adWatchCount >= 3;
-  const hasSupernovaBadge = adWatchCount >= 6;
-  const hasVoidBadge = adWatchCount >= 12;
-  const hasCosmicBadge = adWatchCount >= 25;
+    // --- AUTO-FLIP HINT ON ABOUT TAB VISIT (max 3 times ever) ---
+    useEffect(() => {
+        if (coinFlipHintCount >= 3) return;
+        // Small delay so the tab has fully rendered before flipping
+        const flipTimer = setTimeout(() => {
+            setIsAvatarFlipped(true);
+            incrementCoinFlipHint();
+        }, 1200);
+        return () => clearTimeout(flipTimer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // run only once per mount
 
-  const getContributionLabel = () => {
-      if (hasCosmicBadge) return "Rank: Cosmic Guardian";
-      if (hasVoidBadge) return `Rank: Void Walker`;
-      if (hasSupernovaBadge) return `Rank: Supernova`;
-      if (hasBackerBadge) return `Rank: Backer`;
-      return `Start your journey`;
-  };
+    // Badge Logic
+    const hasBackerBadge = adWatchCount >= 3;
+    const hasSupernovaBadge = adWatchCount >= 6;
+    const hasVoidBadge = adWatchCount >= 12;
+    const hasCosmicBadge = adWatchCount >= 25;
 
-  // --- DEV TOOLS STATE ---
-  const [rateLimit, setRateLimit] = useState<{ limit: number, remaining: number, reset: number } | null>(null);
-  const [pkgQuery, setPkgQuery] = useState('');
-  const [pkgResult, setPkgResult] = useState<string>('');
-  const [showJson, setShowJson] = useState(false);
-  const [deviceInfo, setDeviceInfo] = useState<any>(null);
-  const showcasedBadges = useSettingsStore((s) => s.showcasedBadges);
-  const showcasedBadgeSlots = showcasedBadges.slice(0, 3);
-  const canSwapShowcasedBadges = showcasedBadgeSlots.length === 3;
-  
-  // --- AUTO FLIP BACK LOGIC ---
-  useEffect(() => {
-      let timer: any;
-      if (isAvatarFlipped) {
-          timer = setTimeout(() => {
-              setIsAvatarFlipped(false);
-          }, 6000);
-      }
-      return () => clearTimeout(timer);
-  }, [isAvatarFlipped]);
+    const getContributionLabel = () => {
+        if (hasCosmicBadge) return "Rank: Cosmic Guardian";
+        if (hasVoidBadge) return `Rank: Void Walker`;
+        if (hasSupernovaBadge) return `Rank: Supernova`;
+        if (hasBackerBadge) return `Rank: Backer`;
+        return `Start your journey`;
+    };
 
-  // --- DEV TOOLS LOGIC ---
-  useEffect(() => {
-      if (isDevUnlocked) {
-          fetchRateLimit();
-          gatherDeviceInfo();
-      }
-  }, [isDevUnlocked, githubToken]);
+    // --- DEV TOOLS STATE ---
+    const [rateLimit, setRateLimit] = useState<{ limit: number, remaining: number, reset: number } | null>(null);
+    const [pkgQuery, setPkgQuery] = useState('');
+    const [pkgResult, setPkgResult] = useState<string>('');
+    const [showJson, setShowJson] = useState(false);
+    const [deviceInfo, setDeviceInfo] = useState<any>(null);
+    const [showToken, setShowToken] = useState(false);
+    const showcasedBadges = useSettingsStore((s) => s.showcasedBadges);
+    const showcasedBadgeSlots = showcasedBadges.slice(0, 3);
+    const canSwapShowcasedBadges = showcasedBadgeSlots.length === 3;
+    const hasDonationOptions = Boolean(donation?.kofiUrl || donation?.upiId || donation?.paypalUrl);
 
-  const fetchRateLimit = async () => {
-      try {
-          const headers: HeadersInit = {};
-          if (githubToken) headers['Authorization'] = `token ${githubToken}`;
-          
-          const res = await fetch('https://api.github.com/rate_limit', { headers });
-          if (res.ok) {
-              const data = await res.json();
-              setRateLimit(data.resources.core);
-          }
-      } catch (e) {
-          console.error("Rate limit check failed", e);
-      }
-  };
+    // --- AUTO FLIP BACK LOGIC ---
+    useEffect(() => {
+        let timer: any;
+        if (isAvatarFlipped) {
+            timer = setTimeout(() => {
+                setIsAvatarFlipped(false);
+            }, 6000);
+        }
+        return () => clearTimeout(timer);
+    }, [isAvatarFlipped]);
 
-  const gatherDeviceInfo = async () => {
-      const info = {
-          userAgent: navigator.userAgent,
-          platform: Capacitor.getPlatform(),
-          screen: `${window.screen.width}x${window.screen.height}`,
-          pixelRatio: window.devicePixelRatio,
-          touch: navigator.maxTouchPoints > 0 ? 'Yes' : 'No',
-          language: navigator.language
-      };
-      setDeviceInfo(info);
-  };
+    // --- DEV TOOLS LOGIC ---
+    useEffect(() => {
+        if (isDevUnlocked) {
+            fetchRateLimit();
+            gatherDeviceInfo();
+        }
+    }, [isDevUnlocked, githubToken]);
 
-  const checkPackage = async () => {
-      if (!pkgQuery) return;
-      setPkgResult("Checking...");
-      try {
-          if (Capacitor.isNativePlatform()) {
-              const res = await AppTracker.getAppInfo({ packageName: pkgQuery });
-              setPkgResult(JSON.stringify(res, null, 2));
-          } else {
-              setPkgResult("Native Plugin Unavailable (Web Mode)");
-          }
-      } catch (e: any) {
-          setPkgResult(`Error: ${e.message}`);
-      }
-  };
+    const fetchRateLimit = async () => {
+        try {
+            const headers: HeadersInit = {};
+            if (githubToken) headers['Authorization'] = `token ${githubToken}`;
 
-  const getCachedJson = () => {
-      try {
-          const cached = localStorage.getItem('orion_cached_apps_v2');
-          return cached ? JSON.stringify(JSON.parse(cached), null, 2) : "Cache Empty";
-      } catch { return "Error parsing cache"; }
-  };
+            const res = await fetch('https://api.github.com/rate_limit', { headers });
+            if (res.ok) {
+                const data = await res.json();
+                setRateLimit(data.resources.core);
+            }
+        } catch (e) {
+            console.error("Rate limit check failed", e);
+        }
+    };
 
-  const formatResetTime = (timestamp: number) => {
-      const date = new Date(timestamp * 1000);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+    const gatherDeviceInfo = async () => {
+        const info = {
+            userAgent: navigator.userAgent,
+            platform: Capacitor.getPlatform(),
+            screen: `${window.screen.width}x${window.screen.height}`,
+            pixelRatio: window.devicePixelRatio,
+            touch: navigator.maxTouchPoints > 0 ? 'Yes' : 'No',
+            language: navigator.language
+        };
+        setDeviceInfo(info);
+    };
 
-  return (
-    <div className="p-4 flex flex-col items-center text-center animate-fade-in pt-8">
-        
-        {/* FLIP AVATAR CONTAINER */}
-        <div 
-            className="w-32 h-32 mb-4 relative cursor-pointer perspective-1000"
-            onClick={() => {
-                if (isAvatarFlipped) {
-                    // Always open the leaderboard — it handles profile creation internally
-                    setShowLeaderboard(true);
-                    if(hapticEnabled) Haptics.impact({ style: ImpactStyle.Medium });
-                } else {
-                    // First click — always flip the coin
-                    setIsAvatarFlipped(true);
-                    if(hapticEnabled) Haptics.selection();
-                }
-            }}
-        >
-            <div className={`relative w-full h-full duration-500 preserve-3d transition-transform ${isAvatarFlipped ? 'rotate-y-180' : ''}`}>
-                
-                {/* FRONT: AVATAR - 'R' Coin */}
-                <div className="absolute inset-0 backface-hidden w-full h-full rounded-full p-1 bg-gradient-to-br from-acid to-primary animate-pulse-slow">
-                    <div className="w-full h-full rounded-full bg-card border-4 border-card flex items-center justify-center relative overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black opacity-90"></div>
-                        <div className="absolute w-full h-full bg-gradient-to-tr from-acid/20 to-neon/20 animate-pulse"></div>
-                        <span className="relative text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-acid via-primary to-neon tracking-tighter filter drop-shadow-lg">
-                            R
-                        </span>
-                    </div>
-                    {/* Small hint icon */}
-                    <div className="absolute bottom-0 right-0 w-8 h-8 bg-surface rounded-full flex items-center justify-center border-2 border-theme-border shadow-md z-20 text-green-500">
-                        <i className="fas fa-trophy text-xs"></i>
-                    </div>
-                </div>
+    const checkPackage = async () => {
+        if (!pkgQuery) return;
+        setPkgResult("Checking...");
+        try {
+            if (Capacitor.isNativePlatform()) {
+                const res = await AppTracker.getAppInfo({ packageName: pkgQuery });
+                setPkgResult(JSON.stringify(res, null, 2));
+            } else {
+                setPkgResult("Native Plugin Unavailable (Web Mode)");
+            }
+        } catch (e: any) {
+            setPkgResult(`Error: ${e.message}`);
+        }
+    };
 
-                {/* BACK: HALL OF FAME COIN */}
-                <div className="absolute inset-0 backface-hidden rotate-y-180 w-full h-full rounded-full bg-gradient-to-br from-green-400 to-emerald-600 border-4 border-green-300 shadow-xl flex flex-col items-center justify-center text-white p-2">
-                    {/* Pattern Texture */}
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 rounded-full"></div>
-                    <i className="fas fa-trophy text-4xl mb-1 drop-shadow-md animate-bounce relative z-10 text-yellow-300"></i>
-                    <span className="text-[9px] font-black uppercase tracking-tighter leading-tight drop-shadow-md relative z-10">Hall of<br/>Fame</span>
-                </div>
+    const getCachedJson = () => {
+        try {
+            const cached = localStorage.getItem('orion_cached_apps_v2');
+            return cached ? JSON.stringify(JSON.parse(cached), null, 2) : "Cache Empty";
+        } catch { return "Error parsing cache"; }
+    };
 
-            </div>
-        </div>
-        
-        <div className="relative z-0 flex flex-col items-center w-full">
-            <h2 className="text-3xl font-black text-theme-text mb-1">{devProfile.name}</h2>
-            
-            {/* Badge Showcase (Max 3) */}
-            <div className="flex flex-wrap justify-center gap-2 mb-4 animate-fade-in max-w-sm">
-                {showcasedBadgeSlots.map((badgeId, index) => {
-                    switch (badgeId) {
-                        case 'Legend': return (
-                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
-                                <i className="fas fa-crown text-[10px] animate-bounce"></i>
-                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
-                            </button>
-                        );
-                        case 'Guardian': return (
-                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-red-500/10 via-orange-500/10 to-red-500/10 dark:from-red-500/20 dark:via-orange-500/20 dark:to-red-500/20 border border-red-500/30 dark:border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)] dark:shadow-[0_0_15px_rgba(239,68,68,0.4)] backdrop-blur-md animate-pulse ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
-                                <SwordIcon className="w-3 h-3 text-red-600 dark:text-red-400" />
-                                <span className="text-[9px] font-black tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600 dark:from-red-400 dark:to-orange-400">{badgeId}</span>
-                            </button>
-                        );
-                        case 'Void Walker': return (
-                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
-                                <i className="fas fa-dragon text-[10px]"></i>
-                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
-                            </button>
-                        );
-                        case 'Supernova': return (
-                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-pink-500/10 to-rose-500/10 border border-pink-500/30 text-pink-600 dark:text-pink-400 shadow-[0_0_15px_rgba(236,72,153,0.2)] backdrop-blur-sm animate-pulse ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
-                                <i className="fas fa-meteor text-[10px]"></i>
-                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
-                            </button>
-                        );
-                        case 'Backer': return (
-                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
-                                <i className="fas fa-gem text-[10px] animate-pulse"></i>
-                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
-                            </button>
-                        );
-                        case 'Dev Mode': return (
-                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-fuchsia-500/10 to-pink-500/10 border border-fuchsia-500/30 text-fuchsia-600 dark:text-fuchsia-400 shadow-[0_0_10px_rgba(217,70,239,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
-                                <i className="fas fa-terminal text-[10px]"></i>
-                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
-                            </button>
-                        );
-                        case 'Dino Rookie': return (
-                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
-                                <i className="fas fa-egg text-[10px]"></i>
-                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
-                            </button>
-                        );
-                        case 'Dino Master': return (
-                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
-                                <i className="fas fa-bolt text-[10px]"></i>
-                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
-                            </button>
-                        );
-                        case 'Dino Legend': return (
-                            <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary shadow-[0_0_15px_rgba(99,102,241,0.2)] backdrop-blur-md animate-pulse ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
-                                <i className="fas fa-fire text-[10px]"></i>
-                                <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
-                            </button>
-                        );
-                        default: return null;
-                    }
-                })}
-                {showcasedBadgeSlots.length < 3 && (
-                    <button
-                        type="button"
-                        onClick={() => handleProfileClick('badges', showcasedBadgeSlots.length)}
-                        className="inline-flex items-center gap-1.5 rounded-full border-2 border-dashed border-purple-300 dark:border-purple-700 bg-[linear-gradient(135deg,rgba(129,140,248,0.16),rgba(192,132,252,0.14))] px-2.5 py-1 text-theme-text shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_0_18px_rgba(129,140,248,0.22)] transition-all hover:scale-[1.03] hover:border-primary/70 hover:shadow-[0_0_24px_rgba(129,140,248,0.34)]"
-                    >
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-primary shadow-[0_0_10px_rgba(99,102,241,0.25)]">
-                            <i className="fas fa-plus text-[9px]"></i>
-                        </span>
-                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-theme-text">Add Badge</span>
-                    </button>
-                )}
-            </div>
+    const formatResetTime = (timestamp: number) => {
+        const date = new Date(timestamp * 1000);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
 
-            <p className="text-theme-sub max-w-md mb-5 text-lg">
-                {devProfile.bio}
-            </p>
+    const openDonationSheet = () => {
+        setShowDonationSheet(true);
+        if (hapticEnabled) Haptics.selection().catch(() => { });
+    };
 
-            <div className="w-full max-w-md space-y-4">
-                <div className="space-y-3">
-                    <div className="flex items-center gap-2 px-2">
-                        <div className="h-px bg-theme-border flex-1"></div>
-                        <span className="text-xs font-bold text-theme-sub uppercase tracking-widest">Connect</span>
-                        <div className="h-px bg-theme-border flex-1"></div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-3">
-                        <a href={socialLinks.github} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 p-4 bg-card border border-theme-border rounded-2xl hover:scale-[1.02] transition-all cursor-pointer group shadow-sm">
-                            <i className="fab fa-github text-2xl text-theme-text"></i>
-                            <span className="font-bold text-theme-text">GitHub</span>
-                        </a>
-                        
-                        <a href={socialLinks.x} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 p-4 bg-theme-text text-surface rounded-2xl hover:scale-[1.02] transition-all cursor-pointer shadow-lg shadow-black/10 group border border-theme-border">
-                            <div className="w-6 h-6 flex items-center justify-center">
-                                <svg viewBox="0 0 24 24" aria-hidden="true" className="w-full h-full fill-current">
-                                    <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"></path>
-                                </svg>
-                            </div>
-                        </a>
+    const closeDonationSheet = () => {
+        setShowDonationSheet(false);
+    };
 
-                        <a href={socialLinks.discord} target="_blank" rel="noreferrer" className="col-span-2 flex items-center justify-between p-4 bg-[#5865F2]/10 rounded-2xl hover:scale-[1.01] transition-all cursor-pointer border border-[#5865F2]/20">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-[#5865F2] text-white flex items-center justify-center text-sm">
-                                    <i className="fab fa-discord"></i>
-                                </div>
-                                <span className="font-bold text-[#5865F2]">Join Discord Community</span>
-                            </div>
-                            <i className="fas fa-arrow-right text-[#5865F2] text-sm opacity-50"></i>
-                        </a>
-                    </div>
-                </div>
+    return (
+        <>
+            <div className="p-4 flex flex-col items-center text-center animate-fade-in pt-8">
 
-                <div className="space-y-3">
-                    <div className="flex items-center gap-2 px-2">
-                        <div className="h-px bg-theme-border flex-1"></div>
-                        <span className="text-xs font-bold text-theme-sub uppercase tracking-widest">Resources</span>
-                        <div className="h-px bg-theme-border flex-1"></div>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                        <a href={socialLinks.coffee} target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-400 rounded-2xl hover:scale-[1.01] transition-all cursor-pointer shadow-lg shadow-yellow-400/20 group">
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full bg-yellow-400 text-yellow-900 flex items-center justify-center text-xl group-hover:rotate-12 transition-transform">
-                                    <i className="fas fa-coffee"></i>
-                                </div>
-                                <div className="text-left">
-                                    <span className="font-bold text-gray-900 dark:text-yellow-100 text-lg block">Buy me a coffee</span>
-                                    <span className="text-xs text-yellow-600 dark:text-yellow-200 font-semibold">Support development</span>
-                                </div>
-                            </div>
-                            <i className="fas fa-heart text-red-500 animate-bounce"></i>
-                        </a>
+                {/* FLIP AVATAR CONTAINER */}
+                <div
+                    className="w-32 h-32 mb-4 relative cursor-pointer perspective-1000"
+                    onClick={() => {
+                        if (isAvatarFlipped) {
+                            // Always open the leaderboard — it handles profile creation internally
+                            setShowLeaderboard(true);
+                            if (hapticEnabled) Haptics.impact({ style: ImpactStyle.Medium });
+                        } else {
+                            // First click — always flip the coin
+                            setIsAvatarFlipped(true);
+                            if (hapticEnabled) Haptics.selection();
+                        }
+                    }}
+                >
+                    <div className={`relative w-full h-full duration-500 preserve-3d transition-transform ${isAvatarFlipped ? 'rotate-y-180' : ''}`}>
 
-                        <button 
-                            onClick={onOpenAdDonation}
-                            className="flex items-center justify-between p-4 bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-400 rounded-2xl hover:scale-[1.01] transition-all cursor-pointer shadow-lg shadow-indigo-400/20 group w-full text-left"
-                        >
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full bg-indigo-500 text-white flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
-                                    <i className="fas fa-play-circle"></i>
-                                </div>
-                                <div className="text-left">
-                                    <span className="font-bold text-gray-900 dark:text-indigo-100 text-lg block">Fuel the Code</span>
-                                    <span className="text-xs text-indigo-600 dark:text-indigo-300 font-semibold">
-                                        {getContributionLabel()}
-                                    </span>
-                                </div>
-                            </div>
-                            {hasCosmicBadge ? (
-                                <SwordIcon className="w-5 h-5 text-red-500 animate-pulse" />
-                            ) : hasVoidBadge ? (
-                                <i className="fas fa-dragon text-purple-500 animate-pulse"></i>
-                            ) : hasSupernovaBadge ? (
-                                <i className="fas fa-meteor text-pink-500 animate-pulse"></i>
-                            ) : hasBackerBadge ? (
-                                <i className="fas fa-gem text-cyan-400 animate-pulse"></i>
-                            ) : (
-                                <i className="fas fa-arrow-right text-indigo-500 group-hover:translate-x-1 transition-transform"></i>
-                            )}
-                        </button>
-
-                        <button 
-                            onClick={() => setShowFAQ(true)}
-                            className="flex items-center justify-between p-4 bg-purple-50 dark:bg-purple-900/20 border-2 border-dashed border-purple-300 dark:border-purple-700 rounded-2xl hover:scale-[1.01] transition-all cursor-pointer w-full group text-left"
-                        >
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full bg-purple-400 text-white flex items-center justify-center text-xl group-hover:bg-purple-500 transition-colors">
-                                    <i className="fas fa-question"></i>
-                                </div>
-                                <div>
-                                    <span className="font-bold text-gray-900 dark:text-purple-100 text-lg block">FAQs</span>
-                                    <span className="text-xs text-purple-600 dark:text-purple-300 font-semibold">Secrets & Safety</span>
-                                </div>
-                            </div>
-                            <i className="fas fa-chevron-right text-purple-400 group-hover:translate-x-1 transition-transform"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            {/* Developer Command Center */}
-            {isDevUnlocked && (
-                <div className="flex flex-col items-center gap-4 mt-6 w-full max-w-md animate-fade-in">
-                     <div className="flex items-center gap-2 px-2 w-full">
-                        <div className="h-px bg-theme-border flex-1"></div>
-                        <span className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2">
-                            <i className="fas fa-code-branch"></i> Developer Options
-                        </span>
-                        <div className="h-px bg-theme-border flex-1"></div>
-                    </div>
-
-                    <div className="w-full bg-card border border-theme-border rounded-2xl p-5 shadow-sm text-left">
-                        <div className="flex justify-between items-start mb-2">
-                            <div>
-                                <h3 className="font-bold text-theme-text text-sm flex items-center gap-2">
-                                    <i className="fab fa-github"></i> GitHub Access
-                                </h3>
-                                <p className="text-xs text-theme-sub mt-1">Unlock 5000 requests/hr (Authenticated)</p>
-                            </div>
-                            <button onClick={() => setIsEditingToken(!isEditingToken)} className="text-xs text-primary font-bold hover:underline">
-                                {isEditingToken ? 'Cancel' : 'Edit Token'}
-                            </button>
-                        </div>
-                        
-                        {isEditingToken ? (
-                            <div className="flex gap-2 mt-3">
-                                <input 
-                                    type="password" 
-                                    placeholder="ghp_..."
-                                    className="flex-1 bg-theme-input border border-theme-border rounded-xl px-3 py-2 text-xs font-mono focus:border-primary outline-none"
-                                    onKeyDown={(e) => {
-                                        if(e.key === 'Enter') saveGithubToken((e.target as HTMLInputElement).value)
-                                    }}
-                                />
-                                <button 
-                                    className="bg-primary text-white px-4 rounded-xl text-xs font-bold shadow-lg shadow-primary/20"
-                                    onClick={(e) => {
-                                            const input = (e.currentTarget.previousElementSibling as HTMLInputElement);
-                                            saveGithubToken(input.value);
-                                    }}
-                                >
-                                    Save
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-3 mt-3 bg-theme-element p-3 rounded-xl border border-theme-border">
-                                <div className={`w-2 h-2 rounded-full ${githubToken ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                <span className="text-xs font-mono text-theme-sub flex-1 truncate">
-                                    {githubToken ? `••••••••••••${githubToken.slice(-4)}` : 'No Token Set (Rate Limited)'}
+                        {/* FRONT: AVATAR - 'R' Coin */}
+                        <div className="absolute inset-0 backface-hidden w-full h-full rounded-full p-1 bg-gradient-to-br from-acid to-primary animate-pulse-slow">
+                            <div className="w-full h-full rounded-full bg-card border-4 border-card flex items-center justify-center relative overflow-hidden">
+                                <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black opacity-90"></div>
+                                <div className="absolute w-full h-full bg-gradient-to-tr from-acid/20 to-neon/20 animate-pulse"></div>
+                                <span className="relative text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-acid via-primary to-neon tracking-tighter filter drop-shadow-lg">
+                                    R
                                 </span>
-                                {githubToken && (
-                                    <button onClick={() => saveGithubToken('')} className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-full transition-colors">
-                                        <i className="fas fa-trash-alt text-xs"></i>
-                                    </button>
-                                )}
                             </div>
+                            {/* Small hint icon */}
+                            <div className="absolute bottom-0 right-0 w-8 h-8 bg-surface rounded-full flex items-center justify-center border-2 border-theme-border shadow-md z-20 text-green-500">
+                                <i className="fas fa-trophy text-xs"></i>
+                            </div>
+                        </div>
+
+                        {/* BACK: HALL OF FAME COIN */}
+                        <div className="absolute inset-0 backface-hidden rotate-y-180 w-full h-full rounded-full bg-gradient-to-br from-green-400 to-emerald-600 border-4 border-green-300 shadow-xl flex flex-col items-center justify-center text-white p-2">
+                            {/* Pattern Texture */}
+                            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 rounded-full"></div>
+                            <i className="fas fa-trophy text-4xl mb-1 drop-shadow-md animate-bounce relative z-10 text-yellow-300"></i>
+                            <span className="text-[9px] font-black uppercase tracking-tighter leading-tight drop-shadow-md relative z-10">Hall of<br />Fame</span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div className="relative z-0 flex flex-col items-center w-full">
+                    <h2 className="text-3xl font-black text-theme-text mb-1">{devProfile.name}</h2>
+
+                    {/* Badge Showcase (Max 3) */}
+                    <div className="flex flex-wrap justify-center gap-2 mb-4 animate-fade-in max-w-sm">
+                        {showcasedBadgeSlots.map((badgeId, index) => {
+                            switch (badgeId) {
+                                case 'Legend': return (
+                                    <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                        <i className="fas fa-crown text-[10px] animate-bounce"></i>
+                                        <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                                    </button>
+                                );
+                                case 'Guardian': return (
+                                    <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-red-500/10 via-orange-500/10 to-red-500/10 dark:from-red-500/20 dark:via-orange-500/20 dark:to-red-500/20 border border-red-500/30 dark:border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)] dark:shadow-[0_0_15px_rgba(239,68,68,0.4)] backdrop-blur-md animate-pulse ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                        <SwordIcon className="w-3 h-3 text-red-600 dark:text-red-400" />
+                                        <span className="text-[9px] font-black tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600 dark:from-red-400 dark:to-orange-400">{badgeId}</span>
+                                    </button>
+                                );
+                                case 'Void Walker': return (
+                                    <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                        <i className="fas fa-dragon text-[10px]"></i>
+                                        <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                                    </button>
+                                );
+                                case 'Supernova': return (
+                                    <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-pink-500/10 to-rose-500/10 border border-pink-500/30 text-pink-600 dark:text-pink-400 shadow-[0_0_15px_rgba(236,72,153,0.2)] backdrop-blur-sm animate-pulse ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                        <i className="fas fa-meteor text-[10px]"></i>
+                                        <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                                    </button>
+                                );
+                                case 'Backer': return (
+                                    <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                        <i className="fas fa-gem text-[10px] animate-pulse"></i>
+                                        <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                                    </button>
+                                );
+                                case 'Dev Mode': return (
+                                    <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-fuchsia-500/10 to-pink-500/10 border border-fuchsia-500/30 text-fuchsia-600 dark:text-fuchsia-400 shadow-[0_0_10px_rgba(217,70,239,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                        <i className="fas fa-terminal text-[10px]"></i>
+                                        <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                                    </button>
+                                );
+                                case 'Dino Rookie': return (
+                                    <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                        <i className="fas fa-egg text-[10px]"></i>
+                                        <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                                    </button>
+                                );
+                                case 'Dino Master': return (
+                                    <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.15)] backdrop-blur-sm ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                        <i className="fas fa-bolt text-[10px]"></i>
+                                        <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                                    </button>
+                                );
+                                case 'Dino Legend': return (
+                                    <button key={`${badgeId}-${index}`} type="button" onClick={() => canSwapShowcasedBadges && handleProfileClick('badges', index)} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary shadow-[0_0_15px_rgba(99,102,241,0.2)] backdrop-blur-md animate-pulse ${canSwapShowcasedBadges ? 'cursor-pointer transition-transform hover:scale-[1.03]' : 'cursor-default'}`}>
+                                        <i className="fas fa-fire text-[10px]"></i>
+                                        <span className="text-[9px] font-black tracking-widest uppercase">{badgeId}</span>
+                                    </button>
+                                );
+                                default: return null;
+                            }
+                        })}
+                        {showcasedBadgeSlots.length < 3 && (
+                            <button
+                                type="button"
+                                onClick={() => handleProfileClick('badges', showcasedBadgeSlots.length)}
+                                className="inline-flex items-center gap-1.5 rounded-full border-2 border-dashed border-purple-300 dark:border-purple-700 bg-[linear-gradient(135deg,rgba(129,140,248,0.16),rgba(192,132,252,0.14))] px-2.5 py-1 text-theme-text shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_0_18px_rgba(129,140,248,0.22)] transition-all hover:scale-[1.03] hover:border-primary/70 hover:shadow-[0_0_24px_rgba(129,140,248,0.34)]"
+                            >
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-primary shadow-[0_0_10px_rgba(99,102,241,0.25)]">
+                                    <i className="fas fa-plus text-[9px]"></i>
+                                </span>
+                                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-theme-text">Add Badge</span>
+                            </button>
                         )}
                     </div>
 
-                    <div className="flex flex-col gap-4 w-full p-5 bg-card border border-theme-border rounded-2xl shadow-lg shadow-primary/5 text-left">
-                         {/* UI Debugger */}
-                         <div className="space-y-2">
-                             <span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">UI Debugger (Alignment Check)</span>
-                             <div className="grid grid-cols-3 gap-2">
-                                 <button onClick={() => onTriggerDebugToast('install')} className="py-2 bg-theme-element hover:bg-theme-hover rounded-lg text-[10px] font-bold border border-theme-border">Toast: Install</button>
-                                 <button onClick={() => onTriggerDebugToast('error')} className="py-2 bg-theme-element hover:bg-theme-hover rounded-lg text-[10px] font-bold border border-theme-border">Toast: Error</button>
-                                 <button onClick={() => onTriggerDebugToast('cleanup')} className="py-2 bg-theme-element hover:bg-theme-hover rounded-lg text-[10px] font-bold border border-theme-border">Deck: Clean</button>
-                             </div>
-                             <button onClick={onTriggerModernUITutorial} className="w-full py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-[10px] font-bold text-primary border border-primary/20 transition-colors flex items-center justify-center gap-1.5">
-                                 <i className="fas fa-sparkles text-[8px]"></i>
-                                 Trigger: Try New UI
-                             </button>
-                         </div>
+                    <p className="text-theme-sub max-w-md mb-5 text-lg">
+                        {devProfile.bio}
+                    </p>
 
-                         <div className="h-px bg-theme-border w-full"></div>
+                    <div className="w-full max-w-md space-y-4">
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 px-2">
+                                <div className="h-px bg-theme-border flex-1"></div>
+                                <span className="text-xs font-bold text-theme-sub uppercase tracking-widest">Connect</span>
+                                <div className="h-px bg-theme-border flex-1"></div>
+                            </div>
 
-                         {/* API Monitor */}
-                         {rateLimit && (
-                             <div className="space-y-2">
-                                 <div className="flex justify-between items-center">
-                                     <span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">GitHub API Quota</span>
-                                     <span className="text-[10px] font-mono text-theme-text">{rateLimit.remaining}/{rateLimit.limit}</span>
-                                 </div>
-                                 <div className="w-full h-1.5 bg-theme-element rounded-full overflow-hidden">
-                                     <div 
-                                        className={`h-full rounded-full transition-all duration-500 ${rateLimit.remaining < 10 ? 'bg-red-500' : 'bg-green-500'}`} 
-                                        style={{ width: `${(rateLimit.remaining / rateLimit.limit) * 100}%` }}
-                                     ></div>
-                                 </div>
-                                 <div className="flex justify-between text-[9px] text-theme-sub font-mono">
-                                     <span>{githubToken ? 'Authenticated' : 'Public IP'}</span>
-                                     <span>Resets: {formatResetTime(rateLimit.reset)}</span>
-                                 </div>
-                             </div>
-                         )}
+                            <div className="grid grid-cols-2 gap-3">
+                                <a href={socialLinks.github} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 p-4 bg-card border border-theme-border rounded-2xl hover:scale-[1.02] transition-all cursor-pointer group shadow-sm">
+                                    <i className="fab fa-github text-2xl text-theme-text"></i>
+                                    <span className="font-bold text-theme-text">GitHub</span>
+                                </a>
 
-                         <div className="h-px bg-theme-border w-full"></div>
+                                <a href={socialLinks.x} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 p-4 bg-theme-text text-surface rounded-2xl hover:scale-[1.02] transition-all cursor-pointer shadow-lg shadow-black/10 group border border-theme-border">
+                                    <div className="w-6 h-6 flex items-center justify-center">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true" className="w-full h-full fill-current">
+                                            <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"></path>
+                                        </svg>
+                                    </div>
+                                </a>
 
-                         {/* Package Detective */}
-                         <div className="space-y-2">
-                             <span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">Package Detective</span>
-                             <div className="flex gap-2">
-                                 <input 
-                                    type="text" 
-                                    className="flex-1 bg-theme-input border border-theme-border rounded-lg px-2 py-1.5 text-xs font-mono focus:border-primary outline-none"
-                                    placeholder="com.example.app"
-                                    value={pkgQuery}
-                                    onChange={(e) => setPkgQuery(e.target.value)}
-                                 />
-                                 <button onClick={checkPackage} className="px-3 py-1.5 bg-theme-element hover:bg-theme-hover rounded-lg text-xs font-bold border border-theme-border"><i className="fas fa-search"></i></button>
-                             </div>
-                             {pkgResult && (
-                                 <pre className="bg-black/50 p-2 rounded-lg text-[10px] font-mono text-green-400 overflow-x-auto border border-white/10">
-                                     {pkgResult}
-                                 </pre>
-                             )}
-                         </div>
+                                <a href={socialLinks.discord} target="_blank" rel="noreferrer" className="col-span-2 flex items-center justify-between p-4 bg-[#5865F2]/10 rounded-2xl hover:scale-[1.01] transition-all cursor-pointer border border-[#5865F2]/20">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-[#5865F2] text-white flex items-center justify-center text-sm">
+                                            <i className="fab fa-discord"></i>
+                                        </div>
+                                        <span className="font-bold text-[#5865F2]">Join Discord Community</span>
+                                    </div>
+                                    <i className="fas fa-arrow-right text-[#5865F2] text-sm opacity-50"></i>
+                                </a>
+                            </div>
+                        </div>
 
-                         <div className="h-px bg-theme-border w-full"></div>
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 px-2">
+                                <div className="h-px bg-theme-border flex-1"></div>
+                                <span className="text-xs font-bold text-theme-sub uppercase tracking-widest">Resources</span>
+                                <div className="h-px bg-theme-border flex-1"></div>
+                            </div>
+                            <div className="flex flex-col gap-3">
+                                {hasDonationOptions && (
+                                    <button
+                                        id="btn-donate-coffee"
+                                        onClick={openDonationSheet}
+                                        className="flex w-full items-center justify-between rounded-2xl border-2 border-yellow-400 bg-yellow-50 p-4 text-left shadow-lg shadow-yellow-400/20 transition-all hover:scale-[1.01] cursor-pointer group dark:bg-yellow-900/20"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-full bg-yellow-400 text-yellow-900 flex items-center justify-center text-xl group-hover:rotate-12 transition-transform">
+                                                <i className="fas fa-coffee"></i>
+                                            </div>
+                                            <div className="text-left">
+                                                <span className="font-bold text-gray-900 dark:text-yellow-100 text-lg block">Buy me a coffee</span>
+                                                <span className="text-xs text-yellow-600 dark:text-yellow-200 font-semibold">Support development</span>
+                                            </div>
+                                        </div>
+                                        <i className="fas fa-heart text-red-500 animate-bounce"></i>
+                                    </button>
+                                )}
 
-                         {/* JSON Explorer */}
-                         <div>
-                             <button onClick={() => setShowJson(!showJson)} className="w-full flex justify-between items-center text-xs font-bold text-theme-text py-1">
-                                 <span>Raw Metadata Explorer</span>
-                                 <i className={`fas fa-chevron-${showJson ? 'up' : 'down'}`}></i>
-                             </button>
-                             {showJson && (
-                                 <textarea 
-                                    readOnly 
-                                    className="w-full h-32 mt-2 bg-black text-green-500 font-mono text-[9px] p-2 rounded-lg border border-theme-border resize-none focus:outline-none"
-                                    value={getCachedJson()}
-                                 />
-                             )}
-                         </div>
+                                <button
+                                    onClick={onOpenAdDonation}
+                                    className="flex items-center justify-between p-4 bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-400 rounded-2xl hover:scale-[1.01] transition-all cursor-pointer shadow-lg shadow-indigo-400/20 group w-full text-left"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-indigo-500 text-white flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+                                            <i className="fas fa-play-circle"></i>
+                                        </div>
+                                        <div className="text-left">
+                                            <span className="font-bold text-gray-900 dark:text-indigo-100 text-lg block">Fuel the Code</span>
+                                            <span className="text-xs text-indigo-600 dark:text-indigo-300 font-semibold">
+                                                {getContributionLabel()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {hasCosmicBadge ? (
+                                        <SwordIcon className="w-5 h-5 text-red-500 animate-pulse" />
+                                    ) : hasVoidBadge ? (
+                                        <i className="fas fa-dragon text-purple-500 animate-pulse"></i>
+                                    ) : hasSupernovaBadge ? (
+                                        <i className="fas fa-meteor text-pink-500 animate-pulse"></i>
+                                    ) : hasBackerBadge ? (
+                                        <i className="fas fa-gem text-cyan-400 animate-pulse"></i>
+                                    ) : (
+                                        <i className="fas fa-arrow-right text-indigo-500 group-hover:translate-x-1 transition-transform"></i>
+                                    )}
+                                </button>
 
-                         <div className="h-px bg-theme-border w-full my-2"></div>
-
-                         {/* Mirror Source */}
-                         <div className="flex justify-between items-center px-1">
-                             <span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">Active Mirror</span>
-                             <span className={`text-[10px] font-mono font-bold ${mirrorSource.includes('GitHub') ? 'text-green-500' : mirrorSource.includes('GitLab') ? 'text-orange-500' : mirrorSource.includes('Codeberg') ? 'text-blue-400' : 'text-theme-text'}`}>
-                                 {mirrorSource}
-                             </span>
-                         </div>
-
-                         <div className="h-px bg-theme-border w-full my-2"></div>
-
-                         {/* Core Controls */}
-                         <div className="grid grid-cols-2 gap-3">
-                            <button 
-                                onClick={toggleSourceMode}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${useRemoteJson ? 'bg-primary text-white border-primary' : 'bg-theme-element text-theme-sub border-theme-border'}`}
-                            >
-                                {useRemoteJson ? "Remote Mode" : "Local Mode"}
-                            </button>
-                            <button 
-                                onClick={() => { if(hapticEnabled) Haptics.impact({ style: ImpactStyle.Medium }); onTestStoreUpdate(); }}
-                                className="px-4 py-2 rounded-xl text-xs font-bold bg-theme-element text-theme-sub border border-theme-border hover:text-primary"
-                            >
-                                Test Update UI
-                            </button>
-                         </div>
+                                <button
+                                    onClick={() => setShowFAQ(true)}
+                                    className="flex items-center justify-between p-4 bg-purple-50 dark:bg-purple-900/20 border-2 border-dashed border-purple-300 dark:border-purple-700 rounded-2xl hover:scale-[1.01] transition-all cursor-pointer w-full group text-left"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-purple-400 text-white flex items-center justify-center text-xl group-hover:bg-purple-500 transition-colors">
+                                            <i className="fas fa-question"></i>
+                                        </div>
+                                        <div>
+                                            <span className="font-bold text-gray-900 dark:text-purple-100 text-lg block">FAQs</span>
+                                            <span className="text-xs text-purple-600 dark:text-purple-300 font-semibold">Secrets & Safety</span>
+                                        </div>
+                                    </div>
+                                    <i className="fas fa-chevron-right text-purple-400 group-hover:translate-x-1 transition-transform"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Nuclear Button */}
-                    <div className="space-y-3">
-                        <button
-                           onClick={() => { setDevUnlocked(false); if(hapticEnabled) Haptics.notification({ type: NotificationType.Warning }); }}
-                           className="w-full px-4 py-3 rounded-xl bg-theme-element text-theme-sub text-xs font-bold hover:bg-red-500/10 hover:text-red-500 transition-all flex items-center justify-center gap-2 border border-theme-border"
-                        >
-                           <i className="fas fa-lock"></i>
-                           CLOSE DEVELOPER OPTIONS
-                        </button>
+                    {/* Developer Command Center */}
+                    {isDevUnlocked && (
+                        <div className="flex flex-col items-center gap-4 mt-6 w-full max-w-md animate-fade-in">
+                            <div className="flex items-center gap-2 px-2 w-full">
+                                <div className="h-px bg-theme-border flex-1"></div>
+                                <span className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2">
+                                    <i className="fas fa-code-branch"></i> Developer Options
+                                </span>
+                                <div className="h-px bg-theme-border flex-1"></div>
+                            </div>
 
-                        <button
-                           onClick={onWipeCache}
-                           className="w-full px-4 py-3 rounded-xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 border border-red-500/20"
+                            <div className="w-full bg-card border border-theme-border rounded-2xl p-5 shadow-sm text-left">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <h3 className="font-bold text-theme-text text-sm flex items-center gap-2">
+                                            <i className="fab fa-github"></i> GitHub Access
+                                        </h3>
+                                        <p className="text-xs text-theme-sub mt-1">Unlock 5000 requests/hr (Authenticated)</p>
+                                    </div>
+                                    <button onClick={() => setIsEditingToken(!isEditingToken)} className="text-xs text-primary font-bold hover:underline">
+                                        {isEditingToken ? 'Cancel' : 'Edit Token'}
+                                    </button>
+                                </div>
+
+                                {isEditingToken ? (
+                                    <div className="flex gap-2 mt-3">
+                                        <div className="relative flex-1">
+                                            <input
+                                                type={showToken ? 'text' : 'password'}
+                                                placeholder="ghp_..."
+                                                className="w-full bg-theme-input border border-theme-border rounded-xl px-3 py-2 pr-9 text-xs font-mono focus:border-primary outline-none"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') saveGithubToken((e.target as HTMLInputElement).value)
+                                                }}
+                                            />
+                                            <button
+                                                type="button"
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                onClick={() => setShowToken(v => !v)}
+                                                className="absolute inset-y-0 right-0 flex items-center px-2.5 text-theme-sub hover:text-theme-text transition-colors"
+                                                aria-label={showToken ? 'Hide token' : 'Show token'}
+                                            >
+                                                <i className={`fas ${showToken ? 'fa-eye-slash' : 'fa-eye'} text-[11px]`}></i>
+                                            </button>
+                                        </div>
+                                        <button
+                                            className="bg-primary text-white px-4 rounded-xl text-xs font-bold shadow-lg shadow-primary/20"
+                                            onClick={(e) => {
+                                                const input = (e.currentTarget.previousElementSibling as HTMLDivElement).querySelector('input') as HTMLInputElement;
+                                                saveGithubToken(input.value);
+                                            }}
+                                        >
+                                            Save
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-3 mt-3 bg-theme-element p-3 rounded-xl border border-theme-border">
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${githubToken ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                        <span className="text-xs font-mono text-theme-sub flex-1 truncate">
+                                            {githubToken
+                                                ? showToken ? githubToken : `••••••••••••${githubToken.slice(-4)}`
+                                                : 'No Token Set (Rate Limited)'}
+                                        </span>
+                                        {githubToken && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowToken(v => !v)}
+                                                    className="text-theme-sub hover:text-theme-text p-1.5 rounded-full transition-colors"
+                                                    aria-label={showToken ? 'Hide token' : 'Reveal token'}
+                                                >
+                                                    <i className={`fas ${showToken ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigator.clipboard.writeText(githubToken)}
+                                                    className="text-theme-sub hover:text-primary p-1.5 rounded-full transition-colors"
+                                                    aria-label="Copy token"
+                                                >
+                                                    <i className="fas fa-copy text-xs"></i>
+                                                </button>
+                                                <button onClick={() => saveGithubToken('')} className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-full transition-colors">
+                                                    <i className="fas fa-trash-alt text-xs"></i>
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col gap-4 w-full p-5 bg-card border border-theme-border rounded-2xl shadow-lg shadow-primary/5 text-left">
+                                {/* UI Debugger */}
+                                <div className="space-y-2">
+                                    <span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">UI Debugger (Alignment Check)</span>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <button onClick={() => onTriggerDebugToast('install')} className="py-2 bg-theme-element hover:bg-theme-hover rounded-lg text-[10px] font-bold border border-theme-border">Toast: Install</button>
+                                        <button onClick={() => onTriggerDebugToast('error')} className="py-2 bg-theme-element hover:bg-theme-hover rounded-lg text-[10px] font-bold border border-theme-border">Toast: Error</button>
+                                        <button onClick={() => onTriggerDebugToast('cleanup')} className="py-2 bg-theme-element hover:bg-theme-hover rounded-lg text-[10px] font-bold border border-theme-border">Deck: Clean</button>
+                                    </div>
+                                    <button onClick={onTriggerModernUITutorial} className="w-full py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-[10px] font-bold text-primary border border-primary/20 transition-colors flex items-center justify-center gap-1.5">
+                                        <i className="fas fa-sparkles text-[8px]"></i>
+                                        Trigger: Try New UI
+                                    </button>
+                                    <button onClick={onTriggerForcedUpdateTest} className="w-full py-2 bg-theme-element hover:bg-theme-hover rounded-lg text-[10px] font-bold border border-theme-border flex items-center justify-center gap-1.5 mt-2">
+                                        <i className="fas fa-shield-alt text-[8px]"></i>
+                                        TEST FORCED UPDATE
+                                    </button>
+                                </div>
+
+                                <div className="h-px bg-theme-border w-full"></div>
+
+                                {/* API Monitor */}
+                                {rateLimit && (
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">GitHub API Quota</span>
+                                            <span className="text-[10px] font-mono text-theme-text">{rateLimit.remaining}/{rateLimit.limit}</span>
+                                        </div>
+                                        <div className="w-full h-1.5 bg-theme-element rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full rounded-full transition-all duration-500 ${rateLimit.remaining < 10 ? 'bg-red-500' : 'bg-green-500'}`}
+                                                style={{ width: `${(rateLimit.remaining / rateLimit.limit) * 100}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className="flex justify-between text-[9px] text-theme-sub font-mono">
+                                            <span>{githubToken ? 'Authenticated' : 'Public IP'}</span>
+                                            <span>Resets: {formatResetTime(rateLimit.reset)}</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="h-px bg-theme-border w-full"></div>
+
+                                {/* Package Detective */}
+                                <div className="space-y-2">
+                                    <span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">Package Detective</span>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            className="flex-1 bg-theme-input border border-theme-border rounded-lg px-2 py-1.5 text-xs font-mono focus:border-primary outline-none"
+                                            placeholder="com.example.app"
+                                            value={pkgQuery}
+                                            onChange={(e) => setPkgQuery(e.target.value)}
+                                        />
+                                        <button onClick={checkPackage} className="px-3 py-1.5 bg-theme-element hover:bg-theme-hover rounded-lg text-xs font-bold border border-theme-border"><i className="fas fa-search"></i></button>
+                                    </div>
+                                    {pkgResult && (
+                                        <pre className="bg-black/50 p-2 rounded-lg text-[10px] font-mono text-green-400 overflow-x-auto border border-white/10">
+                                            {pkgResult}
+                                        </pre>
+                                    )}
+                                </div>
+
+                                <div className="h-px bg-theme-border w-full"></div>
+
+                                {/* JSON Explorer */}
+                                <div>
+                                    <button onClick={() => setShowJson(!showJson)} className="w-full flex justify-between items-center text-xs font-bold text-theme-text py-1">
+                                        <span>Raw Metadata Explorer</span>
+                                        <i className={`fas fa-chevron-${showJson ? 'up' : 'down'}`}></i>
+                                    </button>
+                                    {showJson && (
+                                        <textarea
+                                            readOnly
+                                            className="w-full h-32 mt-2 bg-black text-green-500 font-mono text-[9px] p-2 rounded-lg border border-theme-border resize-none focus:outline-none"
+                                            value={getCachedJson()}
+                                        />
+                                    )}
+                                </div>
+
+                                <div className="h-px bg-theme-border w-full my-2"></div>
+
+                                {/* Mirror Source */}
+                                <div className="flex justify-between items-center px-1">
+                                    <span className="text-[10px] font-bold text-theme-sub uppercase tracking-wider">Active Mirror</span>
+                                    <span className={`text-[10px] font-mono font-bold ${mirrorSource.includes('GitHub') ? 'text-green-500' : mirrorSource.includes('GitLab') ? 'text-orange-500' : mirrorSource.includes('Codeberg') ? 'text-blue-400' : 'text-theme-text'}`}>
+                                        {mirrorSource}
+                                    </span>
+                                </div>
+
+                                <div className="h-px bg-theme-border w-full my-2"></div>
+
+                                {/* Core Controls */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={toggleSourceMode}
+                                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${useRemoteJson ? 'bg-primary text-white border-primary' : 'bg-theme-element text-theme-sub border-theme-border'}`}
+                                    >
+                                        {useRemoteJson ? "Remote Mode" : "Local Mode"}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Nuclear Button */}
+                            <div className="space-y-3">
+                                <button
+                                    onClick={() => { setDevUnlocked(false); if (hapticEnabled) Haptics.notification({ type: NotificationType.Warning }); }}
+                                    className="w-full px-4 py-3 rounded-xl bg-theme-element text-theme-sub text-xs font-bold hover:bg-red-500/10 hover:text-red-500 transition-all flex items-center justify-center gap-2 border border-theme-border"
+                                >
+                                    <i className="fas fa-lock"></i>
+                                    CLOSE DEVELOPER OPTIONS
+                                </button>
+
+                                <button
+                                    onClick={onWipeCache}
+                                    className="w-full px-4 py-3 rounded-xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 border border-red-500/20"
+                                >
+                                    <i className="fas fa-radiation"></i>
+                                    NUCLEAR RESET (Wipe & Restart)
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="mt-6 mb-2 flex flex-col items-center gap-4 animate-fade-in">
+                        <div className="flex items-center gap-3 text-sm font-medium text-theme-sub">
+                            <span className="opacity-60 font-mono">v{currentStoreVersion}</span>
+                            <span className="w-1 h-1 rounded-full bg-theme-border"></span>
+                            <div className={`px-3 py-1 rounded-full border text-xs font-bold flex items-center gap-2 shadow-sm ${useRemoteJson
+                                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                    : 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+                                }`}>
+                                <span className="uppercase tracking-wider opacity-80">Source:</span>
+                                <span>{useRemoteJson ? "Remote" : "Local"}</span>
+                            </div>
+                        </div>
+                        {/* EASTER EGG TARGET */}
+                        <span
+                            onClick={() => handleProfileClick()}
+                            className="text-xs font-mono text-theme-sub opacity-40 hover:opacity-100 cursor-pointer active:scale-95 transition-all select-none"
                         >
-                           <i className="fas fa-radiation"></i>
-                           NUCLEAR RESET (Wipe & Restart)
-                        </button>
+                            Made with 💜 for Geeks
+                        </span>
                     </div>
                 </div>
-            )}
 
-            <div className="mt-6 mb-2 flex flex-col items-center gap-4 animate-fade-in">
-                <div className="flex items-center gap-3 text-sm font-medium text-theme-sub">
-                    <span className="opacity-60 font-mono">v{currentStoreVersion}</span>
-                    <span className="w-1 h-1 rounded-full bg-theme-border"></span>
-                    <div className={`px-3 py-1 rounded-full border text-xs font-bold flex items-center gap-2 shadow-sm ${
-                        useRemoteJson 
-                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' 
-                        : 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
-                    }`}>
-                        <span className="uppercase tracking-wider opacity-80">Source:</span>
-                        <span>{useRemoteJson ? "Remote" : "Local"}</span>
-                    </div>
-                </div>
-                {/* EASTER EGG TARGET */}
-                <span 
-                    onClick={() => handleProfileClick()}
-                    className="text-xs font-mono text-theme-sub opacity-40 hover:opacity-100 cursor-pointer active:scale-95 transition-all select-none"
-                >
-                    Made with 💜 for Geeks
-                </span>
+                {/* MODALS */}
+                <Suspense fallback={null}>
+                    {showLeaderboard && (
+                        <LeaderboardModal
+                            onClose={() => {
+                                setShowLeaderboard(false);
+                                // Reset flip state when leaderboard closes
+                                setIsAvatarFlipped(false);
+                            }}
+                            workerUrl={WORKER_URL}
+                            onOpenSubmit={() => { setShowLeaderboard(false); setShowSubmitRank(true); }}
+                        />
+                    )}
+                    {showSubmitRank && (
+                        <LeaderboardSubmitModal
+                            onClose={() => setShowSubmitRank(false)}
+                            workerUrl={WORKER_URL}
+                        />
+                    )}
+                </Suspense>
             </div>
-        </div>
-
-        {/* MODALS */}
-        <Suspense fallback={null}>
-            {showLeaderboard && (
-                <LeaderboardModal 
-                    onClose={() => {
-                        setShowLeaderboard(false);
-                        // Reset flip state when leaderboard closes
-                        setIsAvatarFlipped(false);
-                    }} 
-                    workerUrl={WORKER_URL}
-                    onOpenSubmit={() => { setShowLeaderboard(false); setShowSubmitRank(true); }}
-                />
-            )}
-            {showSubmitRank && (
-                <LeaderboardSubmitModal 
-                    onClose={() => setShowSubmitRank(false)} 
-                    workerUrl={WORKER_URL}
-                />
-            )}
-        </Suspense>
-    </div>
-  );
+            <DonationSheet 
+                isOpen={showDonationSheet}
+                onClose={closeDonationSheet}
+                donation={donation ?? null}
+                hapticEnabled={hapticEnabled}
+            />
+        </>
+    );
 };
 
 export default AboutView;

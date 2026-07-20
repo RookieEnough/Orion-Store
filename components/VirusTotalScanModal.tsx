@@ -1,10 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
 import { Haptics, NotificationType } from '@capacitor/haptics';
 import { AppItem, Platform } from '../types';
-import AppTracker from '../plugins/AppTracker';
 import { useSettingsStore } from '../store/useAppStore';
+import {
+  ScanTarget,
+  ScanTargetType,
+  VirusTotalResult,
+  VirusTotalStats,
+  VtView,
+  useVirusTotalScan
+} from '../hooks/useVirusTotalScan';
 
 interface VirusTotalScanModalProps {
   app: AppItem;
@@ -14,35 +21,7 @@ interface VirusTotalScanModalProps {
   cleanupFileName?: string;
 }
 
-type VtView = 'warning' | 'key' | 'ready' | 'scanning' | 'results' | 'error';
-type ScanTargetType = 'apk' | 'downloaded-apk' | 'remote-apk';
-
-interface VirusTotalStats {
-  harmless?: number;
-  malicious?: number;
-  suspicious?: number;
-  undetected?: number;
-  timeout?: number;
-}
-
-interface VirusTotalEngineResult {
-  engine_name?: string;
-  category?: string;
-  result?: string | null;
-}
-
-interface VirusTotalResult {
-  type: ScanTargetType;
-  hash?: string;
-  url?: string;
-  stats: VirusTotalStats;
-  results: Record<string, VirusTotalEngineResult>;
-  source: 'existing-report' | 'fresh-analysis';
-  permalink?: string;
-}
-
 const VT_TUTORIAL_URL = 'https://www.youtube.com/shorts/Ynqw4dgH5ko';
-const VT_API_BASE = 'https://www.virustotal.com/api/v3';
 
 const moddedWarningPages = [
   {
@@ -61,13 +40,6 @@ const moddedWarningPages = [
     body: 'If flags look suspicious, patch the app yourself with Morphe Manager, keep patches updated, then rescan manually on VirusTotal.'
   }
 ];
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-const parseVtBody = (body: any) => {
-  if (typeof body === 'string') return body ? JSON.parse(body) : {};
-  return body || {};
-};
 
 const getStatsTotal = (stats: VirusTotalStats) =>
   (stats.harmless || 0) + (stats.malicious || 0) + (stats.suspicious || 0) + (stats.undetected || 0) + (stats.timeout || 0);
@@ -106,14 +78,6 @@ const getToneClasses = (tone: string): ToneClasses => {
   return tones[tone] || tones.blue || { bg: 'bg-blue-500', text: 'text-blue-500', border: 'border-blue-500/25', soft: 'bg-blue-500/10' };
 };
 
-const getApiErrorMessage = (status: number, fallback = 'VirusTotal request failed.') => {
-  if (status === 401 || status === 403) return 'API key rejected. Check the key and try again.';
-  if (status === 404) return 'No VirusTotal report exists for this target yet.';
-  if (status === 429) return 'VirusTotal quota reached. Free keys are commonly limited to 4 requests per minute.';
-  if (status >= 500) return 'VirusTotal is having trouble right now. Try again later.';
-  return fallback;
-};
-
 const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
   app,
   onClose,
@@ -131,12 +95,11 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
     return haystack.includes('revanced') || haystack.includes('morphe');
   }, [app.author, app.id, app.name]);
 
-  const [view, setView] = useState<VtView>(isModdedApp ? 'warning' : (virusTotalApiKey ? 'ready' : 'key'));
+  const [showWarning, setShowWarning] = useState(isModdedApp);
   const [keyInput, setKeyInput] = useState(virusTotalApiKey);
+  const [showKey, setShowKey] = useState(false);
   const [warningIndex, setWarningIndex] = useState(0);
   const [warningSeconds, setWarningSeconds] = useState(10);
-  const [scanNote, setScanNote] = useState('Preparing scan...');
-  const [scanProgress, setScanProgress] = useState(0);
   const scanTips = useMemo(
     () => [
       'Tip: Scan only apps you plan to install.',
@@ -147,18 +110,23 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
     []
   );
   const [scanTipIndex, setScanTipIndex] = useState(0);
-  const [result, setResult] = useState<VirusTotalResult | null>(null);
-  const [error, setError] = useState('');
-  const scanStartedRef = useRef(false);
+  const vt = useVirusTotalScan({
+    apiKey: virusTotalApiKey,
+    appId: app.id,
+    appName: app.name,
+    packageName: app.packageName
+  });
+  const view: 'warning' | VtView = showWarning ? 'warning' : vt.view;
+  const { error, result, scanNote, scanProgress, setError } = vt;
 
   useEffect(() => {
-    if (view !== 'warning') return;
+    if (!showWarning) return;
     setWarningSeconds(10);
     const interval = window.setInterval(() => {
       setWarningSeconds((seconds) => Math.max(0, seconds - 1));
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [view, warningIndex]);
+  }, [showWarning, warningIndex]);
 
   useEffect(() => {
     if (view !== 'scanning') return;
@@ -174,7 +142,7 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
     ? `${virusTotalApiKey.slice(0, 4)}••••${virusTotalApiKey.slice(-4)}`
     : '';
 
-  const selectedTarget = useMemo(() => {
+  const selectedTarget = useMemo<ScanTarget | null>(() => {
     const downloadFile = readyFileName || cleanupFileName;
     const latestVersion = app.availableVersions && app.availableVersions.length > 0 ? app.availableVersions[0] : null;
     const latestVariant = latestVersion?.variants?.[0] || app.variants?.[0];
@@ -183,12 +151,12 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
     const isLikelyFile = /\.(apk|apks|xapk|zip)(\?|#|$)/i.test(remoteUrl);
     const validRemoteApkUrl = isRemoteHttp && (latestVariant?.url || isLikelyFile) ? remoteUrl : '';
 
-    if (Capacitor.isNativePlatform() && app.platform === Platform.ANDROID && app.packageName && localVersion) {
-      return { type: 'apk' as ScanTargetType, label: 'Installed APK', detail: app.packageName };
-    }
-
     if (Capacitor.isNativePlatform() && app.platform === Platform.ANDROID && downloadFile) {
       return { type: 'downloaded-apk' as ScanTargetType, label: 'Downloaded APK', detail: downloadFile };
+    }
+
+    if (Capacitor.isNativePlatform() && app.platform === Platform.ANDROID && app.packageName && localVersion) {
+      return { type: 'apk' as ScanTargetType, label: 'Installed APK', detail: app.packageName };
     }
 
     if (Capacitor.isNativePlatform() && app.platform === Platform.ANDROID && validRemoteApkUrl) {
@@ -197,190 +165,28 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
 
     return null;
   }, [app.availableVersions, app.downloadUrl, app.packageName, app.platform, app.variants, cleanupFileName, localVersion, readyFileName]);
-
-  const vtGet = async (path: string, apiKey: string) => {
-    const response = await CapacitorHttp.get({
-      url: `${VT_API_BASE}${path}`,
-      headers: { 'x-apikey': apiKey },
-      responseType: 'json',
-      connectTimeout: 15000,
-      readTimeout: 30000
-    });
-    return { status: response.status, body: parseVtBody(response.data) };
-  };
-
-  const readFileReport = async (hash: string, apiKey: string): Promise<VirusTotalResult | null> => {
-    const report = await vtGet(`/files/${hash}`, apiKey);
-    if (report.status === 404) return null;
-    if (report.status < 200 || report.status >= 300) throw new Error(getApiErrorMessage(report.status));
-
-    const attributes = report.body?.data?.attributes || {};
-    return {
-      type: 'apk',
-      hash,
-      stats: attributes.last_analysis_stats || {},
-      results: attributes.last_analysis_results || {},
-      source: 'existing-report',
-      permalink: `https://www.virustotal.com/gui/file/${hash}`
-    };
-  };
-
-  const pollAnalysis = async (analysisId: string, apiKey: string, target: Pick<VirusTotalResult, 'type' | 'hash' | 'url'>): Promise<VirusTotalResult> => {
-    for (let attempt = 0; attempt < 18; attempt += 1) {
-      setScanNote(attempt === 0 ? 'Waiting for engines...' : 'Collecting engine verdicts...');
-      setScanProgress(Math.min(94, 58 + attempt * 2));
-      await sleep(attempt < 3 ? 5000 : 10000);
-
-      const analysis = await vtGet(`/analyses/${analysisId}`, apiKey);
-      if (analysis.status < 200 || analysis.status >= 300) throw new Error(getApiErrorMessage(analysis.status, 'Analysis polling failed.'));
-
-      const attributes = analysis.body?.data?.attributes || {};
-      if (attributes.status === 'completed') {
-        return {
-          ...target,
-          stats: attributes.stats || {},
-          results: attributes.results || {},
-          source: 'fresh-analysis',
-          permalink: target.hash ? `https://www.virustotal.com/gui/file/${target.hash}` : undefined
-        };
-      }
-    }
-    throw new Error('VirusTotal is still analyzing this app. Try opening the VirusTotal report in a minute.');
-  };
-
-  const uploadAndAnalyzeFile = async (filePath: string, hash: string, apiKey: string) => {
-    setScanNote('Uploading APK only because VirusTotal has no report...');
-    setScanProgress(48);
-
-    if (!Capacitor.isNativePlatform()) {
-      throw new Error('APK upload is available in the Android app.');
-    }
-
-    const upload = await AppTracker.uploadVirusTotalFile({ filePath, apiKey });
-    const body = parseVtBody(upload.body);
-    if (upload.status < 200 || upload.status >= 300) throw new Error(getApiErrorMessage(upload.status, 'Upload failed.'));
-
-    const analysisId = body?.data?.id;
-    if (!analysisId) throw new Error('VirusTotal did not return an analysis id.');
-    return pollAnalysis(analysisId, apiKey, { type: 'apk', hash });
-  };
-
-  const scanApkPath = async (filePath: string, apiKey: string) => {
-    setScanNote('Calculating SHA-256...');
-    setScanProgress(18);
-    const { hash } = await AppTracker.calculateHash({ filePath });
-
-    setScanNote('Checking existing VirusTotal report...');
-    setScanProgress(34);
-    const existingReport = await readFileReport(hash, apiKey);
-    if (existingReport) return existingReport;
-
-    return uploadAndAnalyzeFile(filePath, hash, apiKey);
-  };
-
-  const getTempScanFileName = (url: string) => {
-    let baseName = `${app.id || app.name}-vt-scan.apk`;
-    try {
-      const parsed = new URL(url);
-      const urlName = decodeURIComponent(parsed.pathname.split('/').pop() || '');
-      if (urlName && /\.(apk|apks|xapk|zip)$/i.test(urlName)) baseName = urlName;
-    } catch {}
-    const safeBase = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const suffix = Date.now().toString(36);
-    const dotIndex = safeBase.lastIndexOf('.');
-    if (dotIndex > 0) return `${safeBase.slice(0, dotIndex)}_${suffix}${safeBase.slice(dotIndex)}`;
-    return `${safeBase}_${suffix}.apk`;
-  };
-
-  const waitForDownload = async (downloadId: string) => {
-    for (let attempt = 0; attempt < 180; attempt += 1) {
-      const progress = await AppTracker.getDownloadProgress({ downloadId });
-      setScanProgress(Math.max(8, Math.min(40, progress.progress || 0)));
-      if (progress.status === 'SUCCESSFUL') return;
-      if (progress.status === 'FAILED') throw new Error('APK download failed before scanning.');
-      await sleep(1000);
-    }
-    throw new Error('APK download took too long. Try again on a stronger connection.');
-  };
-
-  const downloadAndScanApk = async (url: string, apiKey: string) => {
-    const fileName = getTempScanFileName(url);
-    setScanNote('Downloading APK for file scan...');
-    setScanProgress(8);
-
-    try {
-      const download = await AppTracker.downloadFile({ url, fileName });
-      await waitForDownload(download.downloadId || fileName);
-      const downloaded = await AppTracker.resolveDownloadFile({ fileName });
-      return await scanApkPath(downloaded.path, apiKey);
-    } finally {
-      AppTracker.deleteFile({ fileName }).catch(() => {});
-    }
-  };
-
   const startScan = async () => {
-    const apiKey = virusTotalApiKey.trim();
-    if (!apiKey) {
-      setView('key');
-      return;
-    }
-    if (!selectedTarget) {
-      setError('No installed APK, downloaded APK, or direct APK file was found for this app.');
-      setView('error');
-      return;
-    }
-
-    scanStartedRef.current = true;
-    setError('');
-    setResult(null);
-    setView('scanning');
-    setScanProgress(8);
-    setScanNote('Starting VirusTotal scan...');
-
-    try {
-      let nextResult: VirusTotalResult;
-      if (selectedTarget.type === 'apk') {
-        const extracted = await AppTracker.extractApk({ packageName: app.packageName || '' });
-        nextResult = await scanApkPath(extracted.path, apiKey);
-      } else if (selectedTarget.type === 'downloaded-apk') {
-        const downloaded = await AppTracker.resolveDownloadFile({ fileName: selectedTarget.detail });
-        nextResult = await scanApkPath(downloaded.path, apiKey);
-      } else {
-        nextResult = await downloadAndScanApk(selectedTarget.detail, apiKey);
-      }
-
-      setScanProgress(100);
-      setScanNote('Report ready.');
-      await sleep(350);
-      setResult(nextResult);
-      setView('results');
-      if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: getRiskInfo(nextResult.stats).flagged >= 5 ? NotificationType.Warning : NotificationType.Success });
-    } catch (scanError: any) {
-      setError(scanError?.message || 'VirusTotal scan failed.');
-      setView('error');
-      if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Error });
-    } finally {
-      scanStartedRef.current = false;
-    }
+    await vt.startScan(selectedTarget);
   };
 
   const saveKey = () => {
     const trimmed = keyInput.trim();
     if (!trimmed) {
       setError('Paste your VirusTotal API key first.');
-      setView('error');
+      vt.setView('error');
       return;
     }
     setVirusTotalApiKey(trimmed);
-    setView('ready');
+    vt.reset();
+    vt.setView('ready');
     if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success });
   };
 
   const revokeKey = () => {
     setVirusTotalApiKey('');
     setKeyInput('');
-    setResult(null);
-    setView('key');
+    vt.reset();
+    vt.setView('key');
     if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success });
   };
 
@@ -389,7 +195,8 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
     if (warningIndex < moddedWarningPages.length - 1) {
       setWarningIndex(warningIndex + 1);
     } else {
-      setView(virusTotalApiKey ? 'ready' : 'key');
+      setShowWarning(false);
+      vt.setView(virusTotalApiKey ? 'ready' : 'key');
     }
   };
 
@@ -439,7 +246,7 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
   };
 
   const renderKeyView = () => (
-    <div className="w-full max-w-sm mx-auto space-y-4">
+    <div className="w-full max-w-sm mx-auto min-h-full py-4 flex flex-col justify-center space-y-4">
       <div className="text-center">
         <div className="w-16 h-16 mx-auto rounded-3xl bg-[#1a73e8]/15 text-[#1a73e8] flex items-center justify-center text-2xl mb-4">
           <i className="fas fa-key"></i>
@@ -453,13 +260,24 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
 
       <div className="bg-card border border-theme-border rounded-3xl p-4 space-y-3">
         <label className="text-[10px] font-black text-theme-sub uppercase tracking-widest">API Key</label>
-        <input
-          value={keyInput}
-          onChange={(event) => setKeyInput(event.target.value)}
-          type="password"
-          placeholder="Paste your VirusTotal API key"
-          className="w-full bg-theme-element border border-theme-border rounded-2xl px-4 py-4 text-sm font-bold text-theme-text outline-none focus:border-[#1a73e8] transition-colors"
-        />
+        <div className="relative">
+          <input
+            value={keyInput}
+            onChange={(event) => setKeyInput(event.target.value)}
+            type={showKey ? 'text' : 'password'}
+            placeholder="Paste your VirusTotal API key"
+            className="w-full bg-theme-element border border-theme-border rounded-2xl px-4 py-4 pr-12 text-sm font-bold text-theme-text outline-none focus:border-[#1a73e8] transition-colors"
+          />
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setShowKey(v => !v)}
+            className="absolute inset-y-0 right-0 flex items-center px-4 text-theme-sub hover:text-theme-text transition-colors"
+            aria-label={showKey ? 'Hide API key' : 'Show API key'}
+          >
+            <i className={`fas ${showKey ? 'fa-eye-slash' : 'fa-eye'} text-sm`}></i>
+          </button>
+        </div>
         <button onClick={saveKey} className="w-full py-4 rounded-2xl bg-[#1a73e8] text-white font-bold shadow-lg shadow-[#1a73e8]/20 active:scale-95 transition-all">
           Save Key
         </button>
@@ -486,7 +304,7 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
   );
 
   const renderReadyView = () => (
-    <div className="w-full max-w-sm mx-auto space-y-5">
+    <div className="w-full max-w-sm mx-auto min-h-full py-4 flex flex-col justify-center space-y-5">
       {renderHeader('Ready', 'Scan with VirusTotal', 'Hash lookup first. Upload only happens if VirusTotal has no APK report yet.', 'fa-microscope')}
       <div className="bg-card border border-theme-border rounded-3xl p-4 space-y-4">
         <div className="flex items-center gap-4">
@@ -548,68 +366,68 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
       .slice(0, 8);
 
     return (
-      <div className="w-full max-w-sm mx-auto h-full flex flex-col min-h-0">
-        <div className="flex-1 overflow-y-auto no-scrollbar pb-4">
-          <div className="min-h-full flex flex-col justify-center space-y-3">
-            <div className="bg-card border border-theme-border rounded-3xl p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-theme-sub">Harmful rate</p>
-              <div className="flex items-center gap-4 mt-3">
-                <div className={`w-14 h-14 rounded-full border-2 ${classes.border} ${classes.soft} flex items-center justify-center`}>
-                  <i className={`fas ${risk.flagged === 0 ? 'fa-check' : risk.icon} ${classes.text}`}></i>
-                </div>
-                <div className="min-w-0">
-                  <h2 className={`text-4xl font-black ${classes.text} leading-none`}>{risk.rate}%</h2>
-                  <p className="text-xs font-black uppercase tracking-[0.24em] text-theme-sub mt-2">{risk.label}</p>
-                </div>
+      <div className="w-full max-w-sm mx-auto min-h-full py-4 flex flex-col justify-center">
+        <div className="flex flex-col space-y-3">
+          <div className="bg-card border border-theme-border rounded-3xl p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-theme-sub">Harmful rate</p>
+            <div className="flex items-center gap-4 mt-3">
+              <div className={`w-14 h-14 rounded-full border-2 ${classes.border} ${classes.soft} flex items-center justify-center`}>
+                <i className={`fas ${risk.flagged === 0 ? 'fa-check' : risk.icon} ${classes.text}`}></i>
               </div>
-              <p className="text-sm text-theme-sub font-medium mt-3 leading-relaxed">{risk.note}</p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-card border border-theme-border rounded-2xl p-3 text-center"><p className="text-lg font-black text-red-500">{risk.flagged}</p><p className="text-[9px] font-black text-theme-sub uppercase">Flagged</p></div>
-              <div className="bg-card border border-theme-border rounded-2xl p-3 text-center"><p className="text-lg font-black text-emerald-500">{result.stats.harmless || 0}</p><p className="text-[9px] font-black text-theme-sub uppercase">Clean</p></div>
-              <div className="bg-card border border-theme-border rounded-2xl p-3 text-center"><p className="text-lg font-black text-theme-text">{getStatsTotal(result.stats)}</p><p className="text-[9px] font-black text-theme-sub uppercase">Engines</p></div>
-            </div>
-
-            <div className="bg-theme-element border border-theme-border rounded-2xl p-3">
-              <p className="text-[10px] font-black text-theme-sub uppercase tracking-widest mb-2">How to read it</p>
-              <div className="space-y-2 text-xs font-bold text-theme-sub">
-                <p><span className="text-emerald-500">0</span> detections: generally safe.</p>
-                <p><span className="text-amber-500">1-4</span> detections: often false positives.</p>
-                <p><span className="text-red-500">5+</span> detections: high caution.</p>
+              <div className="min-w-0">
+                <h2 className={`text-4xl font-black ${classes.text} leading-none`}>{risk.rate}%</h2>
+                <p className="text-xs font-black uppercase tracking-[0.24em] text-theme-sub mt-2">{risk.label}</p>
               </div>
             </div>
-
-            {detections.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-black text-theme-sub uppercase tracking-widest px-1">Flagging engines</p>
-                {detections.map(([name, engine]) => (
-                  <div key={name} className="bg-card border border-theme-border rounded-2xl p-3 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-black text-theme-text truncate">{engine.engine_name || name}</p>
-                      <p className="text-[10px] text-red-500 font-bold truncate">{engine.result || engine.category}</p>
-                    </div>
-                    <span className="text-[9px] font-black uppercase text-red-500 bg-red-500/10 rounded-lg px-2 py-1">{engine.category}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {result.hash && (
-              <button onClick={() => navigator.clipboard.writeText(result.hash || '')} className="w-full py-3 rounded-2xl bg-theme-element text-theme-sub font-bold text-xs uppercase tracking-widest">
-                Copy SHA-256
-              </button>
-            )}
+            <p className="text-sm text-theme-sub font-medium mt-3 leading-relaxed">{risk.note}</p>
           </div>
-        </div>
-        <div className="space-y-3 pt-2">
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-card border border-theme-border rounded-2xl p-3 text-center"><p className="text-lg font-black text-red-500">{risk.flagged}</p><p className="text-[9px] font-black text-theme-sub uppercase">Flagged</p></div>
+            <div className="bg-card border border-theme-border rounded-2xl p-3 text-center"><p className="text-lg font-black text-emerald-500">{result.stats.harmless || 0}</p><p className="text-[9px] font-black text-theme-sub uppercase">Clean</p></div>
+            <div className="bg-card border border-theme-border rounded-2xl p-3 text-center"><p className="text-lg font-black text-theme-text">{getStatsTotal(result.stats)}</p><p className="text-[9px] font-black text-theme-sub uppercase">Engines</p></div>
+          </div>
+
+          <div className="bg-theme-element border border-theme-border rounded-2xl p-3">
+            <p className="text-[10px] font-black text-theme-sub uppercase tracking-widest mb-2">How to read it</p>
+            <div className="space-y-2 text-xs font-bold text-theme-sub">
+              <p><span className="text-emerald-500">0</span> detections: generally safe.</p>
+              <p><span className="text-amber-500">1-4</span> detections: often false positives.</p>
+              <p><span className="text-red-500">5+</span> detections: high caution.</p>
+            </div>
+          </div>
+
+          {detections.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-black text-theme-sub uppercase tracking-widest px-1">Flagging engines</p>
+              {detections.map(([name, engine]) => (
+                <div key={name} className="bg-card border border-theme-border rounded-2xl p-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-theme-text truncate">{engine.engine_name || name}</p>
+                    <p className="text-[10px] text-red-500 font-bold truncate">{engine.result || engine.category}</p>
+                  </div>
+                  <span className="text-[9px] font-black uppercase text-red-500 bg-red-500/10 rounded-lg px-2 py-1">{engine.category}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {result.hash && (
+            <button onClick={() => navigator.clipboard.writeText(result.hash || '')} className="w-full py-3 rounded-2xl bg-theme-element text-theme-sub font-bold text-xs uppercase tracking-widest">
+              Copy SHA-256
+            </button>
+          )}
+
           {result.permalink && (
             <button onClick={() => window.open(result.permalink, '_blank')} className="w-full py-4 rounded-2xl bg-[#1a73e8] text-white font-bold shadow-lg shadow-[#1a73e8]/20">
               Open VirusTotal Report
             </button>
           )}
-          <button onClick={() => setView('ready')} className="w-full py-3 rounded-2xl bg-theme-element text-theme-sub font-bold text-xs uppercase tracking-widest">
+          <button onClick={() => { vt.reset(); vt.setView('ready'); }} className="w-full py-3 rounded-2xl bg-theme-element text-theme-sub font-bold text-xs uppercase tracking-widest">
             Scan Again
+          </button>
+          <button onClick={onClose} className="w-full py-3 rounded-2xl text-theme-sub font-bold text-xs uppercase tracking-widest">
+            Close
           </button>
         </div>
       </div>
@@ -617,9 +435,9 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
   };
 
   const renderErrorView = () => (
-    <div className="w-full max-w-sm mx-auto space-y-5 text-center">
+    <div className="w-full max-w-sm mx-auto min-h-full py-4 flex flex-col justify-center space-y-5 text-center">
       {renderHeader('Scan stopped', 'Needs attention', error || 'Something went wrong.', 'fa-circle-exclamation')}
-      <button onClick={() => setView(virusTotalApiKey ? 'ready' : 'key')} className="w-full py-4 rounded-2xl bg-[#1a73e8] text-white font-bold shadow-lg shadow-[#1a73e8]/20">
+      <button onClick={() => { vt.reset(); vt.setView(virusTotalApiKey ? 'ready' : 'key'); }} className="w-full py-4 rounded-2xl bg-[#1a73e8] text-white font-bold shadow-lg shadow-[#1a73e8]/20">
         Back
       </button>
       <button onClick={revokeKey} className="w-full py-3 rounded-2xl bg-theme-element text-theme-sub font-bold text-xs uppercase tracking-widest">
@@ -629,15 +447,14 @@ const VirusTotalScanModal: React.FC<VirusTotalScanModalProps> = ({
   );
 
   return createPortal(
-    <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 backdrop-blur-md animate-fade-in p-0 sm:p-4 overflow-y-auto no-scrollbar overscroll-contain">
-      <div className="bg-surface w-full min-h-[100dvh] sm:min-h-0 sm:max-h-[92vh] sm:max-w-md sm:rounded-[2rem] shadow-2xl border border-theme-border flex flex-col overflow-hidden">
-        {/* Header - No longer sticky, part of the scroll flow if we want, but here we keep it simple */}
-        <div className="shrink-0 px-5 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-3 flex items-center justify-center">
+    <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/70 backdrop-blur-md animate-fade-in p-0 sm:p-4 overflow-y-auto no-scrollbar overscroll-contain">
+      <div className="bg-surface w-full min-h-[100dvh] max-h-[100dvh] sm:h-auto sm:min-h-0 sm:max-h-[92vh] sm:max-w-md sm:rounded-[2rem] shadow-2xl border border-theme-border flex flex-col overflow-hidden">
+        <div className="shrink-0 px-5 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-3 flex items-center justify-center gap-3">
           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-theme-sub">
             VirusTotal Scan
           </div>
         </div>
-        <div className="flex-1 flex flex-col justify-center px-5 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <div className="flex-1 min-h-0 px-5 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom))] overflow-y-auto no-scrollbar flex flex-col justify-center h-full">
           {view === 'warning' && renderWarning()}
           {view === 'key' && renderKeyView()}
           {view === 'ready' && renderReadyView()}

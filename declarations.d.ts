@@ -95,12 +95,18 @@ declare module '@capacitor/app' {
     export interface BackButtonEvent {
         canGoBack: boolean;
     }
+    /* URL Open event data for deep links */
+    export interface URLOpenListenerEvent {
+        url: string;
+    }
     export const App: {
         addListener(eventName: 'appStateChange', listenerFunc: (state: AppState) => void): Promise<{ remove: () => Promise<void> }>;
         addListener(eventName: 'appRestoredResult', listenerFunc: (result: AppRestoredResult) => void): Promise<{ remove: () => Promise<void> }>;
         addListener(eventName: 'resume', listenerFunc: () => void): Promise<{ remove: () => Promise<void> }>;
         /* Added missing backButton overload to satisfy TypeScript requirements in App.tsx */
         addListener(eventName: 'backButton', listenerFunc: (data: BackButtonEvent) => void): Promise<{ remove: () => Promise<void> }>;
+        /* Deep link handler for orionstore:// scheme */
+        addListener(eventName: 'appUrlOpen', listenerFunc: (event: URLOpenListenerEvent) => void): Promise<{ remove: () => Promise<void> }>;
         exitApp(): Promise<void>;
     };
 }

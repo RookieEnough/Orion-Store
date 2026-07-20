@@ -6,6 +6,7 @@ import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { AppItem, Platform, VersionOption } from '../types';
 import { MICROG_DEPENDENT_APPS, MICROG_INFO_URL, CATEGORY_GRADIENTS } from '../constants';
 import AppTracker from '../plugins/AppTracker';
+import { buildDeepLinkShareArtifacts } from '../utils/deepLinkShare';
 import { getOptimizedImageUrl } from '../utils/image';
 import { useDataStore, useSettingsStore } from '../store/useAppStore';
 
@@ -119,9 +120,117 @@ const AppDetail: React.FC<AppDetailProps> = ({
     const [showMicroGNotice, setShowMicroGNotice] = useState(false);
     const [showCleanupPrompt, setShowCleanupPrompt] = useState(!!cleanupFileName);
     const [isCleaning, setIsCleaning] = useState(false);
+    const cleanupHandledRef = useRef(false);
 
     // --- LIGHTBOX STATE ---
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+    // --- DEEP LINK SHARE SHEET ---
+    const [showShareSheet, setShowShareSheet] = useState(false);
+    const [openShareKey, setOpenShareKey] = useState<string | null>(null);
+    const [copiedField, setCopiedField] = useState<string | null>(null);
+    const isDeveloperMode = useSettingsStore((s) => s.isDevUnlocked);
+    const shareArtifacts = buildDeepLinkShareArtifacts(app.id);
+    const shareRows = [
+        {
+            key: 'deep',
+            label: 'Deep Link',
+            helper: 'Launches Orion Store directly to this app',
+            value: shareArtifacts.deepLink,
+            multiline: false,
+            copyLabel: 'Copy',
+        },
+        {
+            key: 'web',
+            label: 'Web Link',
+            helper: 'Uses the fallback redirect page before opening the app',
+            value: shareArtifacts.webLink,
+            multiline: false,
+            copyLabel: 'Copy',
+        },
+        {
+            key: 'md',
+            label: 'Markdown Badge',
+            helper: 'Badge snippet for markdown readmes and posts',
+            value: shareArtifacts.mdBadge,
+            multiline: true,
+            copyLabel: 'Copy Markdown',
+        },
+        {
+            key: 'html',
+            label: 'HTML Badge',
+            helper: 'Badge snippet for websites and embedded pages',
+            value: shareArtifacts.htmlBadge,
+            multiline: true,
+            copyLabel: 'Copy HTML',
+        },
+    ] as const;
+    const copyToClipboard = useCallback((text: string, label: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            setCopiedField(label);
+            if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success }).catch(() => {});
+            setTimeout(() => setCopiedField(null), 2000);
+        }).catch(() => {});
+    }, []);
+    const closeShareSheet = useCallback(() => {
+        setShowShareSheet(false);
+        setOpenShareKey(null);
+        setCopiedField(null);
+    }, []);
+    const toggleShareRow = useCallback((key: string) => {
+        setOpenShareKey((current) => (current === key ? null : key));
+    }, []);
+    const renderShareAccordionItem = (row: (typeof shareRows)[number]) => {
+        const isOpen = openShareKey === row.key;
+        const isCopied = copiedField === row.key;
+        const buttonClass = isCopied
+            ? 'bg-primary text-white shadow-lg shadow-primary/20'
+            : 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15';
+
+        return (
+            <div key={row.key} className="overflow-hidden rounded-2xl border border-theme-border/30 bg-card">
+                <button
+                    onClick={() => toggleShareRow(row.key)}
+                    className={`flex w-full items-center justify-between gap-3 px-4 py-4 text-left transition-colors ${isOpen ? 'bg-primary/6' : 'hover:bg-theme-element/50'}`}
+                >
+                    <div className="min-w-0">
+                        <p className="text-sm font-black text-theme-text">{row.label}</p>
+                        <p className="mt-1 text-[11px] text-theme-sub">{row.helper}</p>
+                    </div>
+                    <i className={`fas fa-chevron-down text-xs text-theme-sub transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isOpen && (
+                    <div className="px-4 pb-4">
+                        {row.multiline ? (
+                            <pre className="rounded-xl border border-theme-border/30 bg-theme-element/35 px-3 py-3 text-[11px] leading-relaxed text-theme-text whitespace-pre-wrap break-all font-mono">
+                                {row.value}
+                            </pre>
+                        ) : (
+                            <code className="block rounded-xl border border-theme-border/30 bg-theme-element/35 px-3 py-3 text-[11px] text-theme-text font-mono break-all">
+                                {row.value}
+                            </code>
+                        )}
+                        <button
+                            onClick={() => copyToClipboard(row.value, row.key)}
+                            className={`mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold transition-all ${buttonClass}`}
+                        >
+                            <i className={`fas ${isCopied ? 'fa-check' : 'fa-copy'} text-[11px]`} />
+                            {isCopied ? 'Copied' : row.copyLabel}
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    };
+    const openShareSheet = () => {
+        setShowShareSheet(true);
+        setOpenShareKey(null);
+        setCopiedField(null);
+        if (useSettingsStore.getState().hapticEnabled) {
+            Haptics.selection().catch(() => {});
+        }
+    };
 
     // Gesture Physics State
     const [zoom, setZoom] = useState(1);
@@ -209,8 +318,13 @@ const AppDetail: React.FC<AppDetailProps> = ({
     }, []);
 
     useEffect(() => {
-        if (cleanupFileName) setShowCleanupPrompt(true);
-        else setShowCleanupPrompt(false);
+        if (cleanupFileName) {
+            // Only re-show if not explicitly handled already
+            if (!cleanupHandledRef.current) setShowCleanupPrompt(true);
+        } else {
+            setShowCleanupPrompt(false);
+            cleanupHandledRef.current = false; // Reset for next cleanup cycle
+        }
     }, [cleanupFileName]);
 
     const resetGestures = () => {
@@ -424,7 +538,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
 
     const handleShare = async () => {
         if (useSettingsStore.getState().hapticEnabled) Haptics.selection();
-        const shareUrl = app.repoUrl || app.downloadUrl || '#';
+        const shareUrl = shareArtifacts.webLink;
         const shareText = `Check out ${app.name} on Orion Store!`;
 
         if (Capacitor.isNativePlatform()) {
@@ -486,6 +600,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
     const handleCleanupDelete = async () => {
         if (cleanupFileName) {
             setIsCleaning(true); // Start Cleaning Animation
+            cleanupHandledRef.current = true;
             try {
                 await AppTracker.deleteFile({ fileName: cleanupFileName });
                 if (useSettingsStore.getState().hapticEnabled) Haptics.notification({ type: NotificationType.Success });
@@ -502,7 +617,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
         }
     };
 
-    const handleKeep = () => { if (useSettingsStore.getState().hapticEnabled) Haptics.selection(); setShowCleanupPrompt(false); };
+    const handleKeep = () => { if (useSettingsStore.getState().hapticEnabled) Haptics.selection(); cleanupHandledRef.current = true; setShowCleanupPrompt(false); };
 
     const handleRedownload = () => { if (readyFileName && onDeleteReadyFile) { if (useSettingsStore.getState().hapticEnabled) Haptics.impact({ style: ImpactStyle.Medium }); onDeleteReadyFile(app, readyFileName); } };
 
@@ -793,8 +908,42 @@ const AppDetail: React.FC<AppDetailProps> = ({
                         {app.packageName && <div className="flex justify-between items-center py-3"><span className="text-theme-sub font-medium text-sm">Package</span><span className="text-theme-text font-mono text-xs opacity-70 truncate max-w-[150px]">{app.packageName}</span></div>}
                     </div>
                 </div>
+
+                {/* Deep Linking — Developer Mode only */}
+                {isDeveloperMode && (
+                    <div className="px-6 mb-8">
+                        <button
+                            onClick={openShareSheet}
+                            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-primary/30 bg-primary py-4 text-sm font-black text-white shadow-lg shadow-primary/25 transition-all active:scale-[0.98]"
+                        >
+                            <i className="fas fa-code text-sm" />
+                            Developer Deep Links
+                        </button>
+                    </div>
+                )}
             </div>
-            <div className="absolute bottom-0 left-0 right-0 p-6 bg-surface/90 backdrop-blur-xl z-20">{renderActionButton()}</div>
+            <div className="absolute bottom-0 left-0 right-0 p-6 bg-surface z-20" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>{renderActionButton()}</div>
+
+            {showShareSheet && (
+                <div className="absolute inset-0 z-[110] flex items-end sm:items-center justify-center sm:p-4 bg-black/60 animate-fade-in" onClick={closeShareSheet}>
+                    <div className="bg-surface w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 pb-8 shadow-2xl animate-slide-up flex flex-col gap-5 relative max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                                <h3 className="text-xl font-black text-theme-text tracking-tight">Developer Deep Links</h3>
+                                <p className="mt-1 text-xs text-theme-sub leading-relaxed">
+                                    Open one item at a time to copy links and badge snippets for <strong className="text-theme-text">{app.name}</strong>.
+                                </p>
+                            </div>
+                            <button onClick={closeShareSheet} className="w-9 h-9 rounded-full bg-theme-element flex items-center justify-center text-theme-sub hover:text-theme-text transition-colors shrink-0">
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div className="space-y-3">
+                            {shareRows.map(renderShareAccordionItem)}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {showCleanupPrompt && (
                 <div className="absolute inset-0 z-[110] flex items-center justify-center p-6 bg-black/70 animate-fade-in">
