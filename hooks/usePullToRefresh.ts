@@ -20,46 +20,77 @@ export function usePullToRefresh({
     disabled = false,
     threshold = 60
 }: UsePullToRefreshOptions): void {
+    const startXRef = useRef<number | null>(null);
     const startYRef = useRef<number | null>(null);
+    const rejectedRef = useRef(false);
 
     useEffect(() => {
         if (disabled) return;
 
-        const onPointerDown = (e: PointerEvent) => {
+        const getScrollTop = () => {
             const rootScroller = document.getElementById('root');
-            const scrollTop = rootScroller ? rootScroller.scrollTop : window.scrollY;
-            if (scrollTop > 0) return;
-            if (document.body.classList.contains('lightbox-open') || document.querySelector('.modal-content')) return;
+            return Math.max(
+                rootScroller?.scrollTop || 0,
+                window.scrollY || 0,
+                document.documentElement.scrollTop || 0,
+                document.body.scrollTop || 0
+            );
+        };
+
+        const hasBlockingOverlay = () => (
+            document.body.classList.contains('lightbox-open')
+            || !!document.querySelector('.modal-content,[role="dialog"],[class*="Modal"],[class*="modal"]')
+        );
+
+        const onPointerDown = (e: PointerEvent) => {
+            if (getScrollTop() > 2) return;
+            if (hasBlockingOverlay()) return;
             if (!e.isPrimary) return;
+            startXRef.current = e.clientX;
             startYRef.current = e.clientY;
+            rejectedRef.current = false;
         };
 
         const onPointerMove = (e: PointerEvent) => {
-            if (startYRef.current == null) return;
-            const rootScroller = document.getElementById('root');
-            const scrollTop = rootScroller ? rootScroller.scrollTop : window.scrollY;
-            if (scrollTop > 0) {
+            if (startXRef.current == null || startYRef.current == null || rejectedRef.current) return;
+            if (getScrollTop() > 2) {
+                startXRef.current = null;
                 startYRef.current = null;
                 return;
             }
-            if (document.body.classList.contains('lightbox-open') || document.querySelector('.modal-content')) {
+            if (hasBlockingOverlay()) {
+                startXRef.current = null;
                 startYRef.current = null;
                 return;
             }
+            const dx = Math.abs(e.clientX - startXRef.current);
             const dy = e.clientY - startYRef.current;
-            if (dy <= 0) {
+            const absDy = Math.abs(dy);
+            if (absDy > 8 && dy < 0) {
+                rejectedRef.current = true;
+                startXRef.current = null;
                 startYRef.current = null;
                 return;
             }
+            if (dx > 10 && dx > absDy * 0.9) {
+                rejectedRef.current = true;
+                startXRef.current = null;
+                startYRef.current = null;
+                return;
+            }
+            if (dy < 10 || dy <= dx * 1.18) return;
             if (dy >= threshold) {
                 e.preventDefault();
+                startXRef.current = null;
                 startYRef.current = null;
                 onRefresh();
             }
         };
 
         const onPointerEnd = () => {
+            startXRef.current = null;
             startYRef.current = null;
+            rejectedRef.current = false;
         };
 
         window.addEventListener('pointerdown', onPointerDown, { passive: true });

@@ -17,7 +17,7 @@ const ClassicAppList: React.FC<ClassicAppListProps> = ({ apps, onAppClick }) => 
     const loadMoreRef = useRef<HTMLDivElement | null>(null);
     const visibleApps = useMemo(() => apps.slice(0, visibleCount), [apps, visibleCount]);
     const hasMore = visibleCount < apps.length;
-    const gridGapClass = compactMode ? 'gap-2 sm:gap-2.5' : 'gap-4';
+    const gridGapClass = compactMode ? 'gap-1 sm:gap-1.5' : 'gap-4';
 
     useEffect(() => {
         setVisibleCount(Math.min(apps.length, INITIAL_BATCH));

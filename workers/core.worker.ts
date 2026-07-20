@@ -15,6 +15,15 @@ import { appMatchesCategoryFilter, getHomepageCategoryCards } from '../utils/dis
 let allApps: AppItem[] = [];
 let mirrorCache: Map<string, any[]> = new Map();
 
+interface SearchFields {
+    name: string;
+    author: string;
+    description: string;
+    id: string;
+}
+const searchFieldsCache = new WeakMap<AppItem, SearchFields>();
+const parsedSizeCache = new WeakMap<AppItem, number>();
+
 // --- UTILITIES ---
 const determineArch = (filename: string): string => {
     const lower = filename.toLowerCase();
@@ -80,24 +89,62 @@ const parseSizeToNumber = (sizeStr: string): number => {
     return num;
 };
 
+const getSearchFields = (app: AppItem): SearchFields => {
+    const cached = searchFieldsCache.get(app);
+    if (cached) return cached;
+
+    const fields = {
+        name: app.name.toLowerCase(),
+        author: app.author.toLowerCase(),
+        description: app.description.toLowerCase(),
+        id: app.id.toLowerCase()
+    };
+    searchFieldsCache.set(app, fields);
+    return fields;
+};
+
+const getParsedSize = (app: AppItem): number => {
+    const cached = parsedSizeCache.get(app);
+    if (cached !== undefined) return cached;
+    const size = parseSizeToNumber(app.size);
+    parsedSizeCache.set(app, size);
+    return size;
+};
+
 // --- CORE LOGIC ---
-const sanitizeApp = (app: any): AppItem => {
-    const rawCategory = String(app.category || 'Utility').trim();
+const normalizePlatform = (raw: unknown): 'Android' | 'PC' | 'TV' => {
+    const s = String(raw || '').trim().toLowerCase();
+    if (s === 'pc') return 'PC';
+    if (s === 'tv') return 'TV';
+    return 'Android';
+};
+
+const sanitizeApp = (app: unknown): AppItem => {
+    const source = app && typeof app === 'object' ? app as Record<string, unknown> : {};
+    const rawCategory = String(source.category || 'Utility').trim();
     // Normalize to title-case to prevent duplicate filter tabs (e.g. "utility" → "Utility")
     const normalizedCategory = rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1).toLowerCase();
     return {
-        ...app,
-        name: String(app.name || 'Unknown App'),
-        description: String(app.description || ''),
-        author: String(app.author || 'Unknown'),
+        ...source,
+        id: String(source.id || source.packageName || source.name || ''),
+        name: String(source.name || 'Unknown App'),
+        description: String(source.description || ''),
+        author: String(source.author || 'Unknown'),
         category: normalizedCategory,
-        tags: Array.isArray(app.tags) ? app.tags.map((t: string) => String(t).trim()) : [],
-        platform: app.platform || 'Android',
-        icon: sanitizeUrl(String(app.icon || '')),
-        version: String(app.version || 'Latest'),
-        latestVersion: String(app.latestVersion || 'Latest'),
-        downloadUrl: sanitizeUrl(String(app.downloadUrl || '#')),
-        screenshots: Array.isArray(app.screenshots) ? app.screenshots.map((s: string) => sanitizeUrl(s)) : [],
+        tags: Array.isArray(source.tags) ? source.tags.map((tag) => String(tag).trim()) : [],
+        platform: normalizePlatform(source.platform) as AppItem['platform'],
+        icon: sanitizeUrl(String(source.icon || '')),
+        version: String(source.version || 'Latest'),
+        latestVersion: String(source.latestVersion || 'Latest'),
+        downloadUrl: sanitizeUrl(String(source.downloadUrl || '#')),
+        screenshots: Array.isArray(source.screenshots) ? source.screenshots.map((screenshot) => sanitizeUrl(String(screenshot || ''))) : [],
+        size: String(source.size || ''),
+        repoUrl: typeof source.repoUrl === 'string' ? source.repoUrl : undefined,
+        githubRepo: typeof source.githubRepo === 'string' ? source.githubRepo : undefined,
+        gitlabRepo: typeof source.gitlabRepo === 'string' ? source.gitlabRepo : undefined,
+        codebergRepo: typeof source.codebergRepo === 'string' ? source.codebergRepo : undefined,
+        gitlabDomain: typeof source.gitlabDomain === 'string' ? source.gitlabDomain : undefined,
+        releaseKeyword: typeof source.releaseKeyword === 'string' ? source.releaseKeyword : undefined,
         availableVersions: []
     };
 };
@@ -227,12 +274,16 @@ const processItem = (app: AppItem): AppItem => {
         const availableVersions: VersionOption[] = [];
         const streams: UpdateStream[] = ['Stable', 'Beta', 'Alpha', 'Nightly'];
 
-        // Pick the latest 1 from each stream
+        const getReleaseTimestamp = (version: VersionOption) => {
+            const timestamp = Date.parse(version.date);
+            return Number.isFinite(timestamp) ? timestamp : 0;
+        };
+
+        // Pick the latest release from each stream even when a mirror arrives unsorted.
         streams.forEach(s => {
             const bucket = streamBuckets[s];
             if (bucket && bucket.length > 0) {
-                // Since mirror.json releases are usually sorted by date desc, [0] is latest.
-                // We use ! because we checked length > 0.
+                bucket.sort((left, right) => getReleaseTimestamp(right) - getReleaseTimestamp(left));
                 availableVersions.push(bucket[0]!);
             }
         });
@@ -261,17 +312,18 @@ const processItem = (app: AppItem): AppItem => {
 
 const performSearch = (query: string, category: string, sort: string, apps: AppItem[]) => {
     const q = query.toLowerCase().trim();
-    let results = apps;
+    let results = [...apps];
 
     if (q) {
         // Scoring Algorithm: Name Match (10) > Author (5) > Description (1)
         results = results.map(app => {
+            const fields = getSearchFields(app);
             let score = 0;
-            if (app.name.toLowerCase().includes(q)) score += 10;
-            if (app.name.toLowerCase().startsWith(q)) score += 5; // Bonus for prefix
-            if (app.author.toLowerCase().includes(q)) score += 5;
-            if (app.description.toLowerCase().includes(q)) score += 1;
-            if (app.id.includes(q)) score += 2;
+            if (fields.name.includes(q)) score += 10;
+            if (fields.name.startsWith(q)) score += 5; // Bonus for prefix
+            if (fields.author.includes(q)) score += 5;
+            if (fields.description.includes(q)) score += 1;
+            if (fields.id.includes(q)) score += 2;
 
             return { app, score };
         })
@@ -284,17 +336,15 @@ const performSearch = (query: string, category: string, sort: string, apps: AppI
         results = results.filter((app) => appMatchesCategoryFilter(app, category));
     }
 
-    results.sort((a, b) => {
-        switch (sort) {
-            case 'Oldest Added': return 0;
-            case 'Recently Added': return 0;
-            case 'Name (A-Z)': return a.name.localeCompare(b.name);
-            case 'Name (Z-A)': return b.name.localeCompare(a.name);
-            case 'Size (Smallest)': return parseSizeToNumber(a.size) - parseSizeToNumber(b.size);
-            case 'Size (Largest)': return parseSizeToNumber(b.size) - parseSizeToNumber(a.size);
-            default: return 0;
-        }
-    });
+    if (sort === 'Name (A-Z)') {
+        results.sort((left, right) => left.name.localeCompare(right.name));
+    } else if (sort === 'Name (Z-A)') {
+        results.sort((left, right) => right.name.localeCompare(left.name));
+    } else if (sort === 'Size (Smallest)') {
+        results.sort((left, right) => getParsedSize(left) - getParsedSize(right));
+    } else if (sort === 'Size (Largest)') {
+        results.sort((left, right) => getParsedSize(right) - getParsedSize(left));
+    }
 
     if (sort === 'Recently Added' && !q) {
         return [...results].reverse();
@@ -552,12 +602,27 @@ const generateStorefront = (
     platform: string,
     storefrontModules: StorefrontModuleConfig[] = []
 ): StoreCollection[] => {
-    const platformApps = apps.filter(a => a.platform.toLowerCase() === platform.toLowerCase());
+    const normalizedPlatform = platform.toLowerCase();
+    const platformApps = apps.filter(app => app.platform.toLowerCase() === normalizedPlatform);
     if (platformApps.length === 0) return [];
 
     const collections: StoreCollection[] = [];
     const seed = getDailySeed();
     const appMap = new Map<string, AppItem>(platformApps.map((app) => [app.id, app]));
+    const appsByCategory = new Map<string, AppItem[]>();
+    const appsByTag = new Map<string, AppItem[]>();
+    platformApps.forEach((app) => {
+        if (app.category !== 'All') {
+            const categoryApps = appsByCategory.get(app.category) || [];
+            categoryApps.push(app);
+            appsByCategory.set(app.category, categoryApps);
+        }
+        app.tags?.forEach((tag) => {
+            const tagApps = appsByTag.get(tag) || [];
+            tagApps.push(app);
+            appsByTag.set(tag, tagApps);
+        });
+    });
 
     // 1. Hero Carousel (Featured Today)
     const shuffledForHero = shuffleArray(platformApps, seed);
@@ -587,17 +652,15 @@ const generateStorefront = (
     });
 
     // 4. Dynamic Categories with interludes inserted between rows
-    const categories = Array.from(new Set(platformApps.map(a => a.category))).filter(c => c !== 'All');
     const categoryRows: StoreCollection[] = [];
-    categories.forEach((cat) => {
-        const catApps = platformApps.filter(a => a.category === cat);
-        if (catApps.length >= 3) {
+    appsByCategory.forEach((categoryApps, category) => {
+        if (categoryApps.length >= 3) {
             categoryRows.push({
-                id: `cat_${cat.toLowerCase()}`,
-                title: `Top in ${cat}`,
+                id: `cat_${category.toLowerCase()}`,
+                title: `Top in ${category}`,
                 type: 'swimlane',
-                filter: cat,
-                apps: catApps.slice(0, 12)
+                filter: category,
+                apps: categoryApps.slice(0, 12)
             });
         }
     });
@@ -658,15 +721,12 @@ const generateStorefront = (
     collections.push(...interleavedRows);
 
     // 5. Tag-based collections
-    const allTags = new Set<string>();
-    platformApps.forEach(a => a.tags?.forEach(t => allTags.add(t)));
-    
-    if (allTags.size > 0) {
-        const shuffledTags = shuffleArray(Array.from(allTags), seed + 2);
+    if (appsByTag.size > 0) {
+        const shuffledTags = shuffleArray(Array.from(appsByTag.keys()), seed + 2);
         const tagsToFeature = shuffledTags.slice(0, 2);
         
         tagsToFeature.forEach(tag => {
-            const tagApps = platformApps.filter(a => a.tags?.includes(tag));
+            const tagApps = appsByTag.get(tag) || [];
             if (tagApps.length >= 3) {
                 collections.push({
                     id: `tag_${tag.toLowerCase()}`,
@@ -689,18 +749,20 @@ const handleMessage = (data: any, postMessage: (msg: any) => void) => {
 
     switch (type) {
         case 'INIT_DATA':
-            const { rawApps, mirrorData, importedApps } = payload;
+            const { rawApps, mirrorData, importedApps } = payload || {};
+            const safeRawApps = Array.isArray(rawApps) ? rawApps : [];
+            const safeImportedApps = Array.isArray(importedApps) ? importedApps : [];
 
             mirrorCache.clear();
-            if (mirrorData) {
+            if (mirrorData && typeof mirrorData === 'object') {
                 Object.keys(mirrorData).forEach(key => {
                     const d = mirrorData![key];
                     mirrorCache.set(key.toLowerCase(), Array.isArray(d) ? d : [d]);
                 });
             }
 
-            const processedApps = rawApps.map(sanitizeApp).map(processItem);
-            const processedImported = importedApps.map(sanitizeApp).map(processItem);
+            const processedApps = safeRawApps.filter((app) => app && typeof app === 'object').map(sanitizeApp).map(processItem);
+            const processedImported = safeImportedApps.filter((app) => app && typeof app === 'object').map(sanitizeApp).map(processItem);
 
             allApps = [...processedApps, ...processedImported];
 

@@ -1,7 +1,7 @@
 import React, { memo, useState } from 'react';
 import { shallow } from 'zustand/shallow';
 import { AppItem } from '../types';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion } from 'motion/react';
 import { useDataStore, useSettingsStore } from '../store/useAppStore';
 import { getOptimizedImageUrl } from '../utils/image';
 
@@ -20,6 +20,7 @@ interface CompactAppCardProps {
     index?: number;
     priority?: boolean;
     className?: string;
+    motionEnabled?: boolean;
 }
 
 const CompactAppCard: React.FC<CompactAppCardProps> = ({
@@ -27,10 +28,10 @@ const CompactAppCard: React.FC<CompactAppCardProps> = ({
     onClick,
     index = 0,
     priority = false,
-    className = 'w-28'
+    className = 'w-28',
+    motionEnabled = true
 }) => {
     const [iconStatus, setIconStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
-    const disableAnimations = useSettingsStore((state) => state.disableAnimations);
     const {
         isFavorite,
         toggleFavorite,
@@ -46,8 +47,6 @@ const CompactAppCard: React.FC<CompactAppCardProps> = ({
         isDownloading: !!state.activeDownloads[app.id],
         isReadyToInstall: !!state.readyToInstall[app.id]
     }), shallow);
-    const prefersReducedMotion = useReducedMotion();
-    const motionEnabled = !disableAnimations && !prefersReducedMotion;
 
     const isPending = downloadStatus === 'PENDING';
     const isFeatured = app.tags?.includes('Featured') || app.tags?.includes('Editor\'s Choice');
@@ -165,5 +164,6 @@ export default memo(CompactAppCard, (prev, next) => (
     prev.app === next.app &&
     prev.index === next.index &&
     prev.priority === next.priority &&
-    prev.className === next.className
+    prev.className === next.className &&
+    prev.motionEnabled === next.motionEnabled
 ));

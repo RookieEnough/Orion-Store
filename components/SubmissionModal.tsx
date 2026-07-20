@@ -53,13 +53,13 @@ const InlineHelp: React.FC<{ text: string; label?: string }> = memo(({ text, lab
             <button
                 type="button"
                 onClick={toggleSticky}
-                className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] text-slate-400 transition hover:text-slate-200 focus:outline-none"
+                className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] text-theme-sub transition hover:text-theme-text focus:outline-none"
                 aria-label={label ? `Help: ${label}` : 'Help'}
             >
                 <i className="fas fa-circle-info"></i>
             </button>
             {open && (
-                <span className="absolute left-1/2 top-full z-30 mt-2 w-56 -translate-x-1/2 rounded-xl border border-white/10 bg-[#1e1f2c] px-3 py-2 text-[11px] font-medium normal-case leading-relaxed text-slate-300 shadow-2xl">
+                <span className="absolute left-1/2 top-full z-30 mt-2 w-56 -translate-x-1/2 rounded-xl border border-theme-border bg-surface px-3 py-2 text-[11px] font-medium normal-case leading-relaxed text-theme-sub shadow-2xl">
                     {text}
                 </span>
             )}
@@ -69,7 +69,7 @@ const InlineHelp: React.FC<{ text: string; label?: string }> = memo(({ text, lab
 
 // A label without the info button
 const SimpleLabel: React.FC<{ label: string; required?: boolean }> = ({ label, required }) => (
-    <label className="mb-1.5 flex items-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
+    <label className="mb-1.5 flex items-center text-[10px] font-bold uppercase tracking-wide text-theme-sub">
         {label}
         {required && <span className="ml-0.5 text-red-400">*</span>}
     </label>
@@ -80,7 +80,7 @@ const LabelWithTooltip: React.FC<{
     tooltip: string;
     required?: boolean;
 }> = memo(({ label, tooltip, required }) => (
-    <label className="mb-1.5 flex items-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
+    <label className="mb-1.5 flex items-center text-[10px] font-bold uppercase tracking-wide text-theme-sub">
         {label}
         {required && <span className="ml-0.5 text-red-400">*</span>}
         <InlineHelp text={tooltip} label={label} />
@@ -97,8 +97,8 @@ const Section: React.FC<React.PropsWithChildren<{ title?: string; subtitle?: str
     <div className={`mb-5 ${className}`}>
         {(title || subtitle) && (
             <div className="mb-2">
-                {title && <h4 className="text-[13px] font-black tracking-tight text-white">{title}</h4>}
-                {subtitle && <p className="mt-0.5 text-[10px] leading-relaxed text-slate-400">{subtitle}</p>}
+                {title && <h4 className="text-[13px] font-black tracking-tight text-theme-text">{title}</h4>}
+                {subtitle && <p className="mt-0.5 text-[10px] leading-relaxed text-theme-sub">{subtitle}</p>}
             </div>
         )}
         <div className={innerClassName}>{children}</div>
@@ -200,6 +200,10 @@ const fetchTextIfExists = async (url: string, init?: RequestInit) => {
     return response.text();
 };
 
+const inputShellClass = 'flex items-center gap-2 rounded-xl border border-theme-border bg-theme-input px-3 py-2 text-theme-text';
+const textInputClass = 'w-full bg-transparent text-sm outline-none placeholder:text-theme-sub';
+const textAreaClass = 'w-full resize-none rounded-xl border border-theme-border bg-theme-input px-3 py-2 text-sm text-theme-text outline-none placeholder:text-theme-sub focus:ring-1 focus:ring-primary/50';
+
 const detectRepoAutofill = async (source: RepoSource, githubToken?: string): Promise<RepoAutofillResult> => {
     let description = '';
     let defaultBranch = 'main';
@@ -279,7 +283,7 @@ const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, currentStore
     type FormDataType = {
         name: string; id: string; description: string; icon: string; repoUrl: string;
         githubRepo: string; gitlabRepo: string; gitlabDomain: string; codebergRepo: string;
-        releaseKeyword: string; packageName: string; category: string; author: string; officialSite: string;
+        releaseKeyword: string; packageName: string; category: string; author: string; downloadUrl: string;
     };
     const [isManualKeyword, setIsManualKeyword] = useState(savedDraft?.isManualKeyword || false);
     const [formData, setFormData] = useState<FormDataType>(savedDraft?.formData || {
@@ -296,7 +300,7 @@ const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, currentStore
         packageName: '',
         category: AppCategory.UTILITY,
         author: '',
-        officialSite: '',
+        downloadUrl: '',
     });
     const [autoFilledPackageName, setAutoFilledPackageName] = useState(savedDraft?.autoFilledPackageName || '');
     const [autoFilledDescription, setAutoFilledDescription] = useState(savedDraft?.autoFilledDescription || '');
@@ -330,7 +334,7 @@ const SubmissionModal: React.FC<SubmissionModalProps> = ({ onClose, currentStore
         if (level >= 10) return { title: 'Elite', color: 'text-green-400', bg: 'bg-acid/20', icon: 'fa-crown' };
         if (level >= 5) return { title: 'Expert', color: 'text-green-400', bg: 'bg-purple-500/20', icon: 'fa-star' };
         if (level >= 1) return { title: 'Contributor', color: 'text-green-400', bg: 'bg-blue-500/20', icon: 'fa-shield-alt' };
-        return { title: 'Newcomer', color: 'text-green-400', bg: 'bg-white/5', icon: 'fa-user' };
+        return { title: 'Newcomer', color: 'text-green-400', bg: 'bg-theme-element', icon: 'fa-user' };
     };
 
     const rank = getRankInfo(currentLevel);
@@ -527,10 +531,23 @@ If the file is just "app.apk", simply use "apk".
     };
 
     const generateIssueUrl = useCallback((appsToSubmit: any[]) => {
-        const title = encodeURIComponent(`[Submission] ${appsToSubmit[0]?.name || 'New app'}`);
-        const body = encodeURIComponent(JSON.stringify(appsToSubmit, null, 2));
-        return `https://github.com/RookieEnough/Orion-Data/issues/new?title=${title}&body=${body}`;
-    }, []);
+        // Must start with "App Submission" so the GitHub workflows YAML can search for it
+        const title = `App Submission [${appsToSubmit.length} App${appsToSubmit.length > 1 ? 's' : ''}] - ${appsToSubmit[0]?.name || 'New app'}`;
+        const jsonPayload = JSON.stringify(appsToSubmit, null, 2);
+        const body = `
+### App Submission Request
+
+I would like to submit the following apps to Orion Store.
+
+\`\`\`json
+${jsonPayload}
+\`\`\`
+
+*Generated by Orion Store v${currentStoreVersion}*
+        `.trim();
+
+        return `https://github.com/RookieEnough/Orion-Data/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+    }, [currentStoreVersion]);
 
     const handleSubmit = useCallback(() => {
         setError('');
@@ -561,7 +578,8 @@ If the file is just "app.apk", simply use "apk".
                     icon: sanitizeGitHubImageUrl(obtainiumIcon.trim()),
                     releaseKeyword: obtainiumKeyword.trim() || 'apk',
                     description: obtainiumDescription.trim(),
-                    screenshots: addedScreenshots
+                    screenshots: addedScreenshots,
+                    platform: Platform.ANDROID
                 }];
             } else {
                 if (!formData.name.trim()) { setError('App name is required.'); return; }
@@ -572,17 +590,19 @@ If the file is just "app.apk", simply use "apk".
                 if (activeTab === 'android') {
                     if (!formData.repoUrl.trim()) { setError('Repo URL is required.'); return; }
                     if (!formData.packageName.trim()) { setError('Package name is required.'); return; }
-                } else if (!formData.officialSite.trim()) {
-                    setError('Official website / repo link is required.');
+                } else if (!formData.downloadUrl.trim()) {
+                    setError('Direct download link is required.');
                     return;
                 }
+
+                const mappedPlatform = activeTab === 'pc' ? Platform.PC : activeTab === 'tv' ? Platform.TV : Platform.ANDROID;
 
                 appsToSubmit = [{
                     ...formData,
                     icon: sanitizeGitHubImageUrl(formData.icon.trim()),
                     releaseKeyword: activeTab === 'android' ? (isManualKeyword ? formData.releaseKeyword.trim() || 'apk' : 'apk') : formData.releaseKeyword,
                     screenshots: addedScreenshots,
-                    platform: activeTab
+                    platform: mappedPlatform
                 }];
             }
 
@@ -602,14 +622,14 @@ If the file is just "app.apk", simply use "apk".
                     tooltip="Add direct image URLs. Copy links from the repo's Readme, Play Store, or F-Droid."
                     required
                 />
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300">
+                <span className="rounded-full bg-theme-element px-2 py-0.5 text-[10px] font-bold text-theme-sub">
                     {addedScreenshots.length}/3+
                 </span>
             </div>
             <div className="mb-4 flex gap-2">
                 <input
                     type="text"
-                    className="h-9 flex-1 rounded-xl border border-white/5 bg-[#2d3147] px-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-primary/70"
+                    className="h-9 flex-1 rounded-xl border border-theme-border bg-theme-input px-3 text-sm text-theme-text outline-none placeholder:text-theme-sub focus:border-primary/70"
                     placeholder="https://image.url/screenshot.jpg"
                     value={screenshotInput}
                     onChange={(e) => setScreenshotInput(e.target.value)}
@@ -617,7 +637,7 @@ If the file is just "app.apk", simply use "apk".
                 />
                 <button
                     onClick={handleAddScreenshot}
-                    className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-slate-200 transition hover:bg-white/20"
+                    className="flex h-9 w-9 items-center justify-center rounded-xl bg-theme-element text-theme-text transition hover:bg-theme-hover"
                 >
                     <i className="fas fa-plus text-sm"></i>
                 </button>
@@ -625,7 +645,7 @@ If the file is just "app.apk", simply use "apk".
 
             <div className="grid grid-cols-4 gap-1.5 max-w-xs mx-auto">
                 {addedScreenshots.map((url, idx) => (
-                    <div key={idx} className="relative aspect-[9/19] overflow-hidden rounded-xl bg-[#2d3147]">
+                    <div key={idx} className="relative aspect-[9/19] overflow-hidden rounded-xl bg-theme-input">
                         <img
                             src={url}
                             alt={`Screenshot ${idx + 1}`}
@@ -648,10 +668,10 @@ If the file is just "app.apk", simply use "apk".
                 {Array.from({ length: Math.max(4 - addedScreenshots.length, 1) }).map((_, num) => {
                     const displayNum = addedScreenshots.length + num + 1;
                     return (
-                        <div key={`empty-${num}`} className="relative flex aspect-[9/19] items-center justify-center rounded-xl border border-dashed border-white/10 bg-[#2d3147]/20">
+                        <div key={`empty-${num}`} className="relative flex aspect-[9/19] items-center justify-center rounded-xl border-2 border-dashed border-theme-sub/30 bg-theme-input/40">
                             <div className="text-center">
-                                <i className="fas fa-image mb-1 block text-sm text-slate-600"></i>
-                                <span className="text-[10px] font-medium text-slate-600">{displayNum}</span>
+                                <i className="fas fa-image mb-1 block text-sm text-theme-sub opacity-50"></i>
+                                <span className="text-[10px] font-medium text-theme-sub opacity-60">{displayNum}</span>
                             </div>
                         </div>
                     );
@@ -675,7 +695,7 @@ If the file is just "app.apk", simply use "apk".
     const isAndroid = activeTab === 'android';
 
     return (
-        <div className="fixed inset-0 z-[60] animate-fade-in bg-[#232634] text-white">
+        <div className="fixed inset-0 z-[60] animate-fade-in bg-surface text-theme-text">
             <div className="flex h-full w-full flex-col overflow-y-auto">
                 <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-5 pt-[calc(1rem+env(safe-area-inset-top))] sm:px-5">
                     {/* Header */}
@@ -691,38 +711,38 @@ If the file is just "app.apk", simply use "apk".
                                 )}
                             </div>
                             <div>
-                                <h3 className="text-xl font-black leading-tight tracking-tight text-white">Submit {activeTab === 'android' ? 'App' : activeTab === 'tv' ? 'TV App' : 'Software'}</h3>
+                                <h3 className="text-xl font-black leading-tight tracking-tight text-theme-text">Submit {activeTab === 'android' ? 'App' : activeTab === 'tv' ? 'TV App' : 'Software'}</h3>
                                 <div className="mt-1.5 flex flex-wrap gap-2">
                                     <div className={`flex items-center gap-1.5 rounded-full ${rank.bg} px-2 py-0.5 text-[10px] font-bold ${rank.color}`}>
                                         <i className={`fas ${rank.icon} text-xs`}></i>
                                         <span>{rank.title}</span>
                                     </div>
-                                    <div className="flex items-center gap-1.5 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-bold text-slate-300">
+                                    <div className="flex items-center gap-1.5 rounded-full bg-theme-element px-2 py-0.5 text-[10px] font-bold text-theme-sub">
                                         <i className="fas fa-clock text-[10px] text-blue-400"></i>
                                         <span>{Math.floor(currentCooldown / 60)}h {currentCooldown % 60}m</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-slate-300 transition hover:bg-white/10">
+                        <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-element text-theme-sub transition hover:bg-theme-hover hover:text-theme-text">
                             <i className="fas fa-times text-xs"></i>
                         </button>
                     </div>
 
                     <div className="no-scrollbar">
                         {isAndroid ? (
-                            <div className="mb-6 rounded-xl bg-white/5 p-1">
+                            <div className="mb-6 rounded-xl bg-theme-element p-1">
                                 <div className="grid grid-cols-2 gap-1">
                                     <button
                                         onClick={() => { setMode('obtainium'); resetForm(); }}
-                                        className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all ${mode === 'obtainium' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                        className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all ${mode === 'obtainium' ? 'bg-card text-theme-text shadow-sm' : 'text-theme-sub hover:text-theme-text'}`}
                                     >
                                         <i className="fas fa-file-import text-xs"></i>
                                         <span>Obtainium</span>
                                     </button>
                                     <button
                                         onClick={() => { setMode('manual'); resetForm(); }}
-                                        className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all ${mode === 'manual' ? 'bg-white/10 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                        className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all ${mode === 'manual' ? 'bg-card text-theme-text shadow-sm' : 'text-theme-sub hover:text-theme-text'}`}
                                     >
                                         <i className="fas fa-code-branch text-xs"></i>
                                         <span>Repo</span>
@@ -730,8 +750,8 @@ If the file is just "app.apk", simply use "apk".
                                 </div>
                             </div>
                         ) : (
-                            <div className="mb-6 rounded-xl bg-white/5 px-4 py-2 text-center text-xs font-bold text-slate-300">
-                                Submitting request for <span className="uppercase text-white">{activeTab}</span>
+                            <div className="mb-6 rounded-xl bg-theme-element px-4 py-2 text-center text-xs font-bold text-theme-sub">
+                                Submitting request for <span className="uppercase text-theme-text">{activeTab}</span>
                             </div>
                         )}
 
@@ -746,7 +766,7 @@ If the file is just "app.apk", simply use "apk".
                             <div className="space-y-5">
                                 <Section title="Obtainium import" subtitle="Paste your export and add the Orion-specific metadata needed for review.">
                                     <textarea
-                                        className="h-32 w-full resize-none rounded-xl bg-[#2d3147] p-3 text-xs font-mono text-slate-200 outline-none focus:ring-1 focus:ring-primary/50"
+                                        className={`${textAreaClass} h-32 p-3 text-xs font-mono`}
                                         placeholder='{"apps": [{"url": "https://gitlab.com/..."}]}'
                                         value={jsonInput}
                                         onChange={(e) => setJsonInput(e.target.value)}
@@ -757,10 +777,10 @@ If the file is just "app.apk", simply use "apk".
                                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                                         <div>
                                             <SimpleLabel label="Icon URL" required />
-                                            <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                            <div className={inputShellClass}>
                                                 <input
                                                     type="text"
-                                                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                    className={textInputClass}
                                                     placeholder="https://..."
                                                     value={obtainiumIcon}
                                                     onChange={(e) => setObtainiumIcon(e.target.value)}
@@ -769,10 +789,10 @@ If the file is just "app.apk", simply use "apk".
                                         </div>
                                         <div>
                                             <SimpleLabel label="Release Keyword" />
-                                            <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                            <div className={inputShellClass}>
                                                 <input
                                                     type="text"
-                                                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                    className={textInputClass}
                                                     placeholder="e.g. app-release"
                                                     value={obtainiumKeyword}
                                                     onChange={(e) => setObtainiumKeyword(e.target.value)}
@@ -783,7 +803,7 @@ If the file is just "app.apk", simply use "apk".
                                     <div className="mt-3">
                                         <SimpleLabel label="Description Override" />
                                         <textarea
-                                            className="h-20 w-full resize-none rounded-xl bg-[#2d3147] px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50"
+                                            className={`${textAreaClass} h-20`}
                                             placeholder="What does this app do?"
                                             value={obtainiumDescription}
                                             onChange={(e) => setObtainiumDescription(e.target.value)}
@@ -800,10 +820,10 @@ If the file is just "app.apk", simply use "apk".
                                 <Section title="Source" innerClassName="space-y-3">
                                     {isAndroid ? (
                                         <>
-                                            <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                            <div className={inputShellClass}>
                                                 <input
                                                     type="text"
-                                                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                    className={textInputClass}
                                                     placeholder="https://github.com/owner/repo"
                                                     value={formData.repoUrl}
                                                     onChange={(e) => handleInputChange('repoUrl', e.target.value)}
@@ -814,7 +834,7 @@ If the file is just "app.apk", simply use "apk".
                                                     ? 'bg-red-500/10 text-red-300'
                                                     : repoAutofillState.status === 'success'
                                                         ? 'bg-emerald-500/10 text-emerald-200'
-                                                        : 'bg-white/5 text-slate-300'
+                                                        : 'bg-theme-element text-theme-sub'
                                                     }`}>
                                                     <i className={`fas ${repoAutofillState.status === 'loading'
                                                         ? 'fa-spinner fa-spin'
@@ -829,13 +849,13 @@ If the file is just "app.apk", simply use "apk".
                                             )}
                                         </>
                                     ) : (
-                                        <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                        <div className={inputShellClass}>
                                             <input
                                                 type="text"
-                                                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                className={textInputClass}
                                                 placeholder="https://example.com/download"
-                                                value={formData.officialSite}
-                                                onChange={(e) => handleInputChange('officialSite', e.target.value)}
+                                                value={formData.downloadUrl}
+                                                onChange={(e) => handleInputChange('downloadUrl', e.target.value)}
                                             />
                                         </div>
                                     )}
@@ -844,10 +864,10 @@ If the file is just "app.apk", simply use "apk".
                                 <div className="space-y-4">
                                     <div>
                                         <SimpleLabel label="Name" required />
-                                        <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                        <div className={inputShellClass}>
                                             <input
                                                 type="text"
-                                                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                className={textInputClass}
                                                 placeholder="App name"
                                                 value={formData.name}
                                                 onChange={(e) => handleInputChange('name', e.target.value)}
@@ -857,14 +877,14 @@ If the file is just "app.apk", simply use "apk".
 
                                     <div>
                                         <SimpleLabel label="Category" required />
-                                        <div className="rounded-xl bg-[#2d3147] px-3 py-2 text-slate-200">
+                                        <div className="rounded-xl border border-theme-border bg-theme-input px-3 py-2 text-theme-text">
                                             <select
                                                 className="w-full appearance-none bg-transparent text-sm outline-none"
                                                 value={formData.category}
                                                 onChange={(e) => handleInputChange('category', e.target.value)}
                                             >
                                                 {Object.values(AppCategory).map(c => (
-                                                    <option key={c} value={c} className="bg-[#2d3147] text-white">{c}</option>
+                                                    <option key={c} value={c} className="bg-surface text-theme-text">{c}</option>
                                                 ))}
                                             </select>
                                         </div>
@@ -872,10 +892,10 @@ If the file is just "app.apk", simply use "apk".
 
                                     <div>
                                         <SimpleLabel label="Author" required />
-                                        <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                        <div className={inputShellClass}>
                                             <input
                                                 type="text"
-                                                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                className={textInputClass}
                                                 placeholder="Developer / publisher"
                                                 value={formData.author}
                                                 onChange={(e) => handleInputChange('author', e.target.value)}
@@ -885,7 +905,7 @@ If the file is just "app.apk", simply use "apk".
 
                                     <div>
                                         <SimpleLabel label="APP ID" />
-                                        <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                        <div className={inputShellClass}>
                                             <input
                                                 type="text"
                                                 className="w-full bg-transparent text-sm outline-none"
@@ -898,7 +918,7 @@ If the file is just "app.apk", simply use "apk".
 
                                 <Section title="Description" innerClassName="space-y-3">
                                     <textarea
-                                        className="h-24 w-full resize-none rounded-xl bg-[#2d3147] px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:ring-1 focus:ring-primary/50"
+                                        className={`${textAreaClass} h-24`}
                                         placeholder="A short summary users will read first."
                                         value={formData.description}
                                         onChange={(e) => handleInputChange('description', e.target.value)}
@@ -906,10 +926,10 @@ If the file is just "app.apk", simply use "apk".
                                 </Section>
 
                                 <Section title="Icon URL" innerClassName="space-y-3">
-                                    <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                    <div className={inputShellClass}>
                                         <input
                                             type="text"
-                                            className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                            className={textInputClass}
                                             placeholder="https://..."
                                             value={formData.icon}
                                             onChange={(e) => handleInputChange('icon', e.target.value)}
@@ -922,10 +942,10 @@ If the file is just "app.apk", simply use "apk".
                                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                                             <div>
                                                 <SimpleLabel label="Package Name" required />
-                                                <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                                <div className={inputShellClass}>
                                                     <input
                                                         type="text"
-                                                        className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                                                        className={textInputClass}
                                                         placeholder="com.example.app"
                                                         value={formData.packageName}
                                                         onChange={(e) => handleInputChange('packageName', e.target.value)}
@@ -936,22 +956,22 @@ If the file is just "app.apk", simply use "apk".
                                                 <div className="mb-1.5 flex items-center justify-between">
                                                     <SimpleLabel label="Release Keyword" required />
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-[10px] font-bold uppercase text-slate-400">Auto</span>
+                                                        <span className="text-[10px] font-bold uppercase text-theme-sub">Auto</span>
                                                         <button
                                                             type="button"
                                                             onClick={() => setIsManualKeyword(!isManualKeyword)}
-                                                            className={`relative h-4 w-8 rounded-full transition-colors ${isManualKeyword ? 'bg-blue-500' : 'bg-white/10'}`}
+                                                            className={`relative h-4 w-8 rounded-full transition-colors ${isManualKeyword ? 'bg-blue-500' : 'bg-theme-element'}`}
                                                             aria-pressed={isManualKeyword}
                                                         >
                                                             <div className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform ${isManualKeyword ? 'left-4' : 'left-0.5'}`}></div>
                                                         </button>
-                                                        <span className="text-[10px] font-bold uppercase text-slate-400">Manual</span>
+                                                        <span className="text-[10px] font-bold uppercase text-theme-sub">Manual</span>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2 rounded-xl bg-[#2d3147] px-3 py-2 text-slate-300">
+                                                <div className={inputShellClass}>
                                                     <input
                                                         type="text"
-                                                        className={`w-full bg-transparent text-sm outline-none placeholder:text-slate-500 ${!isManualKeyword ? 'cursor-not-allowed opacity-60' : ''}`}
+                                                        className={`${textInputClass} ${!isManualKeyword ? 'cursor-not-allowed opacity-60' : ''}`}
                                                         placeholder="apk"
                                                         value={isManualKeyword ? formData.releaseKeyword : 'apk'}
                                                         onChange={(e) => handleInputChange('releaseKeyword', e.target.value)}
@@ -965,7 +985,7 @@ If the file is just "app.apk", simply use "apk".
                                                 href={releasesUrl}
                                                 target="_blank"
                                                 rel="noreferrer"
-                                                className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 text-xs font-medium text-slate-300 transition hover:bg-white/10"
+                                                className="inline-flex w-fit items-center gap-1.5 rounded-full bg-theme-element px-3 py-1 text-xs font-medium text-theme-sub transition hover:bg-theme-hover hover:text-theme-text"
                                             >
                                                 <i className="fas fa-external-link-alt text-[10px]"></i>
                                                 Check Releases Page
@@ -982,15 +1002,15 @@ If the file is just "app.apk", simply use "apk".
                     </div>
 
                     {/* Sticky footer */}
-                    <div className="sticky bottom-0 mt-6 border-t border-white/5 bg-[#232634] pb-1 pt-3 outline-none">
+                    <div className="sticky bottom-0 mt-6 border-t border-theme-border bg-surface pb-1 pt-3 outline-none">
                         <button
                             onClick={handleSubmit}
-                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white transition hover:bg-blue-700 active:scale-[0.99] focus:outline-none"
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 transition hover:bg-primary/90 active:scale-[0.99] focus:outline-none"
                         >
                             <i className="fas fa-arrow-right text-xs"></i>
                             <span>Generate GitHub Issue</span>
                         </button>
-                        <p className="mt-2 text-center text-[10px] text-slate-500">
+                        <p className="mt-2 text-center text-[10px] text-theme-sub">
                             Opens GitHub Issues in a new tab.
                         </p>
                     </div>
@@ -1000,12 +1020,12 @@ If the file is just "app.apk", simply use "apk".
             {/* Confirmation modal */}
             {issueUrlToOpen && (
                 <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/70 p-6 animate-fade-in" onClick={() => setIssueUrlToOpen(null)}>
-                    <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1e1f2c] p-5 shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
-                        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/10 text-white">
+                    <div className="w-full max-w-sm rounded-2xl border border-theme-border bg-surface p-5 shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+                        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-theme-element text-theme-text">
                             <i className="fas fa-triangle-exclamation text-lg"></i>
                         </div>
-                        <h3 className="text-center text-base font-black text-white">Before You Continue</h3>
-                        <p className="mt-2 text-center text-xs leading-relaxed text-slate-300">
+                        <h3 className="text-center text-base font-black text-theme-text">Before You Continue</h3>
+                        <p className="mt-2 text-center text-xs leading-relaxed text-theme-sub">
                             Orion already generated the correct JSON for your submission. Please do not manually edit the JSON block on the GitHub issue page, or the submission may break.
                         </p>
                         <div className="mt-5 flex flex-col gap-2">
@@ -1016,17 +1036,41 @@ If the file is just "app.apk", simply use "apk".
                                     setIssueUrlToOpen(null);
                                     onClose();
                                 }}
-                                className="w-full rounded-xl bg-white/10 px-4 py-2.5 font-bold text-white transition hover:bg-white/20 active:scale-[0.99]"
+                                className="w-full rounded-xl bg-primary px-4 py-2.5 font-bold text-white transition hover:bg-primary/90 active:scale-[0.99]"
                             >
                                 Open GitHub Issue
                             </button>
                             <button
                                 onClick={() => setIssueUrlToOpen(null)}
-                                className="w-full rounded-xl bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10"
+                                className="w-full rounded-xl bg-theme-element px-4 py-2.5 text-sm font-medium text-theme-sub transition hover:bg-theme-hover hover:text-theme-text"
                             >
                                 Go Back
                             </button>
                         </div>
+                        {/* Badge for README */}
+                        <details className="mt-4 rounded-xl border border-theme-border bg-card p-3">
+                            <summary className="cursor-pointer text-xs font-bold text-theme-sub select-none">
+                                <i className="fas fa-code mr-1.5 text-primary" />Badge for your README
+                            </summary>
+                            <div className="mt-3 space-y-3">
+                                <div>
+                                    <span className="text-[10px] font-bold text-theme-sub uppercase">Markdown</span>
+                                    <pre className="mt-1 rounded-lg bg-theme-element px-3 py-2 text-[10px] font-mono text-theme-text whitespace-pre-wrap break-all leading-relaxed">{`[![Get it on Orion Store](https://raw.githubusercontent.com/RookieEnough/Orion-Store/refs/heads/main/assets/orion-badge.png)](https://rookieenough.github.io/Orion-Data/redirect.html?id=${encodeURIComponent(formData.id)})`}</pre>
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(`[![Get it on Orion Store](https://raw.githubusercontent.com/RookieEnough/Orion-Store/refs/heads/main/assets/orion-badge.png)](https://rookieenough.github.io/Orion-Data/redirect.html?id=${encodeURIComponent(formData.id)})`);
+                                        }}
+                                        className="mt-1.5 w-full rounded-lg bg-primary/10 py-1.5 text-[11px] font-bold text-primary active:scale-[0.97] transition-transform"
+                                    >
+                                        Copy Markdown
+                                    </button>
+                                </div>
+                                <div>
+                                    <span className="text-[10px] font-bold text-theme-sub uppercase">Deep Link</span>
+                                    <code className="mt-1 block rounded-lg bg-theme-element px-3 py-2 text-[10px] font-mono text-theme-text break-all">{`orionstore://app/${encodeURIComponent(formData.id)}`}</code>
+                                </div>
+                            </div>
+                        </details>
                     </div>
                 </div>
             )}

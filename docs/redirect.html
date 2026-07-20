@@ -3,132 +3,666 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#141218">
     <title>Open in Orion Store</title>
     <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --md-sys-color-primary: #cfbcff;
+            --md-sys-color-on-primary: #381e72;
+            --md-sys-color-primary-container: #4f378b;
+            --md-sys-color-on-primary-container: #eaddff;
+            --md-sys-color-secondary: #cbc2db;
+            --md-sys-color-on-secondary: #332d41;
+            --md-sys-color-secondary-container: #4a4458;
+            --md-sys-color-on-secondary-container: #e8def8;
+            --md-sys-color-tertiary: #efb8c8;
+            --md-sys-color-on-tertiary: #492532;
+            --md-sys-color-tertiary-container: #633b48;
+            --md-sys-color-on-tertiary-container: #ffd8e4;
+            --md-sys-color-error: #f2b8b5;
+            --md-sys-color-on-error: #601410;
+            --md-sys-color-error-container: #8c1d18;
+            --md-sys-color-on-error-container: #f9dedc;
+            --md-sys-color-surface: #141218;
+            --md-sys-color-on-surface: #e6e0e9;
+            --md-sys-color-on-surface-variant: #cac4d0;
+            --md-sys-color-surface-container-lowest: #0f0d13;
+            --md-sys-color-surface-container-low: #1d1b20;
+            --md-sys-color-surface-container: #211f26;
+            --md-sys-color-surface-container-high: #2b2930;
+            --md-sys-color-surface-container-highest: #36343b;
+            --md-sys-color-outline: #938f99;
+            --md-sys-color-outline-variant: #49454f;
+            --md-sys-color-inverse-surface: #e6e0e9;
+            --md-sys-color-inverse-on-surface: #322f35;
+            --md-sys-shape-corner-small: 8px;
+            --md-sys-shape-corner-medium: 12px;
+            --md-sys-shape-corner-large: 16px;
+            --md-sys-shape-corner-extra-large: 28px;
+            --md-sys-shape-corner-full: 999px;
+            --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+            --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.22);
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        html {
+            color-scheme: dark;
+        }
+
+        html, body {
+            margin: 0;
+            min-height: 100%;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0a0a0f;
-            color: #e4e4e7;
+            position: relative;
+            overflow-y: auto;
             min-height: 100vh;
+            padding:
+                max(16px, env(safe-area-inset-top))
+                max(16px, env(safe-area-inset-right))
+                max(16px, env(safe-area-inset-bottom))
+                max(16px, env(safe-area-inset-left));
+            background:
+                radial-gradient(circle at top, rgba(79, 55, 139, 0.22), transparent 38%),
+                radial-gradient(circle at bottom right, rgba(99, 59, 72, 0.16), transparent 32%),
+                var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            font-family: Roboto, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans", sans-serif;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 1.5rem;
+            margin: 0;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: rgba(207, 188, 255, 0.16);
         }
-        .card {
-            background: linear-gradient(145deg, #18181b, #1e1e24);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 2rem;
-            padding: 3rem 2rem;
-            max-width: 420px;
-            width: 100%;
-            text-align: center;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+
+        .bg-shapes {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
         }
-        .logo {
-            width: 80px; height: 80px;
-            border-radius: 1.25rem;
-            background: linear-gradient(135deg, #6366f1, #a855f7);
-            margin: 0 auto 1.5rem;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 2.5rem; font-weight: 900; color: #fff;
-            box-shadow: 0 8px 30px rgba(99,102,241,0.3);
+
+        .bg-shape {
+            position: absolute;
+            display: block;
+            border-radius: var(--md-sys-shape-corner-full);
+            filter: blur(12px);
+            opacity: 0.46;
+            will-change: transform;
+            animation-play-state: running;
         }
-        h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
-        .sub { color: #a1a1aa; font-size: 0.875rem; margin-bottom: 2rem; line-height: 1.5; }
-        .app-id { font-family: monospace; background: rgba(255,255,255,0.06); padding: 0.15em 0.5em; border-radius: 0.375rem; }
-        .spinner {
-            width: 40px; height: 40px; margin: 0 auto 1rem;
-            border: 3px solid rgba(255,255,255,0.1);
-            border-top-color: #6366f1;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+
+        .bg-shape--one {
+            top: 8%;
+            left: -8%;
+            width: 240px;
+            height: 240px;
+            background: radial-gradient(circle, rgba(234, 221, 255, 0.46), rgba(79, 55, 139, 0.08));
+            animation: float-one 11s ease-in-out infinite alternate, morph-one 16s ease-in-out infinite alternate;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .status { color: #a1a1aa; font-size: 0.8rem; margin-bottom: 1.5rem; }
-        .btn {
-            display: inline-flex; align-items: center; gap: 0.5rem;
-            padding: 0.875rem 2rem;
-            border-radius: 1rem;
-            font-size: 0.95rem; font-weight: 700;
+
+        .bg-shape--two {
+            top: 18%;
+            right: 4%;
+            width: 180px;
+            height: 88px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, rgba(203, 194, 219, 0.3), rgba(99, 59, 72, 0.18));
+            animation: float-two 13s ease-in-out infinite alternate, morph-two 18s ease-in-out infinite alternate;
+        }
+
+        .bg-shape--three {
+            bottom: 12%;
+            left: 4%;
+            width: 160px;
+            height: 160px;
+            background: radial-gradient(circle, rgba(239, 184, 200, 0.3), rgba(73, 37, 50, 0.08));
+            animation: float-three 12s ease-in-out infinite alternate, morph-three 14s ease-in-out infinite alternate;
+        }
+
+        .bg-shape--four {
+            bottom: -2%;
+            right: -6%;
+            width: 280px;
+            height: 120px;
+            border-radius: 36px;
+            background: linear-gradient(135deg, rgba(202, 196, 208, 0.22), rgba(79, 55, 139, 0.16));
+            animation: float-four 15s ease-in-out infinite alternate, morph-four 20s ease-in-out infinite alternate;
+        }
+
+        .bg-shape--five {
+            top: 46%;
+            left: 50%;
+            width: 110px;
+            height: 110px;
+            background: radial-gradient(circle, rgba(234, 221, 255, 0.24), rgba(79, 55, 139, 0.04));
+            animation: float-five 9s ease-in-out infinite alternate, morph-five 12s ease-in-out infinite alternate;
+        }
+
+        .skip-link {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 3;
+            padding: 10px 14px;
+            border-radius: var(--md-sys-shape-corner-small);
+            background: var(--md-sys-color-primary-container);
+            color: var(--md-sys-color-on-primary-container);
+            font-weight: 600;
             text-decoration: none;
-            transition: transform 0.15s, box-shadow 0.15s;
-            cursor: pointer; border: none;
+            transform: translateY(-140%);
+            transition: transform 160ms ease;
         }
-        .btn:hover { transform: scale(1.03); }
-        .btn:active { transform: scale(0.97); }
+
+        .skip-link:focus-visible {
+            transform: translateY(0);
+            outline: 3px solid var(--md-sys-color-primary);
+            outline-offset: 2px;
+        }
+
+        .sheet {
+            position: relative;
+            z-index: 1;
+            width: min(100%, 430px);
+            display: grid;
+            gap: 16px;
+            padding: 20px;
+            margin: auto 0;
+            border-radius: var(--md-sys-shape-corner-extra-large);
+            background: rgba(43, 41, 48, 0.92);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(147, 143, 153, 0.34);
+            box-shadow: var(--shadow-2);
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .brand__mark {
+            position: relative;
+            width: 20px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+        }
+
+        .brand__mark::before,
+        .brand__mark::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            width: 2px;
+            height: 6px;
+            border-radius: var(--md-sys-shape-corner-full);
+            background: rgba(176, 227, 141, 0.92);
+            transform-origin: bottom center;
+        }
+
+        .brand__mark::before {
+            left: 5px;
+            transform: rotate(-28deg);
+        }
+
+        .brand__mark::after {
+            right: 5px;
+            transform: rotate(28deg);
+        }
+
+        .brand__android-head {
+            position: absolute;
+            left: 1px;
+            right: 1px;
+            bottom: 1px;
+            height: 12px;
+            border-radius: 9px 9px 6px 6px;
+            background: linear-gradient(180deg, #a8e27d 0%, #86c95d 100%);
+            box-shadow:
+                0 0 0 1px rgba(6, 18, 10, 0.16),
+                0 2px 8px rgba(134, 201, 93, 0.18);
+        }
+
+        .brand__android-eyes {
+            position: absolute;
+            top: 8px;
+            left: 6px;
+            width: 2px;
+            height: 2px;
+            border-radius: var(--md-sys-shape-corner-full);
+            background: rgba(19, 43, 17, 0.8);
+            box-shadow: 6px 0 0 rgba(19, 43, 17, 0.8);
+        }
+
+        .brand__text {
+            display: grid;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .brand__label,
+        .topbar__meta {
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .brand__label {
+            color: var(--md-sys-color-on-surface);
+        }
+
+        .brand__sub,
+        .topbar__meta {
+            color: var(--md-sys-color-on-surface-variant);
+        }
+
+        .hero {
+            display: grid;
+            gap: 10px;
+        }
+
+        .eyebrow {
+            margin: 0;
+            color: var(--md-sys-color-primary);
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 0;
+            color: var(--md-sys-color-on-surface);
+            font-size: clamp(1.75rem, 5vw, 2.25rem);
+            line-height: 1.15;
+            letter-spacing: -0.02em;
+            font-weight: 500;
+            text-wrap: balance;
+        }
+
+        .hero__sub {
+            margin: 0;
+            max-width: 28ch;
+            color: var(--md-sys-color-on-surface-variant);
+            font-size: 0.98rem;
+            line-height: 1.55;
+            text-wrap: pretty;
+        }
+
+        .panel {
+            padding: 14px 16px;
+            border-radius: var(--md-sys-shape-corner-large);
+            border: 1px solid var(--md-sys-color-outline-variant);
+            background: var(--md-sys-color-surface-container);
+            box-shadow: var(--shadow-1);
+        }
+
+        .progress {
+            width: 100%;
+            height: 8px;
+            overflow: hidden;
+            border-radius: var(--md-sys-shape-corner-full);
+            background: var(--md-sys-color-surface-container-highest);
+            border: none;
+        }
+
+        .progress__bar {
+            width: 32%;
+            height: 100%;
+            background: var(--md-sys-color-primary);
+            border-radius: inherit;
+            box-shadow: none;
+            animation: progress-slide 1.8s ease-in-out infinite;
+        }
+
+        .status-text,
+        .fallback-title,
+        .fallback-msg {
+            margin: 0;
+        }
+
+        .status-text,
+        .fallback-msg {
+            color: var(--md-sys-color-on-surface-variant);
+            line-height: 1.6;
+        }
+
+        .status-text {
+            margin-top: 12px;
+        }
+
+        .fallback {
+            background: var(--md-sys-color-surface-container-high);
+            border-color: var(--md-sys-color-outline-variant);
+            box-shadow: var(--shadow-1);
+        }
+
+        .fallback-title {
+            color: var(--md-sys-color-on-surface);
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .actions {
+            display: grid;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .btn {
+            width: 100%;
+            height: 40px;
+            min-height: 40px;
+            margin: 0;
+            border-radius: var(--md-sys-shape-corner-full);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 24px;
+            text-decoration: none;
+            font: inherit;
+            font-size: 0.875rem;
+            font-weight: 600;
+            letter-spacing: 0.006em;
+            cursor: pointer;
+            transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+        }
+
         .btn-primary {
-            background: linear-gradient(135deg, #6366f1, #a855f7);
-            color: #fff;
-            box-shadow: 0 4px 20px rgba(99,102,241,0.35);
+            background: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+            border: none;
         }
+
+        .btn-primary:hover {
+            background: #dccdff;
+        }
+
         .btn-secondary {
-            background: rgba(255,255,255,0.08);
-            color: #e4e4e7;
-            margin-top: 0.75rem;
+            background: var(--md-sys-color-secondary-container);
+            color: var(--md-sys-color-on-secondary-container);
+            border: none;
         }
-        .hidden { display: none; }
-        .footer { margin-top: 2rem; color: #52525b; font-size: 0.7rem; }
+
+        .btn-secondary:hover {
+            background: #5b5469;
+        }
+
+        .btn:focus-visible {
+            outline: 3px solid var(--md-sys-color-primary);
+            outline-offset: 3px;
+        }
+
+        .footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding-top: 2px;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+
+        .footer__label {
+            font-size: 0.74rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .footer code {
+            color: var(--md-sys-color-on-surface-variant);
+            font-family: Roboto Mono, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+            font-size: 0.78rem;
+            overflow-wrap: anywhere;
+            padding: 8px 12px;
+            border-radius: var(--md-sys-shape-corner-medium);
+            background: var(--md-sys-color-surface-container-low);
+            border: 1px solid var(--md-sys-color-outline-variant);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @keyframes progress-slide {
+            0% {
+                transform: translateX(-110%);
+            }
+            100% {
+                transform: translateX(310%);
+            }
+        }
+
+        @keyframes float-one {
+            from { transform: translate3d(0, 0, 0) scale(1); }
+            to { transform: translate3d(88px, 42px, 0) scale(1.08); }
+        }
+
+        @keyframes float-two {
+            from { transform: translate3d(0, 0, 0) scale(1); }
+            to { transform: translate3d(-72px, 54px, 0) scale(1.05); }
+        }
+
+        @keyframes float-three {
+            from { transform: translate3d(0, 0, 0) scale(1); }
+            to { transform: translate3d(70px, -56px, 0) scale(1.1); }
+        }
+
+        @keyframes float-four {
+            from { transform: translate3d(0, 0, 0) scale(1); }
+            to { transform: translate3d(-96px, -34px, 0) scale(1.06); }
+        }
+
+        @keyframes float-five {
+            from { transform: translate3d(0, 0, 0) scale(1); }
+            to { transform: translate3d(-42px, 38px, 0) scale(1.18); }
+        }
+
+        @keyframes morph-one {
+            0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+            50% { border-radius: 40% 60% 46% 54% / 50% 42% 58% 50%; }
+        }
+
+        @keyframes morph-two {
+            0%, 100% { border-radius: 999px; }
+            50% { border-radius: 120px 40px 120px 40px; }
+        }
+
+        @keyframes morph-three {
+            0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+            50% { border-radius: 55% 45% 60% 40% / 45% 55% 40% 60%; }
+        }
+
+        @keyframes morph-four {
+            0%, 100% { border-radius: 36px; }
+            50% { border-radius: 72px 18px 72px 18px; }
+        }
+
+        @keyframes morph-five {
+            0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+            50% { border-radius: 46% 54% 40% 60% / 52% 46% 54% 48%; }
+        }
+
+        @media (max-width: 480px) {
+            .sheet {
+                padding: 16px;
+                gap: 12px;
+            }
+
+            .panel {
+                padding: 12px 14px;
+            }
+
+            .topbar,
+            .footer {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+
+            h1 {
+                font-size: clamp(1.6rem, 10vw, 2.1rem);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+
+            .bg-shape {
+                transform: none !important;
+                filter: blur(8px);
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div class="logo">O</div>
-        <h1>Orion Store</h1>
-        <p class="sub" id="message">Opening <span class="app-id" id="app-label">app</span> in Orion Store...</p>
-
-        <div id="loading">
-            <div class="spinner"></div>
-            <p class="status">Attempting to launch Orion Store...</p>
-        </div>
-
-        <div id="fallback" class="hidden">
-            <p class="sub">Orion Store doesn't seem to be installed on this device.</p>
-            <a id="download-btn" class="btn btn-primary" href="https://github.com/RookieEnough/Orion-Store/releases/latest">
-                ⬇ Download Orion Store
-            </a>
-            <br>
-            <a id="retry-btn" class="btn btn-secondary" href="#">
-                ↻ Try opening again
-            </a>
-        </div>
-
-        <p class="footer">orionstore://app/<span id="footer-id">—</span></p>
+    <a class="skip-link" href="#page-title">Skip to Main Content</a>
+    <div class="bg-shapes" aria-hidden="true">
+        <span class="bg-shape bg-shape--one"></span>
+        <span class="bg-shape bg-shape--two"></span>
+        <span class="bg-shape bg-shape--three"></span>
+        <span class="bg-shape bg-shape--four"></span>
+        <span class="bg-shape bg-shape--five"></span>
     </div>
+    <main class="sheet" aria-labelledby="page-title">
+        <header class="topbar">
+            <div class="brand">
+                <span class="brand__mark" aria-hidden="true">
+                    <span class="brand__android-head"></span>
+                    <span class="brand__android-eyes"></span>
+                </span>
+                <div class="brand__text">
+                    <span class="brand__label">Orion Store</span>
+                    <span class="brand__sub">Android Redirect</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="hero">
+            <p class="eyebrow" id="state-label">Opening In Orion Store</p>
+            <h1 id="page-title">app</h1>
+            <p class="hero__sub" id="message">
+                If Orion Store is installed, this handoff will complete automatically.
+            </p>
+        </section>
+
+        <section class="panel" id="loading" aria-live="polite">
+            <div class="progress" aria-hidden="true">
+                <div class="progress__bar"></div>
+            </div>
+            <p class="status-text">Waiting for Orion Store…</p>
+        </section>
+
+        <section class="panel fallback hidden" id="fallback" aria-live="polite">
+            <p class="fallback-title">Orion Store Is Not Available</p>
+            <div class="actions">
+                <a id="download-btn" class="btn btn-primary" href="https://github.com/RookieEnough/Orion-Store/releases/latest">
+                    Download Orion Store
+                </a>
+                <button id="retry-btn" class="btn btn-secondary" type="button">Try Again</button>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <span class="footer__label">Deep Link</span>
+            <code translate="no">orionstore://app/<span id="footer-id">-</span></code>
+        </footer>
+    </main>
 
     <script>
         const params = new URLSearchParams(window.location.search);
-        const appId = params.get('id') || '';
-        const deepLink = 'orionstore://app/' + encodeURIComponent(appId);
+        const appId = params.get("id") || "";
+        const deepLink = "orionstore://app/" + encodeURIComponent(appId);
 
-        document.getElementById('app-label').textContent = appId || 'unknown';
-        document.getElementById('footer-id').textContent = appId || '—';
+        const pageTitleEl = document.getElementById("page-title");
+        const footerIdEl = document.getElementById("footer-id");
+        const stateLabelEl = document.getElementById("state-label");
+        const messageEl = document.getElementById("message");
+        const loadingEl = document.getElementById("loading");
+        const fallbackEl = document.getElementById("fallback");
+        const retryButton = document.getElementById("retry-btn");
 
-        // Try to open the app via the custom scheme
+        const safeDisplayName = appId
+            ? decodeURIComponent(appId).replace(/-/g, " ")
+            : "selected app";
+
+        let fallbackTimer = null;
+
+        function setMessage(mode) {
+            if (mode === "fallback") {
+                stateLabelEl.textContent = "Unable To Open In Orion Store";
+                messageEl.textContent = "Install the latest Orion Store build on this device, then try the handoff again.";
+                return;
+            }
+
+            stateLabelEl.textContent = "Opening In Orion Store";
+            messageEl.textContent = "If Orion Store is installed, this handoff will complete automatically.";
+        }
+
         function attemptOpen() {
             window.location.href = deepLink;
         }
 
-        // Show fallback after timeout
-        setTimeout(function() {
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('fallback').classList.remove('hidden');
-        }, 2000);
+        function showFallback() {
+            loadingEl.classList.add("hidden");
+            fallbackEl.classList.remove("hidden");
+            setMessage("fallback");
+        }
 
-        document.getElementById('retry-btn').addEventListener('click', function(e) {
-            e.preventDefault();
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('fallback').classList.add('hidden');
-            attemptOpen();
-            setTimeout(function() {
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('fallback').classList.remove('hidden');
-            }, 2000);
+        function resetToLoading() {
+            fallbackEl.classList.add("hidden");
+            loadingEl.classList.remove("hidden");
+            setMessage("loading");
+        }
+
+        function scheduleFallback() {
+            window.clearTimeout(fallbackTimer);
+            fallbackTimer = window.setTimeout(showFallback, 2500);
+        }
+
+        pageTitleEl.textContent = safeDisplayName;
+        footerIdEl.textContent = appId || "-";
+        document.title = appId ? safeDisplayName + " — Orion Store" : "Open in Orion Store";
+
+        document.addEventListener("visibilitychange", function () {
+            if (document.hidden) {
+                window.clearTimeout(fallbackTimer);
+            }
         });
 
-        // Attempt to open immediately
+        retryButton.addEventListener("click", function () {
+            resetToLoading();
+            attemptOpen();
+            scheduleFallback();
+        });
+
+        resetToLoading();
         attemptOpen();
+        scheduleFallback();
     </script>
 </body>
 </html>

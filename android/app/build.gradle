@@ -13,8 +13,8 @@ android {
         applicationId "com.orion.store"
         minSdkVersion 24
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 8
-        versionName "1.3.2"
+        versionCode 10
+        versionName "1.3.4"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -39,12 +39,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
 
-            // ── R8 Full Mode optimizations ────────────────────────────
-            // These flags tell R8 to optimize more aggressively for
-            // performance rather than just code size.
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
-
-            // Enable R8 full mode (more aggressive than ProGuard compatibility)
+            // Enable R8 full mode optimizations (more aggressive than ProGuard compatibility)
             // This inlines methods, removes unused branches, and optimizes bytecode.
             // Already the default with AGP 8+, but explicit for clarity.
         }
@@ -55,9 +50,9 @@ android {
         }
     }
     compileOptions {
-        // Gradle 8 requires Java 17 or higher
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        // Capacitor 7+ requires Java 21
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
 
     // ── Build-level performance flags ────────────────────────────────
