@@ -1,12 +1,15 @@
 import React, { useState, Suspense, lazy, useRef, useEffect } from 'react';
 import { useSettingsStore, Theme } from '../store/useAppStore';
 import DinoCirclePreview from './DinoCirclePreview';
+import { DonationConfig } from '../types';
+import DonationSheet from './DonationSheet';
 
 const DinoGameModal = lazy(() => import('./DinoGameModal'));
 
 interface MaintenanceModeProps {
   maintenanceMessage?: string;
   socialLinks: { discord?: string; coffee?: string };
+  donation?: DonationConfig;
   onBypass: () => void;
   triggerHaptic: (type?: any, style?: any, notificationType?: any) => void;
   version: string;
@@ -15,11 +18,13 @@ interface MaintenanceModeProps {
 const MaintenanceMode: React.FC<MaintenanceModeProps> = ({
   maintenanceMessage,
   socialLinks,
+  donation,
   onBypass,
   triggerHaptic,
   version
 }) => {
   const [showGame, setShowGame] = useState(false);
+  const [showDonationSheet, setShowDonationSheet] = useState(false);
   const clickCount = useRef(0);
   const lastClick = useRef(0);
   const { setDevUnlocked } = useSettingsStore();
@@ -131,9 +136,9 @@ const MaintenanceMode: React.FC<MaintenanceModeProps> = ({
               </button>
             )}
 
-            {socialLinks.coffee && (
+            {(socialLinks.coffee || donation) && (
               <button
-                onClick={() => { triggerHaptic('selection'); window.open(socialLinks.coffee, '_blank'); }}
+                onClick={() => { triggerHaptic('selection'); setShowDonationSheet(true); }}
                 className="group relative w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-emerald-100 dark:bg-emerald-900/60 border-2 border-emerald-400 rounded-2xl hover:scale-[1.01] transition-all cursor-pointer shadow-lg shadow-emerald-400/20"
               >
                 <div className="w-8 h-8 rounded-full bg-emerald-400 text-emerald-900 flex items-center justify-center text-lg shrink-0 group-hover:rotate-12 transition-transform">
@@ -185,6 +190,12 @@ const MaintenanceMode: React.FC<MaintenanceModeProps> = ({
       <Suspense fallback={null}>
         {showGame && <DinoGameModal onClose={() => setShowGame(false)} />}
       </Suspense>
+
+      <DonationSheet
+        isOpen={showDonationSheet}
+        onClose={() => setShowDonationSheet(false)}
+        donation={donation ?? null}
+      />
     </div>
   );
 };

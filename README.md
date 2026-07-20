@@ -21,15 +21,18 @@
   <img src="https://img.shields.io/badge/Capacitor-119EFF?style=for-the-badge&logo=capacitor&logoColor=white" alt="Capacitor">
   <img src="https://img.shields.io/badge/Tailwind-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind">
 </p>
+
 <p align="center">
-  <a href="https://www.buymeacoffee.com/rookiez" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="120" alt="Buy Me A Coffee">
-  </a>
-  <br>
-  <a href="https://buymeachai.ezee.li/RookieZ">
-    <img src="https://i.ibb.co/fd83zYrT/1782281531688.jpg" width="120" alt="Buy Me A Chai">
-  </a>
+  <a href="https://ko-fi.com/rookie_z" target="_blank"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" height="30" style="height:30px; border-radius:8px; display:inline-block;" alt="Donate via Ko-fi" /></a>
+  &nbsp;&nbsp;
+  <a href="https://buymeachai.ezee.li/RookieZ" target="_blank"><img src="https://raw.githubusercontent.com/TakiShiwa/donate-with-upi/ffbb38749891aeb62e758a3692698e346e3df2da/Button/SVG/UPI-light-blue-01.svg" height="30" style="height:30px; border-radius:8px; display:inline-block;" alt="Donate via UPI" /></a>
+  <br />
+  <a href="https://paypal.me/RookieEnough" target="_blank"><img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" height="50" style="height:50px; border-radius:8px; display:inline-block; margin-top:8px;" alt="Donate via PayPal" /></a>
+</p>
+
 <br>
+
+<p align="center">
   <a href="https://github.com/RookieEnough/Orion-Store/releases">
     <img src="https://img.shields.io/github/v/release/RookieEnough/Orion-Store?style=for-the-badge&logo=github&label=Version&color=6366f1" alt="Latest Version">
   </a>
@@ -155,6 +158,19 @@ The app leans into a compact, card-driven interface with a dark shell, loud acce
   </a>
 </p>
 
+## Official Developer Badges :trophy:
+
+If you are a developer, you can promote that your application is hosted on Orion Store by adding our official badge to your repository's readme or your product website.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/RookieEnough/Orion-Store/refs/heads/main/assets/orion-badge.png" alt="Get it on Orion Store" height="60">
+</p>
+
+### How to Get Your Badge Integration Link:
+1. **Submit Your App**: Submit your application to the Orion Store via this client or our repository submission form.
+2. **Enable Developer Mode**: Once approved and live in the store, open Orion Store, go to the header settings (or tap the **"Orion Store"** header 8 times) to unlock Developer Mode.
+3. **Copy Integration Code**: Go to your app's detail view, scroll down to the **Developer Deep Links** section, and click to expand it. From there, copy the **Markdown Badge** for your repository's README or the **HTML Badge** code for your website.
+
 ## How the project is structured :compass:
 
 The application is built with React, TypeScript, Vite, Tailwind CSS, and Capacitor 7. The main app shell lives in `App.tsx`, the UI is split across `components/`, persistent client state is managed in `store/`, Android-native functionality is bridged through `plugins/AppTracker.ts`, and heavier background work is pushed into `workers/` for release aggregation, relay logic, image handling, and Sentinel support.
@@ -231,7 +247,9 @@ The project lives across a few public surfaces:
 
 - `Orion-Data`: [github.com/RookieEnough/Orion-Data](https://github.com/RookieEnough/Orion-Data)
 - `Discord`: [discord.com/invite/CrM6y4ujnq](https://discord.com/invite/CrM6y4ujnq)
-- `Buy Me a Coffee`: [buymeacoffee.com/rookiez](https://www.buymeacoffee.com/rookiez)
+- `Ko-fi`: [ko-fi.com/rookie_z](https://ko-fi.com/rookie_z)
+- `PayPal`: [paypal.me/RookieEnough](https://paypal.me/RookieEnough)
+- `UPI ID`: `rookiez@ptyes`
 - 
 
 ---

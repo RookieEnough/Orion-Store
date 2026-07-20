@@ -11,6 +11,7 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewConfiguration;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.webkit.WebSettings;
@@ -26,23 +27,17 @@ public class MainActivity extends BridgeActivity {
     private PixelCatRefreshView pixelCatRefreshView;
     private boolean webContentAtTop = true;
     private boolean refreshEligibleSurface = false;
-    private boolean pullGestureAllowed = false;
-    // Throttle JS bridge calls — evaluateJavascript is expensive
     private long lastTopStateCheck = 0;
     private static final long TOP_STATE_THROTTLE_MS = 120;
+    private static final float VERTICAL_PULL_RATIO = 1.18f;
+    private static final float HORIZONTAL_REJECT_RATIO = 0.9f;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // Install the splash screen
         SplashScreen.installSplashScreen(this);
-
-        // Register all plugins before calling super.onCreate()
         registerPlugin(AppTrackerPlugin.class);
-
-        // Now, initialize the Bridge
         super.onCreate(savedInstanceState);
 
-        // Draw under the status / navigation bar (true edge-to-edge).
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             getWindow().setStatusBarContrastEnforced(false);
@@ -53,83 +48,43 @@ public class MainActivity extends BridgeActivity {
         getWindow().setStatusBarColor(0x00000000);
         getWindow().setNavigationBarColor(0x00000000);
 
-        // Apply WebView optimizations as early as possible — use a near-zero delay
-        // so the Bridge is definitely initialized but we don't waste 300ms.
         new Handler(Looper.getMainLooper()).post(() -> {
             if (getBridge() != null && getBridge().getWebView() != null) {
                 WebView webView = getBridge().getWebView();
                 WebSettings webSettings = webView.getSettings();
 
-                // ── GPU / Rendering Pipeline ──────────────────────────
-                // LAYER_TYPE_HARDWARE offloads rendering to the GPU texture layer.
-                // This is the single biggest win for scroll & animation smoothness.
                 webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);
-
-                // Disable over-scroll glow — saves a draw pass on every edge bounce.
                 webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-
-                // Hide scrollbars entirely (CSS already hides them). Removing them
-                // avoids measure/layout invalidation when they would appear/disappear.
                 webView.setVerticalScrollBarEnabled(false);
                 webView.setHorizontalScrollBarEnabled(false);
                 webView.setScrollBarStyle(View.SCROLLBARS_OUTSIDE_OVERLAY);
-
-                // Transparent background — WebView won't draw a default white bg
-                // before the page renders, eliminating a flash.
                 webView.setBackgroundColor(0x00000000);
 
-                // ── WebSettings ────────────────────────────────────────
-                // HIGH render priority tells Chromium to allocate more resources.
                 webSettings.setRenderPriority(WebSettings.RenderPriority.HIGH);
-
-                // LOAD_DEFAULT uses HTTP cache properly — unchanged assets are
-                // served from disk, not re-fetched.
                 webSettings.setCacheMode(WebSettings.LOAD_DEFAULT);
-
-                // DOM storage is required for IndexedDB (Zustand idb-keyval).
                 webSettings.setDomStorageEnabled(true);
-
-                // Disable zoom controls — avoids extra measure/layout pass.
                 webSettings.setSupportZoom(false);
                 webSettings.setBuiltInZoomControls(false);
-
-                // Allow media without user gesture.
                 webSettings.setMediaPlaybackRequiresUserGesture(false);
 
-                // ── Android 8+ Renderer Priority ──────────────────────
-                // IMPORTANT + WAIVE_WHEN_INVISIBLE = top priority when visible,
-                // releases resources when backgrounded.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    webView.setRendererPriorityPolicy(
-                        WebView.RENDERER_PRIORITY_IMPORTANT, true);
+                    webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
                 }
 
-                // ── Android 6+ Offscreen Pre-raster ───────────────────
-                // false = don't pre-raster tiles that are offscreen. Saves GPU
-                // memory and fill-rate on low-end devices. The trade-off is a
-                // tiny flash on very fast scrolls, which is imperceptible.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     webSettings.setOffscreenPreRaster(false);
                 }
 
-                // ── Critical: Disable text autosizing ─────────────────
-                // Android WebView's font-boosting inflates text on first layout,
-                // causing a jarring re-layout jump ~200ms after page load.
-                // Our CSS already handles responsive typography.
                 webSettings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.NORMAL);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                     webSettings.setLoadWithOverviewMode(false);
                     webSettings.setUseWideViewPort(true);
                 }
 
-                // ── Mixed content & safe browsing ─────────────────────
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    webSettings.setMixedContentMode(
-                        android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+                    webSettings.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
                 }
 
-                // Disable safe browsing lookups — they add latency to every
-                // navigation and we only load local assets.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     webSettings.setSafeBrowsingEnabled(false);
                 }
@@ -167,16 +122,12 @@ public class MainActivity extends BridgeActivity {
         swipeRefreshLayout.setClipToPadding(false);
         swipeRefreshLayout.setClipChildren(false);
 
-        // Move the native progress drawable below the punch-hole/notch. It is made
-        // transparent because the custom pixel-cat is the visible refresh indicator.
         int progressStart = getSafeRefreshTopOffset();
         int progressEnd = progressStart + dp(58);
         swipeRefreshLayout.setProgressViewOffset(false, progressStart, progressEnd);
         swipeRefreshLayout.setProgressBackgroundColorSchemeColor(Color.TRANSPARENT);
         swipeRefreshLayout.setColorSchemeColors(Color.TRANSPARENT);
-
-        // Keep the gesture quick, but start/end far enough below the status cutout.
-        swipeRefreshLayout.setDistanceToTriggerSync(dp(1000)); // We manually trigger it, hide native threshold
+        swipeRefreshLayout.setDistanceToTriggerSync(dp(1000));
         swipeRefreshLayout.setSlingshotDistance(dp(152));
 
         swipeRefreshLayout.addView(pullContainer,
@@ -185,17 +136,7 @@ public class MainActivity extends BridgeActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
         hideNativeRefreshIndicator();
-
-        // Pull-to-refresh is intentionally locked down:
-        // 1) only the home surface, not settings/details/modals
-        // 2) only when content is at the top
-        // 3) only from the top gesture strip, so hero carousel/update swipes stay native-smooth
-        swipeRefreshLayout.setOnChildScrollUpCallback(
-            (parentLayout, child) -> !canPullToRefresh(webView));
-            
-        // We completely bypass swipeRefreshLayout's internal onRefreshListener sequence
-        // because its scale animations are too hostile to custom invisble indicators.
-        // It is now purely used as a touch interceptor, and we manually trigger below.
+        swipeRefreshLayout.setOnChildScrollUpCallback((parentLayout, child) -> !canPullToRefresh(webView));
         updateWebContentTopState(webView);
         parent.addView(swipeRefreshLayout, webViewIndex);
     }
@@ -210,16 +151,10 @@ public class MainActivity extends BridgeActivity {
             if (child == null || child == pixelCatRefreshView) {
                 continue;
             }
-
             if (child instanceof FrameLayout) {
                 continue;
             }
-
             child.setAlpha(0f);
-            // CRITICAL: We MUST NOT set visibility to GONE. SwipeRefreshLayout relies on
-            // this view's animation completing to trigger the onRefresh() callback!
-            // If it's GONE, the animation aborts and the refresh is never triggered.
-            // We just remove the elevation so it casts no shadow, and alpha 0 hides it entirely.
             child.setElevation(0f);
         }
     }
@@ -228,14 +163,9 @@ public class MainActivity extends BridgeActivity {
         long now = System.currentTimeMillis();
         if (force || now - lastTopStateCheck > TOP_STATE_THROTTLE_MS) {
             lastTopStateCheck = now;
-            // Fast path: if WebView scrollY > 0, we're definitely not at top
             if (webView.getScrollY() > 2) {
                 webContentAtTop = false;
             } else {
-                // Optimistic fast-path: if the native ScrollY is 0, set
-                // webContentAtTop = true immediately so the very first
-                // ACTION_MOVE in a new touch sequence can be intercepted.
-                // The JS bridge will correct it asynchronously if needed.
                 webContentAtTop = true;
                 updateWebContentTopState(webView);
             }
@@ -243,34 +173,15 @@ public class MainActivity extends BridgeActivity {
     }
 
     private boolean canPullToRefresh(WebView webView) {
-        // Synchronous fast-path: trust the native scroll position and the
-        // last-known eligibility. The JS bridge keeps refreshEligibleSurface
-        // up-to-date on every ACTION_DOWN, so it is never dangerously stale.
-        return refreshEligibleSurface
-            && pullGestureAllowed
-            && webContentAtTop
-            && webView.getScrollY() <= 2;
-    }
-
-    private boolean isInTopPullStrip(float rawY) {
-        // Pull-to-refresh gesture must begin near the physical top of the screen,
-        // not halfway down the home page where carousels/swim-lanes live.
-        return rawY <= getStatusBarHeight() + dp(156);
+        return refreshEligibleSurface && webContentAtTop && webView.getScrollY() <= 2;
     }
 
     private void updateWebContentTopState(WebView webView) {
-        // Fast native check first — avoids JS bridge entirely for scrolled state
         if (webView.getScrollY() > 2) {
             webContentAtTop = false;
             return;
         }
 
-        // The JS check does two things:
-        // 1) Reads the REAL scroll position from both window AND #root (the app's
-        //    actual scroll container has overflow-y:visible but we check it anyway).
-        // 2) Detects full-screen modals. We only flag an element as a "modal" if it
-        //    is fixed/absolute AND covers >50% of the viewport height. This avoids
-        //    false positives from the fixed header bar and bottom navigation.
         webView.evaluateJavascript(
             "(function(){" +
                 "var eps=2;" +
@@ -290,17 +201,60 @@ public class MainActivity extends BridgeActivity {
                 "var root=document.documentElement;" +
                 "var activeTab=(root.dataset.orionActiveTab||'').toLowerCase();" +
                 "var datasetEligible=root.dataset.orionRefreshEligible==='true';" +
+                "var character=(root.dataset.orionRefreshCharacter||'cat').toLowerCase();" +
                 "var tabEligible=activeTab==='android'||activeTab==='tv'||activeTab==='pc';" +
                 "var eligible=datasetEligible&&tabEligible&&!modal;" +
-                "return JSON.stringify({top:top<=eps,eligible:eligible});" +
+                "return JSON.stringify({top:top<=eps,eligible:eligible,character:character});" +
             "})()",
             value -> {
                 boolean top = value != null && value.contains("\\\"top\\\":true");
                 boolean eligible = value != null && value.contains("\\\"eligible\\\":true");
                 webContentAtTop = top;
                 refreshEligibleSurface = eligible;
+                if (pixelCatRefreshView != null && value != null) {
+                    pixelCatRefreshView.setCharacter(extractRefreshCharacter(value));
+                }
             }
         );
+    }
+
+    private String extractRefreshCharacter(String value) {
+        String[] known = new String[] {
+            "cat", "dog", "pokeball", "shield", "owl", "robot", "ghost", "kitty", "bunny", "batman", "fox", "panda", "pikachu"
+        };
+        for (String id : known) {
+            if (value.contains("\\\"character\\\":\\\"" + id + "\\\"")) {
+                return normalizeRefreshCharacter(id);
+            }
+        }
+        return "cat";
+    }
+
+    private String normalizeRefreshCharacter(String characterId) {
+        if (characterId == null) {
+            return "cat";
+        }
+        switch (characterId.toLowerCase()) {
+            case "cat":
+            case "dog":
+            case "pokeball":
+            case "shield":
+            case "owl":
+            case "robot":
+            case "ghost":
+            case "kitty":
+            case "bunny":
+            case "batman":
+                return characterId.toLowerCase();
+            case "fox":
+                return "batman";
+            case "panda":
+                return "cat";
+            case "pikachu":
+                return "pokeball";
+            default:
+                return "cat";
+        }
     }
 
     private int getSafeRefreshTopOffset() {
@@ -335,11 +289,16 @@ public class MainActivity extends BridgeActivity {
         private final WebView webView;
         private float startX;
         private float startY;
+        private final int touchSlop;
+        private boolean gestureStartedAtTop;
         private boolean gestureMayRefresh;
+        private boolean gestureCommitted;
+        private boolean gestureRejected;
 
         HomeOnlySwipeRefreshLayout(android.content.Context context, WebView webView) {
             super(context);
             this.webView = webView;
+            this.touchSlop = Math.max(dp(8), ViewConfiguration.get(context).getScaledTouchSlop());
         }
 
         @Override
@@ -348,54 +307,83 @@ public class MainActivity extends BridgeActivity {
             if (action == MotionEvent.ACTION_DOWN) {
                 startX = event.getRawX();
                 startY = event.getRawY();
-                pullGestureAllowed = isInTopPullStrip(startY);
+                gestureCommitted = false;
+                gestureRejected = false;
                 updateTopStateIfNeeded(webView, true);
-                gestureMayRefresh = pullGestureAllowed
-                    && refreshEligibleSurface
-                    && webContentAtTop
-                    && webView.getScrollY() <= 2;
-                if (!gestureMayRefresh) {
+                gestureStartedAtTop = canPullToRefresh(webView);
+                gestureMayRefresh = gestureStartedAtTop;
+                super.onInterceptTouchEvent(event);
+                if (!gestureStartedAtTop) {
                     return false;
                 }
             } else if (action == MotionEvent.ACTION_MOVE) {
                 float dx = Math.abs(event.getRawX() - startX);
                 float dy = event.getRawY() - startY;
+                float absDy = Math.abs(dy);
 
-                // Horizontal-first or diagonal carousel swipes must never be stolen.
-                if (dx > dp(10) && dx > Math.abs(dy) * 0.72f) {
+                if (gestureRejected || !gestureStartedAtTop || !canPullToRefresh(webView)) {
                     gestureMayRefresh = false;
-                    pullGestureAllowed = false;
+                    gestureCommitted = false;
                     return false;
                 }
 
-                if (dy < dp(8) || !gestureMayRefresh || !canPullToRefresh(webView)) {
+                if (absDy > touchSlop && dy < 0) {
+                    gestureMayRefresh = false;
+                    gestureCommitted = false;
+                    gestureRejected = true;
+                    return false;
+                }
+
+                if (dx > touchSlop && dx > absDy * HORIZONTAL_REJECT_RATIO) {
+                    gestureMayRefresh = false;
+                    gestureCommitted = false;
+                    gestureRejected = true;
+                    return false;
+                }
+
+                if (!gestureCommitted) {
+                    if (dy > touchSlop && dy > dx * VERTICAL_PULL_RATIO) {
+                        gestureCommitted = true;
+                    } else {
+                        return false;
+                    }
+                }
+
+                if (dy <= 0) {
                     return false;
                 }
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                gestureStartedAtTop = false;
                 gestureMayRefresh = false;
-                pullGestureAllowed = false;
+                gestureCommitted = false;
+                gestureRejected = false;
             }
-            return gestureMayRefresh && super.onInterceptTouchEvent(event);
+            if (!gestureMayRefresh || !gestureCommitted) {
+                return false;
+            }
+            super.onInterceptTouchEvent(event);
+            return true;
         }
 
         @Override
         public boolean onTouchEvent(MotionEvent event) {
             int action = event.getActionMasked();
-            
+
             if (action == MotionEvent.ACTION_MOVE) {
                 float dy = event.getRawY() - startY;
-                if (pixelCatRefreshView != null && gestureMayRefresh && dy > 0) {
+                if (pixelCatRefreshView != null && gestureCommitted && gestureMayRefresh && dy > 0) {
                     pixelCatRefreshView.setPullProgress(Math.min(1f, dy / dp(120)));
                 }
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                 float dy = event.getRawY() - startY;
-                // Manual explicit trigger: If pulled 116dp physically down
-                boolean shouldTrigger = (action == MotionEvent.ACTION_UP && dy >= dp(116) && gestureMayRefresh);
-                
+                boolean shouldTrigger = (action == MotionEvent.ACTION_UP && dy >= dp(116) && gestureCommitted && gestureMayRefresh);
+
+                gestureStartedAtTop = false;
                 gestureMayRefresh = false;
-                pullGestureAllowed = false;
+                gestureCommitted = false;
+                gestureRejected = false;
                 boolean handled = super.onTouchEvent(event);
-                
+
                 if (shouldTrigger) {
                     if (pixelCatRefreshView != null) {
                         pixelCatRefreshView.setRefreshing(true);
@@ -419,7 +407,7 @@ public class MainActivity extends BridgeActivity {
                 }
                 return handled;
             }
-            
+
             return super.onTouchEvent(event);
         }
     }
@@ -430,26 +418,247 @@ public class MainActivity extends BridgeActivity {
         if (getBridge() != null && getBridge().getWebView() != null) {
             WebView webView = getBridge().getWebView();
             webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);
-            // Reset throttle so next check fires immediately
             lastTopStateCheck = 0;
             updateWebContentTopState(webView);
         }
     }
 
     private class PixelCatRefreshView extends View {
+        private static final String[] CAT_GRID = new String[] {
+            ".b............b.",
+            ".bb..........bb.",
+            ".beb........beb.",
+            ".bebb......bbeb.",
+            ".bbbbbbbbbbbbbb.",
+            ".bbbbabbbbabbbb.",
+            ".bbbbbbbbbbbbbb.",
+            ".bbedbbbbbbedbb.",
+            ".bbddbbbbbbddbb.",
+            ".bbbbcceeccbbbb.",
+            "dbbbbcdccdcbbbbd",
+            "dbbbbccddccbbbbd",
+            ".bbbbbccccbbbbb.",
+            ".bbbbbbbbbbbbbb.",
+            "..bbbbbbbbbbbb..",
+            "....bbbbbbbb...."
+        };
+        private static final String[] DOG_GRID = new String[] {
+            ".aa......aa.",
+            ".aabbbbbbaa.",
+            ".aabbbbbbaa.",
+            ".aabbbbbbaa.",
+            ".abddbbddba.",
+            ".abddbbddba.",
+            ".abbccccbba.",
+            ".abccddccba.",
+            ".abcceeccba.",
+            ".abbccccbba.",
+            "..abbbbbba..",
+            "...aaaaaa..."
+        };
+        private static final String[] POKEBALL_REST_GRID = new String[] {
+            ".....aaaaaa.....",
+            "...aaccccccaa...",
+            "..acccccccccca..",
+            ".acccccccccccca.",
+            ".acccccccccccca.",
+            "acccccaaaaccccca",
+            "abbbbaffffabbbba",
+            "aaaaaafhhfaaaaaa",
+            "aaaaaafhhfaaaaaa",
+            "aeeeeaffffaeeeea",
+            "aeeeeeaaaaeeeeea",
+            ".aeeeeeeeeeeeea.",
+            ".aeeeeeeeeeeeea.",
+            "..aeeeeeeeeeea..",
+            "...aaeeeeeeaa...",
+            ".....aaaaaa....."
+        };
+        private static final String[] POKEBALL_SPARK_GRID = new String[] {
+            ".g...aaaaaa...g.",
+            "gggaaccccccaaggg",
+            ".gaccccccccccag.",
+            ".acccccccccccca.",
+            ".acccccccccccca.",
+            "acccccaaaaccccca",
+            "abbbbaffffabbbba",
+            "aaaaaafhhfaaaaaa",
+            "aaaaaafhhfaaaaaa",
+            "aeeeeaffffaeeeea",
+            "aeeeeeaaaaeeeeea",
+            ".aeeeeeeeeeeeea.",
+            ".aeeeeeeeeeeeea.",
+            "g.aeeeeeeeeeea.g",
+            "...aaeeeeeeaa...",
+            "..g..aaaaaa..g.."
+        };
+        private static final String[] SHIELD_GRID = new String[] {
+            ".....bbbbbb.....",
+            "...bbbbbbbbbb...",
+            "..bbbccccccbbb..",
+            ".bbccccbbccccbb.",
+            ".bbccbbbbbbccbb.",
+            "bbccbbddddbbccbb",
+            "bccbbddeeddbbccb",
+            "bccbbeeeeeebbccb",
+            "bccbbdeeeedbbccb",
+            "bccbbdeddedbbccb",
+            "bbccbbddddbbccbb",
+            ".bbccbbbbbbccbb.",
+            ".bbccccbbccccbb.",
+            "..bbbccccccbbb..",
+            "...bbbbbbbbbb...",
+            ".....bbbbbb....."
+        };
+        private static final String[] SHIELD_REST_GRID = new String[] {
+            ".....bbbbbb.....",
+            "...bbbbbbbbbb...",
+            "..bbbccccccbbb..",
+            ".bbccccbbccccbb.",
+            ".bbccbbbbbbccbb.",
+            "bbccbbddddbbccbb",
+            "bccbbddxxddbbccb",
+            "bccbbxxxxxxbbccb",
+            "bccbbdxxxxdbbccb",
+            "bccbbdxdeddbbccb",
+            "bbccbbddddbbccbb",
+            ".bbccbbbbbbccbb.",
+            ".bbccccbbccccbb.",
+            "..bbbccccccbbb..",
+            "...bbbbbbbbbb...",
+            ".....bbbbbb....."
+        };
+        private static final String[] OWL_GRID = new String[] {
+            ".b........b.",
+            ".bb......bb.",
+            ".bbbbbbbbbb.",
+            ".bcccbbcccb.",
+            ".bcdcbbcdcb.",
+            ".bcdcbbcdcb.",
+            ".bcccbbcccb.",
+            ".bbbbeebbbb.",
+            ".bbccccccbb.",
+            "..bccccccb..",
+            "...bbbbbb...",
+            "...e....e..."
+        };
+        private static final String[] ROBOT_GRID = new String[] {
+            ".....cc.....",
+            ".....aa.....",
+            ".aaaaaaaaaa.",
+            ".abbbbbbbba.",
+            ".abccbbccba.",
+            ".abccbbccba.",
+            ".abbbbbbbba.",
+            ".abeeeeeeba.",
+            ".abbbbbbbba.",
+            ".aaaaaaaaaa.",
+            "....aaaa....",
+            "............"
+        };
+        private static final String[] GHOST_GRID = new String[] {
+            "....bbbb....",
+            "..bbbbbbbb..",
+            ".bbbbbbbbbb.",
+            ".bbccbbccbb.",
+            ".bbccbbccbb.",
+            ".bebbbbbbeb.",
+            ".bbbbccbbbb.",
+            ".bbbbbbbbbb.",
+            ".bbbbbbbbbb.",
+            ".bbbbbbbbbb.",
+            ".bb..bb..bb.",
+            "............"
+        };
+        private static final String[] KITTY_GRID = new String[] {
+            "..b......b..",
+            ".bbb....bbb.",
+            "ccbbbbbbbbb.",
+            "cccbbbbbbbbb",
+            "bbbbbbbbbbbb",
+            "abbabbbbabba",
+            "bbbabbbbabbb",
+            "abbbbddbbbba",
+            "bbbbbbbbbbbb",
+            ".bbbbbbbbbb.",
+            "..bbbbbbbb..",
+            "............"
+        };
+        private static final String[] BUNNY_GRID = new String[] {
+            "..b......b..",
+            ".bcb....bcb.",
+            ".bcb....bcb.",
+            ".bbb....bbb.",
+            "..bbbbbbbb..",
+            ".bbbbbbbbbb.",
+            ".bbaabbaabb.",
+            ".bbaabbaabb.",
+            ".bebbddbbeb.",
+            ".bbbbbbbbbb.",
+            "..bbbbbbbb..",
+            "...bbbbbb..."
+        };
+        private static final String[] BATMAN_FACE_OPEN_GRID = new String[] {
+            "................",
+            "..b..........b..",
+            "..bb........bb..",
+            "..bbb......bbb..",
+            "..bbbbbbbbbbbb..",
+            "..bbbbbbbbbbbb..",
+            "..bbcbbbbbbcbb..",
+            "..bbccbbbbccbb..",
+            "..bbcccbbcccbb..",
+            "..bbbbbbbbbbbb..",
+            "..bbbbbbbbbbbb..",
+            "..bddddddddddb..",
+            "..bdddbbbbdddb..",
+            "...bddddddddb...",
+            "....bbbbbbbb....",
+            "................"
+        };
+        private static final String[] BATMAN_FACE_CLOSED_GRID = new String[] {
+            "................",
+            "..b..........b..",
+            "..bb........bb..",
+            "..bbb......bbb..",
+            "..bbbbbbbbbbbb..",
+            "..bbbbbbbbbbbb..",
+            "..bbbbbbbbbbbb..",
+            "..bbbbbbbbbbbb..",
+            "..bbcccbbcccbb..",
+            "..bbbbbbbbbbbb..",
+            "..bbbbbbbbbbbb..",
+            "..bddddddddddb..",
+            "..bdddbbbbdddb..",
+            "...bddddddddb...",
+            "....bbbbbbbb....",
+            "................"
+        };
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private boolean refreshing = false;
         private float pullProgress = 0f;
         private long refreshStartedAt = 0L;
+        private long shieldSpinStartedAt = 0L;
+        private String characterId = "cat";
 
         PixelCatRefreshView(android.content.Context context) {
             super(context);
             paint.setStyle(Paint.Style.FILL);
+            paint.setAntiAlias(false);
             setLayerType(View.LAYER_TYPE_HARDWARE, null);
             setAlpha(0f);
             setScaleX(0.72f);
             setScaleY(0.72f);
-            setTranslationY(-dp(10));
+            setTranslationY(-dp(14));
+        }
+
+        void setCharacter(String nextCharacterId) {
+            String normalizedCharacterId = normalizeRefreshCharacter(nextCharacterId);
+            if (normalizedCharacterId.equals(characterId)) {
+                return;
+            }
+            characterId = normalizedCharacterId;
+            invalidate();
         }
 
         void setPullProgress(float progress) {
@@ -461,7 +670,7 @@ public class MainActivity extends BridgeActivity {
             float scale = 0.72f + (0.28f * progress);
             setScaleX(scale);
             setScaleY(scale);
-            setTranslationY(-dp(10) + dp(12) * progress);
+            setTranslationY(-dp(14) + dp(10) * progress);
             invalidate();
         }
 
@@ -469,21 +678,32 @@ public class MainActivity extends BridgeActivity {
             refreshing = isRefreshing;
             if (isRefreshing) {
                 refreshStartedAt = System.currentTimeMillis();
+                shieldSpinStartedAt = "shield".equals(characterId) ? refreshStartedAt : 0L;
                 setAlpha(1f);
                 setScaleX(1f);
                 setScaleY(1f);
-                setTranslationY(dp(2));
+                setTranslationY(-dp(8));
                 postInvalidateOnAnimation();
             } else {
                 refreshStartedAt = 0L;
+                shieldSpinStartedAt = 0L;
                 animate()
                     .alpha(0f)
                     .scaleX(0.72f)
                     .scaleY(0.72f)
-                    .translationY(-dp(10))
+                    .translationY(-dp(14))
                     .setDuration(140)
                     .start();
             }
+        }
+
+        private boolean isAnimalCharacter() {
+            return "cat".equals(characterId)
+                || "dog".equals(characterId)
+                || "owl".equals(characterId)
+                || "ghost".equals(characterId)
+                || "kitty".equals(characterId)
+                || "bunny".equals(characterId);
         }
 
         @Override
@@ -491,82 +711,210 @@ public class MainActivity extends BridgeActivity {
             super.onDraw(canvas);
             float w = getWidth();
             float h = getHeight();
-            // Expanded divisor from 18f to 24f to keep px=3dp since canvas is 72dp instead of 54dp.
-            float px = Math.min(w, h) / 24f;
-            float cx = w / 2f;
-            float top = h * 0.12f; // 72*0.12 = 8.64dp (exactly identical to 54*0.16)
-            boolean blink = refreshing && ((System.currentTimeMillis() - refreshStartedAt) / 180) % 6 == 0;
-            boolean showClosedEyes = !refreshing && pullProgress > 0.08f;
+            boolean isPokeball = "pokeball".equals(characterId);
+            boolean isShield = "shield".equals(characterId);
+            boolean showClosedEyes = !refreshing && pullProgress > 0.08f && !isPokeball;
+            String[] grid = getGridForState(showClosedEyes, refreshing);
+            int rows = Math.max(1, grid.length);
+            int cols = Math.max(1, getGridWidth(grid));
+            int spriteContentSize = dp(56);
+            float basePx = Math.max(2f, (float) Math.floor(Math.min((spriteContentSize - dp(8)) / cols, (spriteContentSize - dp(8)) / rows)));
+            float px = isAnimalCharacter() ? Math.max(2f, basePx * 0.88f) : basePx;
             float bob = refreshing
                 ? (float) Math.sin((System.currentTimeMillis() - refreshStartedAt) / 110f) * px * 0.55f
                 : 0f;
+            float shakeX = 0f;
+            float rotation = 0f;
 
-            canvas.save();
-            canvas.translate(0, bob);
-
-            // Soft neon shadow badge behind the cat.
-            paint.setColor(Color.argb(70, 124, 58, 237));
-            canvas.drawRoundRect(cx - 8.2f * px, top + 1.6f * px, cx + 8.2f * px, top + 15.7f * px, 5f * px, 5f * px, paint);
-            paint.setColor(Color.argb(235, 17, 24, 39));
-            canvas.drawRoundRect(cx - 7.5f * px, top + px, cx + 7.5f * px, top + 15f * px, 4.2f * px, 4.2f * px, paint);
-
-            // Pixel ears.
-            paint.setColor(Color.rgb(31, 41, 55));
-            drawPixel(canvas, cx - 6 * px, top + 0 * px, 2, 4, px);
-            drawPixel(canvas, cx + 4 * px, top + 0 * px, 2, 4, px);
-            paint.setColor(Color.rgb(236, 72, 153));
-            drawPixel(canvas, cx - 5 * px, top + 1 * px, 1, 2, px);
-            drawPixel(canvas, cx + 5 * px, top + 1 * px, 1, 2, px);
-
-            // Pixel face.
-            paint.setColor(Color.rgb(249, 250, 251));
-            drawPixel(canvas, cx - 6 * px, top + 4 * px, 12, 8, px);
-            drawPixel(canvas, cx - 5 * px, top + 3 * px, 10, 1, px);
-            drawPixel(canvas, cx - 4 * px, top + 12 * px, 8, 1, px);
-
-            // Head outline pixels.
-            paint.setColor(Color.rgb(31, 41, 55));
-            drawPixel(canvas, cx - 7 * px, top + 5 * px, 1, 6, px);
-            drawPixel(canvas, cx + 6 * px, top + 5 * px, 1, 6, px);
-            drawPixel(canvas, cx - 5 * px, top + 13 * px, 10, 1, px);
-
-            // Eyes blink while refreshing.
-            paint.setColor(Color.rgb(17, 24, 39));
-            if (showClosedEyes) {
-                drawPixel(canvas, cx - 4 * px, top + 8 * px, 3, 1, px);
-                drawPixel(canvas, cx + 1 * px, top + 8 * px, 3, 1, px);
-            } else if (blink) {
-                drawPixel(canvas, cx - 4 * px, top + 8 * px, 3, 1, px);
-                drawPixel(canvas, cx + 1 * px, top + 8 * px, 3, 1, px);
-            } else {
-                drawPixel(canvas, cx - 4 * px, top + 7 * px, 2, 2, px);
-                drawPixel(canvas, cx + 2 * px, top + 7 * px, 2, 2, px);
+            if (isPokeball && !refreshing && pullProgress > 0.08f) {
+                shakeX = (float) Math.sin(System.currentTimeMillis() / 55f) * px * (0.2f + pullProgress * 0.25f);
+            } else if (isPokeball && refreshing) {
+                shakeX = (float) Math.sin((System.currentTimeMillis() - refreshStartedAt) / 38f) * px * 0.42f;
             }
 
-            // Nose and tiny mouth.
-            paint.setColor(Color.rgb(236, 72, 153));
-            drawPixel(canvas, cx - 0.5f * px, top + 9.5f * px, 1, 1, px);
-            paint.setColor(Color.rgb(17, 24, 39));
-            drawPixel(canvas, cx - 1.5f * px, top + 11 * px, 1, 1, px);
-            drawPixel(canvas, cx + 0.5f * px, top + 11 * px, 1, 1, px);
+            if (isShield && shieldSpinStartedAt > 0L) {
+                long elapsed = System.currentTimeMillis() - shieldSpinStartedAt;
+                if (elapsed < 440L) {
+                    float progress = elapsed / 440f;
+                    float eased = 1f - (float) Math.pow(1f - progress, 3);
+                    rotation = 540f * eased;
+                }
+            }
 
-            // Whiskers.
-            paint.setColor(Color.rgb(6, 182, 212));
-            drawPixel(canvas, cx - 7 * px, top + 9 * px, 3, 1, px);
-            drawPixel(canvas, cx + 4 * px, top + 9 * px, 3, 1, px);
-            paint.setColor(Color.rgb(124, 58, 237));
-            drawPixel(canvas, cx - 7 * px, top + 11 * px, 2, 1, px);
-            drawPixel(canvas, cx + 5 * px, top + 11 * px, 2, 1, px);
-
+            canvas.save();
+            canvas.translate(shakeX, bob);
+            if (rotation != 0f) {
+                canvas.rotate(rotation, w / 2f, h / 2f);
+            }
+            drawSelectedCharacter(canvas, grid, px);
             canvas.restore();
 
-            if (refreshing) {
+            if (refreshing || (isPokeball && pullProgress > 0.08f) || (isShield && shieldSpinStartedAt > 0L)) {
                 postInvalidateOnAnimation();
             }
         }
 
-        private void drawPixel(Canvas canvas, float x, float y, float width, float height, float px) {
-            canvas.drawRect(x, y, x + width * px, y + height * px, paint);
+        private int getGridWidth(String[] grid) {
+            int width = 0;
+            for (String row : grid) {
+                if (row != null && row.length() > width) {
+                    width = row.length();
+                }
+            }
+            return width;
+        }
+
+        private String[] cloneWithRow(String[] source, int rowIndex, String row) {
+            String[] copy = source.clone();
+            copy[rowIndex] = row;
+            return copy;
+        }
+
+        private String[] getGridForState(boolean closedEyes, boolean isRefreshing) {
+            switch (characterId) {
+                case "dog":
+                    return closedEyes ? cloneWithRow(DOG_GRID, 4, ".abbbbbbbba.") : DOG_GRID;
+                case "pokeball":
+                    return isRefreshing ? POKEBALL_SPARK_GRID : POKEBALL_REST_GRID;
+                case "shield":
+                    return SHIELD_GRID;
+                case "owl":
+                    return closedEyes ? cloneWithRow(OWL_GRID, 4, ".bcccbbcccb.") : OWL_GRID;
+                case "robot":
+                    return closedEyes ? cloneWithRow(ROBOT_GRID, 4, ".abbbbbbbba.") : ROBOT_GRID;
+                case "ghost":
+                    return closedEyes ? cloneWithRow(GHOST_GRID, 3, ".bbbbbbbbbb.") : GHOST_GRID;
+                case "kitty":
+                    return closedEyes ? cloneWithRow(KITTY_GRID, 5, "abbbbbbbbbba") : KITTY_GRID;
+                case "bunny":
+                    return closedEyes ? cloneWithRow(BUNNY_GRID, 6, ".bbbbbbbbbb.") : BUNNY_GRID;
+                case "batman":
+                    return closedEyes ? BATMAN_FACE_CLOSED_GRID : BATMAN_FACE_OPEN_GRID;
+                case "cat":
+                default:
+                    return closedEyes ? cloneWithRow(CAT_GRID, 5, ".bbbbddbbddbbb.") : CAT_GRID;
+            }
+        }
+
+        private int resolveColor(char cell) {
+            switch (characterId) {
+                case "dog":
+                    switch (cell) {
+                        case 'a': return Color.parseColor("#7c2d12");
+                        case 'b': return Color.parseColor("#d97706");
+                        case 'c': return Color.parseColor("#fef3c7");
+                        case 'd': return Color.parseColor("#111827");
+                        case 'e': return Color.parseColor("#ef4444");
+                        default: return Color.TRANSPARENT;
+                    }
+                case "pokeball":
+                    switch (cell) {
+                        case 'a': return Color.parseColor("#111827");
+                        case 'b': return Color.parseColor("#b91c1c");
+                        case 'c': return Color.parseColor("#ef4444");
+                        case 'd': return Color.parseColor("#111827");
+                        case 'e': return Color.parseColor("#f8fafc");
+                        case 'f': return Color.parseColor("#e5e7eb");
+                        case 'g': return Color.parseColor("#fde68a");
+                        case 'h': return Color.parseColor("#ffffff");
+                        default: return Color.TRANSPARENT;
+                    }
+                case "shield":
+                    switch (cell) {
+                        case 'b': return Color.parseColor("#dc2626");
+                        case 'c': return Color.parseColor("#f1f5f9");
+                        case 'd': return Color.parseColor("#1d4ed8");
+                        case 'e': return Color.parseColor("#ffffff");
+                        case 'x': return Color.parseColor("#94a3b8");
+                        default: return Color.TRANSPARENT;
+                    }
+                case "owl":
+                    switch (cell) {
+                        case 'b': return Color.parseColor("#0ea5e9");
+                        case 'c': return Color.parseColor("#fef3c7");
+                        case 'd': return Color.parseColor("#111827");
+                        case 'e': return Color.parseColor("#f59e0b");
+                        default: return Color.TRANSPARENT;
+                    }
+                case "robot":
+                    switch (cell) {
+                        case 'a': return Color.parseColor("#334155");
+                        case 'b': return Color.parseColor("#94a3b8");
+                        case 'c': return Color.parseColor("#22d3ee");
+                        case 'e': return Color.parseColor("#f59e0b");
+                        default: return Color.TRANSPARENT;
+                    }
+                case "ghost":
+                    switch (cell) {
+                        case 'b': return Color.parseColor("#f8fafc");
+                        case 'c': return Color.parseColor("#111827");
+                        case 'e': return Color.parseColor("#f472b6");
+                        default: return Color.TRANSPARENT;
+                    }
+                case "kitty":
+                    switch (cell) {
+                        case 'a': return Color.parseColor("#111827");
+                        case 'b': return Color.parseColor("#f8fafc");
+                        case 'c': return Color.parseColor("#ef4444");
+                        case 'd': return Color.parseColor("#facc15");
+                        default: return Color.TRANSPARENT;
+                    }
+                case "bunny":
+                    switch (cell) {
+                        case 'a': return Color.parseColor("#111827");
+                        case 'b': return Color.parseColor("#f8fafc");
+                        case 'c': return Color.parseColor("#f9a8d4");
+                        case 'd': return Color.parseColor("#ec4899");
+                        case 'e': return Color.parseColor("#fda4af");
+                        default: return Color.TRANSPARENT;
+                    }
+                case "batman":
+                    switch (cell) {
+                        case 'b': return Color.parseColor("#05070b");
+                        case 'c': return Color.parseColor("#f8fafc");
+                        case 'd': return Color.parseColor("#f1e4c9");
+                        case 'e': return Color.parseColor("#111827");
+                        default: return Color.TRANSPARENT;
+                    }
+                case "cat":
+                default:
+                    switch (cell) {
+                        case 'a': return Color.parseColor("#c2410c");
+                        case 'b': return Color.parseColor("#fb923c");
+                        case 'c': return Color.parseColor("#f8fafc");
+                        case 'd': return Color.parseColor("#1f2937");
+                        case 'e': return Color.parseColor("#f9a8d4");
+                        default: return Color.TRANSPARENT;
+                    }
+            }
+        }
+
+        private void drawSelectedCharacter(Canvas canvas, String[] grid, float px) {
+            int cols = Math.max(1, getGridWidth(grid));
+            int rows = Math.max(1, grid.length);
+            float startX = (getWidth() - (cols * px)) / 2f;
+            float startY = (getHeight() - (rows * px)) / 2f;
+
+            for (int rowIndex = 0; rowIndex < grid.length; rowIndex++) {
+                String row = grid[rowIndex];
+                if (row == null) {
+                    continue;
+                }
+                for (int colIndex = 0; colIndex < row.length(); colIndex++) {
+                    char cell = row.charAt(colIndex);
+                    if (cell == '.') {
+                        continue;
+                    }
+                    int color = resolveColor(cell);
+                    if (color == Color.TRANSPARENT) {
+                        continue;
+                    }
+                    paint.setColor(color);
+                    float x = startX + (colIndex * px);
+                    float y = startY + (rowIndex * px);
+                    canvas.drawRect(x, y, x + px, y + px, paint);
+                }
+            }
         }
     }
 }

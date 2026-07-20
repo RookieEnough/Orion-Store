@@ -16,4 +16,5 @@ ext {
     cordovaAndroidVersion = '10.1.1'
     coreSplashScreenVersion = '1.0.1'
     junitVersion = '4.13.2'
+    javaVersion = JavaVersion.VERSION_21
 }

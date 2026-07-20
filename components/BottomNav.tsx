@@ -11,7 +11,7 @@ interface BottomNavProps {
 
 const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, hiddenTabs = [], glassEffect = true }) => {
   return (
-    <div className="fixed bottom-4 left-0 right-0 z-40 flex justify-center pointer-events-none safe-area-pb">
+    <div className="fixed left-0 right-0 z-40 flex justify-center pointer-events-none" style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
        <nav className={`${glassEffect ? 'bg-surface/95 backdrop-blur-lg' : 'bg-surface'} border border-theme-border p-1.5 rounded-[2rem] shadow-2xl flex items-center gap-1 animate-slide-up pointer-events-auto transform translate-z-0`}>
          
          {!hiddenTabs.includes('android') && (
@@ -45,6 +45,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, hiddenTab
          )}
 
          <button 
+            id="nav-tab-about"
             onClick={() => onTabChange('about')}
             className={`px-4 py-2.5 rounded-[1.5rem] font-bold transition-all duration-200 flex items-center gap-2 ${activeTab === 'about' ? 'bg-primary text-white shadow-lg shadow-primary/30 scale-105' : 'text-theme-sub hover:bg-theme-element'}`}
          >

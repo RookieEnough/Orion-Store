@@ -364,6 +364,7 @@ const SwimlaneRow: React.FC<{
     index: number;
 }> = ({ collection, onAppClick, onSeeAllCategory, onShowCollectionAll, index }) => {
     const compactMode = false; // Modern layout ignores global compact mode for its own cards
+    const motionEnabled = useMotionEnabled();
     const rowRef = useRef<HTMLDivElement>(null);
     const [isVisible, setIsVisible] = useState(false);
     const laneGapClass = compactMode ? 'gap-2 sm:gap-2.5' : 'gap-3';
@@ -435,6 +436,7 @@ const SwimlaneRow: React.FC<{
                             app={app}
                             index={i}
                             priority={i < 4}
+                            motionEnabled={motionEnabled}
                             onClick={() => onAppClick(app)}
                         />
                     ))}
@@ -568,7 +570,7 @@ const SortedGridPreview: React.FC<{
             </div>
 
             <div className="px-4">
-                <div className={`grid grid-cols-3 ${gridGapClass}`}>
+                <div className={`grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 ${gridGapClass}`}>
                     <div className="contents">
                     {apps.map((app, i) => (
                         <motion.div
@@ -586,6 +588,7 @@ const SortedGridPreview: React.FC<{
                                     index={i}
                                     priority={i < 9}
                                     className="w-full"
+                                    motionEnabled={motionEnabled}
                                     onClick={() => onAppClick(app)}
                                 />
                             </div>

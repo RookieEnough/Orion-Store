@@ -120,6 +120,23 @@ public class AppTrackerPlugin extends Plugin {
     @Override
     public void load() {
         createNotificationChannel();
+        // Clean up any leftover OrionStore_*.apk files from a previous
+        // forced self-update. Skips files that are part of an active
+        // download so we never delete a file the user is currently using.
+        try {
+            File dir = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            if (dir != null && dir.exists()) {
+                File[] files = dir.listFiles((d, name) -> name.startsWith("OrionStore_") && name.endsWith(".apk"));
+                if (files != null) {
+                    for (File f : files) {
+                        if (activeTasks.containsKey(f.getName())) continue;
+                        f.delete();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Best-effort cleanup; ignore failures.
+        }
         try {
             Shizuku.addRequestPermissionResultListener(shizukuListener);
         } catch (Exception e) {
@@ -309,6 +326,30 @@ public class AppTrackerPlugin extends Plugin {
 
     // --- DOWNLOADER METHODS ---
 
+    /**
+     * Files handled by the downloader must stay inside the app's private
+     * downloads directory. Plugin calls originate from the WebView, so never
+     * allow a supplied file name to turn into a path outside that directory.
+     */
+    private File getSafeDownloadFile(String fileName) {
+        if (fileName == null || fileName.trim().isEmpty()
+                || fileName.equals(".") || fileName.equals("..")
+                || fileName.contains("/") || fileName.contains("\\")) {
+            return null;
+        }
+
+        File directory = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        if (directory == null) return null;
+
+        try {
+            File canonicalDirectory = directory.getCanonicalFile();
+            File candidate = new File(canonicalDirectory, fileName).getCanonicalFile();
+            return canonicalDirectory.equals(candidate.getParentFile()) ? candidate : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     @PluginMethod
     public void checkActiveDownloads(PluginCall call) {
         JSObject ret = new JSObject();
@@ -322,6 +363,10 @@ public class AppTrackerPlugin extends Plugin {
     public void downloadFile(PluginCall call) {
         String url = call.getString("url");
         String fileName = call.getString("fileName");
+        if (getSafeDownloadFile(fileName) == null) {
+            call.reject("INVALID_FILE_NAME");
+            return;
+        }
         if (activeTasks.containsKey(fileName)) {
             JSObject r = new JSObject();
             r.put("downloadId", fileName);
@@ -386,15 +431,21 @@ public class AppTrackerPlugin extends Plugin {
     @PluginMethod
     public void getDownloadProgress(PluginCall call) {
         String id = call.getString("downloadId");
-        DownloadTask t = activeTasks.get(id);
         JSObject r = new JSObject();
+        if (id == null || id.trim().isEmpty()) {
+            r.put("status", "FAILED");
+            r.put("progress", 0);
+            call.resolve(r);
+            return;
+        }
+        DownloadTask t = activeTasks.get(id);
         if (t != null) {
             r.put("status", (t.isCancelled || t.hasFailed) ? "FAILED" : "RUNNING");
             r.put("progress", t.progress);
             call.resolve(r);
         } else {
-            File f = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), id);
-            if (f.exists() && f.length() > 0) {
+            File f = getSafeDownloadFile(id);
+            if (f != null && f.exists() && f.length() > 0) {
                 r.put("status", "SUCCESSFUL");
                 r.put("progress", 100);
             } else {
@@ -407,6 +458,10 @@ public class AppTrackerPlugin extends Plugin {
     @PluginMethod
     public void cancelDownload(PluginCall call) {
         String id = call.getString("downloadId");
+        if (id == null || id.trim().isEmpty()) {
+            call.reject("INVALID_DOWNLOAD_ID");
+            return;
+        }
         DownloadTask t = activeTasks.remove(id);
         if (t != null)
             t.cancel();
@@ -419,18 +474,11 @@ public class AppTrackerPlugin extends Plugin {
     @PluginMethod
     public void resolveDownloadFile(PluginCall call) {
         String fileName = call.getString("fileName");
-        if (fileName == null || fileName.isEmpty()) {
-            call.reject("FileName required");
+        File f = getSafeDownloadFile(fileName);
+        if (f == null) {
+            call.reject("INVALID_FILE_NAME");
             return;
         }
-
-        File dir = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-        if (dir == null) {
-            call.reject("FILE_MISSING");
-            return;
-        }
-
-        File f = new File(dir, fileName);
         if (!f.exists()) {
             call.reject("FILE_MISSING");
             return;
@@ -480,7 +528,11 @@ public class AppTrackerPlugin extends Plugin {
     public void installPackage(PluginCall call) {
         String fileName = call.getString("fileName");
         try {
-            File baseFile = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName);
+            File baseFile = getSafeDownloadFile(fileName);
+            if (baseFile == null) {
+                call.reject("INVALID_FILE_NAME");
+                return;
+            }
 
             int checks = 0;
             while (checks < 5) {
@@ -511,7 +563,9 @@ public class AppTrackerPlugin extends Plugin {
 
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(uri, mimeType);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            // startActivityForResult uses the bridge activity, so FLAG_ACTIVITY_NEW_TASK
+            // is not required (and would actually break the onActivityResult delivery).
+            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
             List<ResolveInfo> resInfoList = getContext().getPackageManager().queryIntentActivities(intent,
                     PackageManager.MATCH_DEFAULT_ONLY);
@@ -586,16 +640,26 @@ public class AppTrackerPlugin extends Plugin {
             if (!forceChooser && targetPackage != null) {
                 intent.setPackage(targetPackage);
                 getContext().grantUriPermission(targetPackage, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                getContext().startActivity(intent);
+                saveCall(call);
+                startActivityForResult(call, intent, "installResult");
             } else {
                 Intent chooser = Intent.createChooser(intent, "Install App");
-                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                getContext().startActivity(chooser);
+                saveCall(call);
+                startActivityForResult(call, chooser, "installResult");
             }
-
-            call.resolve();
         } catch (Exception e) {
             call.reject(e.getMessage());
+        }
+    }
+
+    @ActivityCallback
+    private void installResult(PluginCall call, ActivityResult result) {
+        if (result.getResultCode() == Activity.RESULT_OK) {
+            call.resolve();
+        } else if (result.getResultCode() == Activity.RESULT_CANCELED) {
+            call.reject("INSTALL_CANCELED");
+        } else {
+            call.reject("INSTALL_FAILED");
         }
     }
 
@@ -755,7 +819,11 @@ public class AppTrackerPlugin extends Plugin {
                 return;
             }
 
-            File baseFile = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName);
+            File baseFile = getSafeDownloadFile(fileName);
+            if (baseFile == null) {
+                call.reject("INVALID_FILE_NAME");
+                return;
+            }
             if (!baseFile.exists()) {
                 call.reject("FILE_MISSING");
                 return;
@@ -1042,7 +1110,42 @@ public class AppTrackerPlugin extends Plugin {
                 }
 
                 String boundary = "----orionvt" + System.currentTimeMillis();
-                URL url = new URL("https://www.virustotal.com/api/v3/files");
+                String uploadUrl = "https://www.virustotal.com/api/v3/files";
+                if (f.length() >= 32 * 1024 * 1024L) {
+                    HttpURLConnection getUrlConn = null;
+                    try {
+                        URL getUrl = new URL("https://www.virustotal.com/api/v3/files/upload_url");
+                        getUrlConn = (HttpURLConnection) getUrl.openConnection();
+                        getUrlConn.setConnectTimeout(15000);
+                        getUrlConn.setReadTimeout(15000);
+                        getUrlConn.setRequestMethod("GET");
+                        getUrlConn.setRequestProperty("x-apikey", apiKey);
+                        getUrlConn.setRequestProperty("Accept", "application/json");
+
+                        int getUrlStatus = getUrlConn.getResponseCode();
+                        if (getUrlStatus >= 200 && getUrlStatus < 300) {
+                            String getUrlBody = readAll(getUrlConn.getInputStream());
+                            org.json.JSONObject json = new org.json.JSONObject(getUrlBody);
+                            uploadUrl = json.getString("data");
+                        } else {
+                            InputStream errStream = getUrlConn.getErrorStream();
+                            String errBody = readAll(errStream);
+                            JSObject ret = new JSObject();
+                            ret.put("status", getUrlStatus);
+                            ret.put("body", errBody != null ? errBody : "Failed to retrieve upload URL");
+                            call.resolve(ret);
+                            return;
+                        }
+                    } catch (Exception e) {
+                        call.reject("Failed to obtain VirusTotal upload URL: " + e.getMessage());
+                        return;
+                    } finally {
+                        if (getUrlConn != null) {
+                            getUrlConn.disconnect();
+                        }
+                    }
+                }
+                URL url = new URL(uploadUrl);
                 conn = (HttpURLConnection) url.openConnection();
                 conn.setConnectTimeout(30000);
                 conn.setReadTimeout(60000);
@@ -1280,29 +1383,28 @@ public class AppTrackerPlugin extends Plugin {
     @PluginMethod
     public void deleteFile(PluginCall call) {
         String name = call.getString("fileName");
-        if (name == null) {
-            call.reject("FileName required");
+        File file = getSafeDownloadFile(name);
+        if (file == null) {
+            call.reject("INVALID_FILE_NAME");
             return;
         }
         call.resolve(); // Optimistic
         executorService.execute(() -> {
-            File f = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), name);
-            if (!f.exists())
+            if (!file.exists())
                 return;
-            f.delete();
+            file.delete();
         });
     }
 
     @PluginMethod
     public void exportFile(PluginCall call) {
         String fileName = call.getString("fileName");
-        if (fileName == null) {
-            call.reject("FileName required");
+        File sourceFile = getSafeDownloadFile(fileName);
+        if (sourceFile == null) {
+            call.reject("INVALID_FILE_NAME");
             return;
         }
         try {
-            File privateDir = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-            File sourceFile = new File(privateDir, fileName);
             if (!sourceFile.exists()) {
                 call.reject("File not found");
                 return;
@@ -1310,12 +1412,13 @@ public class AppTrackerPlugin extends Plugin {
             File publicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
             if (!publicDir.exists())
                 publicDir.mkdirs();
+            int extensionIndex = fileName.lastIndexOf(".");
+            String baseName = extensionIndex > 0 ? fileName.substring(0, extensionIndex) : fileName;
+            String extension = extensionIndex > 0 ? fileName.substring(extensionIndex) : "";
             File destFile = new File(publicDir, fileName);
             int i = 1;
             while (destFile.exists()) {
-                String name = fileName.substring(0, fileName.lastIndexOf("."));
-                String ext = fileName.substring(fileName.lastIndexOf("."));
-                destFile = new File(publicDir, name + "_" + i + ext);
+                destFile = new File(publicDir, baseName + "_" + i + extension);
                 i++;
             }
             try (InputStream in = new FileInputStream(sourceFile);

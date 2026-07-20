@@ -1,5 +1,5 @@
 
-import { AppCategory, AppFontKey, AppItem, Platform, FAQItem, DevProfile } from './types';
+import { AppCategory, AppFontKey, AppItem, Platform, FAQItem, DevProfile, DonationConfig } from './types';
 
 // System Constants
 export const CACHE_VERSION = 'v1_6'; // Increment this to force-clear client cache in future updates
@@ -42,6 +42,12 @@ export const DEV_SOCIALS = {
   x: 'https://x.com/_Rookie_Z',
   discord: 'https://discord.com/invite/CrM6y4ujnq',
   coffee: 'https://www.buymeacoffee.com/rookiez'
+};
+
+export const DEFAULT_DONATION: DonationConfig = {
+  kofiUrl: 'https://ko-fi.com/rookie_z',
+  upiId: 'rookiez@ptyes',
+  paypalUrl: 'paypal.me/RookieEnough'
 };
 
 export const DEFAULT_DEV_PROFILE: DevProfile = {

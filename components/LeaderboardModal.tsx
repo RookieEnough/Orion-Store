@@ -13,7 +13,7 @@ interface LeaderboardModalProps {
 
 const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, workerUrl, onOpenSubmit }) => {
   useScrollLock(true);
-  const { lastSubmissionTime } = useSettingsStore();
+  const lastSubmissionTime = useSettingsStore((state) => state.lastSubmissionTime);
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);

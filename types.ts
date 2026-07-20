@@ -26,6 +26,7 @@ export enum SortOption {
 
 export type UpdateStream = 'Stable' | 'Beta' | 'Alpha' | 'Nightly';
 export type AppFontKey = 'spaceGrotesk' | 'inter' | 'poppins' | 'manrope' | 'outfit' | 'dmSans' | 'plusJakartaSans' | 'rubik' | 'nunitoSans' | 'publicSans' | 'systemDefault';
+export type PullToRefreshCharacterKey = 'cat' | 'dog' | 'pokeball' | 'shield' | 'owl' | 'robot' | 'ghost' | 'kitty' | 'bunny' | 'batman';
 
 export interface AppVariant {
   arch: string;
@@ -73,6 +74,12 @@ export interface SocialLinks {
   x: string;
   discord: string;
   coffee: string;
+}
+
+export interface DonationConfig {
+  kofiUrl?: string;
+  upiId?: string;
+  paypalUrl?: string;
 }
 
 export interface DevProfile {
@@ -140,6 +147,7 @@ export interface StoreConfig {
   latestStoreVersion?: string;
   storeDownloadUrl?: string;
   socials?: SocialLinks;
+  donation?: DonationConfig;
   devProfile?: DevProfile;
   faqs?: FAQItem[];
   supportEmail?: string;

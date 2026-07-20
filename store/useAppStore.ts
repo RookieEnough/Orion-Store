@@ -1,8 +1,9 @@
 import { create, StateCreator } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { get, set, del } from 'idb-keyval';
-import { AppFontKey, AppItem, SortOption, UpdateStream } from '../types';
+import { AppFontKey, AppItem, PullToRefreshCharacterKey, SortOption, UpdateStream } from '../types';
 import { DEFAULT_APP_FONT } from '../constants';
+import { ForcedStoreUpdateSnapshot } from '../utils/forcedStoreUpdate';
 
 // --- Types ---
 
@@ -37,6 +38,7 @@ interface SettingsState {
   disableAnimations: boolean;
   compactMode: boolean;
   highRefreshRate: boolean;
+  pullToRefreshCharacter: PullToRefreshCharacterKey;
   hapticEnabled: boolean;
   glassEffect: boolean;
   isDevUnlocked: boolean;
@@ -49,6 +51,7 @@ interface SettingsState {
   useRemoteJson: boolean;
   loadLocalData: boolean;
   githubToken: string;
+  forcedStoreUpdate: ForcedStoreUpdateSnapshot | null;
   installedVersions: Record<string, string>; // { appId: version } (From OS)
   lastRemoteVersions: Record<string, string>; // { appId: version } (From Orion Install)
   appStreams: Record<string, UpdateStream>; // { appId: 'Beta' } - Stream Locking
@@ -83,6 +86,7 @@ interface SettingsState {
   toggleDisableAnimations: () => void;
   toggleCompactMode: () => void;
   toggleHighRefreshRate: () => void;
+  setPullToRefreshCharacter: (character: PullToRefreshCharacterKey) => void;
   toggleHaptic: () => void;
   toggleGlass: () => void;
   setDevUnlocked: (isUnlocked: boolean) => void;
@@ -94,6 +98,8 @@ interface SettingsState {
   setUseRemoteJson: (useRemote: boolean) => void;
   toggleLoadLocalData: () => void;
   setGithubToken: (token: string) => void;
+  setForcedStoreUpdate: (snapshot: ForcedStoreUpdateSnapshot | null) => void;
+  clearForcedStoreUpdate: () => void;
   setInstalledVersions: (versions: Record<string, string>) => void;
   setLastRemoteVersion: (appId: string, version: string) => void;
   removeLastRemoteVersion: (appId: string) => void;
@@ -206,6 +212,7 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   disableAnimations: false,
   compactMode: false,
   highRefreshRate: false,
+  pullToRefreshCharacter: 'cat',
   hapticEnabled: true,
   glassEffect: true,
   isDevUnlocked: false,
@@ -218,6 +225,7 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   useRemoteJson: true,
   loadLocalData: false,
   githubToken: '',
+  forcedStoreUpdate: null,
   installedVersions: {},
   lastRemoteVersions: {},
   appStreams: {},
@@ -274,6 +282,11 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   toggleDisableAnimations: () => set((state) => ({ disableAnimations: !state.disableAnimations })),
   toggleCompactMode: () => set((state) => ({ compactMode: !state.compactMode })),
   toggleHighRefreshRate: () => set((state) => ({ highRefreshRate: !state.highRefreshRate })),
+  setPullToRefreshCharacter: (pullToRefreshCharacter) => set({
+    pullToRefreshCharacter: (((pullToRefreshCharacter as string) === 'pikachu')
+      ? 'pokeball'
+      : pullToRefreshCharacter) as PullToRefreshCharacterKey
+  }),
   toggleHaptic: () => set((state) => ({ hapticEnabled: !state.hapticEnabled })),
   toggleGlass: () => set((state) => ({ glassEffect: !state.glassEffect })),
   setDevUnlocked: (val) => set((state) => ({ 
@@ -292,10 +305,14 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
     lastSubmissionTime: Date.now()
   })),
   registerLeaderboardSubmission: () => set({ lastLeaderboardSubmissionTime: Date.now() }),
-  setSubmissionCount: (count) => set({ submissionCount: count }),
+  setSubmissionCount: (count) => set({
+    submissionCount: Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0
+  }),
   setUseRemoteJson: (val) => set({ useRemoteJson: val }),
   toggleLoadLocalData: () => set((state) => ({ loadLocalData: !state.loadLocalData })),
   setGithubToken: (token) => set({ githubToken: token }),
+  setForcedStoreUpdate: (forcedStoreUpdate) => set({ forcedStoreUpdate }),
+  clearForcedStoreUpdate: () => set({ forcedStoreUpdate: null }),
   setInstalledVersions: (versions) => set({ installedVersions: versions }),
   setLastRemoteVersion: (appId, version) => set((state) => ({
     lastRemoteVersions: { ...state.lastRemoteVersions, [appId]: version }
@@ -371,12 +388,14 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   }),
   addGameXP: (amount) => set((state) => {
     // Simple anti-cheat: capping XP gain per call and total XP
-    const cappedAmount = Math.min(amount, 50); 
-    return { gameXP: state.gameXP + cappedAmount };
+    const cappedAmount = Number.isFinite(amount) ? Math.max(0, Math.min(Math.floor(amount), 50)) : 0;
+    return { gameXP: (Number.isFinite(state.gameXP) ? state.gameXP : 0) + cappedAmount };
   }),
-  updateDinoHighScore: (score) => set((state) => ({
-    dinoHighScore: Math.max(state.dinoHighScore, score)
-  })),
+  updateDinoHighScore: (score) => set((state) => {
+    const safeCurrentScore = Number.isFinite(state.dinoHighScore) ? state.dinoHighScore : 0;
+    const safeScore = Number.isFinite(score) ? Math.max(0, Math.floor(score)) : 0;
+    return { dinoHighScore: Math.max(safeCurrentScore, safeScore) };
+  }),
   unlockBadge: (badgeId) => set((state) => {
     if (state.unlockedBadges.includes(badgeId)) return state;
     return { unlockedBadges: [...state.unlockedBadges, badgeId] };
@@ -416,6 +435,12 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'orion-settings-storage',
       storage: createJSONStorage(() => idbStorage),
+      migrate: (persistedState: any) => {
+        if (persistedState?.pullToRefreshCharacter === 'pikachu') {
+          persistedState.pullToRefreshCharacter = 'pokeball';
+        }
+        return persistedState;
+      },
       // IMPORTANT: Explicitly persist package detection state so it survives app restarts
       partialize: (state) => ({
         theme: state.theme,
@@ -434,6 +459,7 @@ export const useSettingsStore = create<SettingsState>()(
         disableAnimations: state.disableAnimations,
         compactMode: state.compactMode,
         highRefreshRate: state.highRefreshRate,
+        pullToRefreshCharacter: state.pullToRefreshCharacter,
         hapticEnabled: state.hapticEnabled,
         glassEffect: state.glassEffect,
         isDevUnlocked: state.isDevUnlocked,
@@ -446,6 +472,7 @@ export const useSettingsStore = create<SettingsState>()(
         useRemoteJson: state.useRemoteJson,
         loadLocalData: state.loadLocalData,
         githubToken: state.githubToken,
+        forcedStoreUpdate: state.forcedStoreUpdate,
         installedVersions: state.installedVersions,
         lastRemoteVersions: state.lastRemoteVersions,
         appStreams: state.appStreams,
