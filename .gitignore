@@ -13,6 +13,7 @@ Thumbs.db
 
 # Android Build Artifacts
 android/app/build/
+android/app/release/
 android/.gradle/
 android/local.properties
 android/*/build/
