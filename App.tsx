@@ -83,7 +83,7 @@ const BundlePreviewModal = lazy(() => import('./components/BundlePreviewModal'))
 const ProfileStatsModal = lazy(() => import('./components/ProfileStatsModal'));
 const VirusTotalScanModal = lazy(() => import('./components/VirusTotalScanModal'));
 
-const CURRENT_STORE_VERSION = '1.3.4';
+const CURRENT_STORE_VERSION = '1.3.5';
 const UNITY_GAME_ID = '5996387';
 const ADS_TEST_MODE = false;
 
@@ -498,6 +498,7 @@ const App: React.FC = () => {
     const forcedStoreDownloadTriggered = useRef(false);
     const forcedStoreDownloadUrlRef = useRef('');
     const forcedStorePendingScanAfterKeyRef = useRef(false);
+    const pendingDeepLinkRef = useRef<string | null>(null);
     // VirusTotal scan hook for the forced self-update flow. Driven inline by
     // the ForcedStoreUpdateGate (no modal hand-off). The package name mirrors
     // the synthetic app identity used in the gate render block below.
@@ -527,6 +528,7 @@ const App: React.FC = () => {
     const shouldBlockWithForcedStoreUpdate =
         (forcedStoreUpdateStatus !== 'inactive' || hasForcedStoreScanResult) &&
         !isForcedUpdateBypassedForSession;
+    const isTutorialActive = useTutorialStore(state => state.isActive);
     const isAnyModalOpen = !!selectedApp
         || !!selectedBundle
         || !!vtScanTarget
@@ -540,6 +542,7 @@ const App: React.FC = () => {
         || showModernUITutorial
         || showCustomBundleModal
         || showProfileStats
+        || isTutorialActive
         || shouldBlockWithForcedStoreUpdate;
 
     useScrollLock(isAnyModalOpen);
@@ -558,9 +561,10 @@ const App: React.FC = () => {
     // One-time Spotlight tutorial for users updating to 1.3.4
     useEffect(() => {
         const tutorialKey = `orion_tutorial_shown_1_3_4`;
+        const needsModernUI = settings.storeLayout === 'classic' && !settings.hasSeenModernUITutorial;
         
-        // Wait until other dialogs and splash screens are dismissed
-        if (isAnyModalOpen || showSplashPreview) return;
+        // Wait until startup is ready, other dialogs, splash screens, notice, and modern UI tutorial are all dismissed
+        if (!isStartupUiReady || isAnyModalOpen || showSplashPreview || showNotice || showModernUITutorial || needsModernUI) return;
 
         if (!localStorage.getItem(tutorialKey)) {
             const timer = setTimeout(() => {
@@ -600,15 +604,19 @@ const App: React.FC = () => {
             }, 750);
             return () => clearTimeout(timer);
         }
-    }, [startTutorial, isAnyModalOpen, showSplashPreview]);
+    }, [startTutorial, isAnyModalOpen, showSplashPreview, showNotice, showModernUITutorial]);
 
     // One-time Modern UI tutorial for classic users updating to 1.3.1
+    // Waits for modals and splash to clear so it doesn't overlap notice/spotlight
     useEffect(() => {
         const tutorialKey = `orion_tutorial_shown_${CURRENT_STORE_VERSION}`;
         if (
+            isStartupUiReady &&
             settings.storeLayout === 'classic' &&
             !settings.hasSeenModernUITutorial &&
-            !localStorage.getItem(tutorialKey)
+            !localStorage.getItem(tutorialKey) &&
+            !isAnyModalOpen &&
+            !showSplashPreview
         ) {
             const timer = setTimeout(() => {
                 if (isMounted.current) {
@@ -618,7 +626,7 @@ const App: React.FC = () => {
             }, 2500);
             return () => clearTimeout(timer);
         }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isAnyModalOpen, showSplashPreview]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const currentTabState = useDataStore(
         useCallback((state) => state.tabs[activeTab] || FALLBACK_TAB_STATE, [activeTab]),
@@ -1679,15 +1687,15 @@ const App: React.FC = () => {
         }
     };
 
-    // Also trigger tutorial on first load if no notice is showing and user is on classic
+    // Also trigger tutorial on first load if no notice/spotlight is showing and user is on classic
     useEffect(() => {
-        if (!settings.hasSeenModernUITutorial && settings.storeLayout === 'classic' && !showNotice && !isLoading && visibleApps.length > 0) {
+        if (!settings.hasSeenModernUITutorial && settings.storeLayout === 'classic' && !showNotice && !isLoading && visibleApps.length > 0 && !useTutorialStore.getState().isActive) {
             const timer = setTimeout(() => {
                 if (isMounted.current) setShowModernUITutorial(true);
             }, 3000);
             return () => clearTimeout(timer);
         }
-    }, [settings.hasSeenModernUITutorial, settings.storeLayout, showNotice, isLoading, visibleApps.length]);
+    }, [settings.hasSeenModernUITutorial, settings.storeLayout, showNotice, isLoading, visibleApps.length, isTutorialActive]);
 
     useEffect(() => {
         if (!Capacitor.isNativePlatform()) return;
@@ -3088,7 +3096,7 @@ const App: React.FC = () => {
         if (target) {
             setSelectedApp(target);
         } else {
-            setDevToast(`App "${appId}" not found`);
+            setDevToast(`App \u2018${appId}\u2019 not found`);
         }
     }, [appLookup]);
 
@@ -3098,12 +3106,14 @@ const App: React.FC = () => {
         if (target) {
             window.setTimeout(() => setSelectedApp(target), 100);
         } else {
-            setDevToast(`App "${appId}" not found`);
+            setDevToast(`App \u2018${appId}\u2019 not found`);
         }
     }, [appLookup]);
 
     // ── Deep Link Handler ──────────────────────────────────────────────
     // Handles orionstore://app/{appId} deep links from external sources.
+    // When the app is launched via a deep link, data may not have loaded yet,
+    // so we queue the appId and resolve it once appLookup is populated.
     useEffect(() => {
         const listener = CapacitorApp.addListener('appUrlOpen', ({ url }) => {
             try {
@@ -3116,16 +3126,35 @@ const App: React.FC = () => {
                 // Expected: ["app", "{appId}"]
                 if (segments[0] === 'app' && segments[1]) {
                     const appId = decodeURIComponent(segments[1]);
+                    // If apps haven't loaded yet, queue the deep link for later resolution
+                    if (appLookup.size === 0) {
+                        pendingDeepLinkRef.current = appId;
+                        return;
+                    }
                     const target = appLookup.get(appId);
                     if (target) {
                         setSelectedApp(target);
                     } else {
-                        setDevToast(`App "${appId}" not found in store`);
+                        setDevToast(`App \u2018${appId}\u2019 not found in Orion Store`);
                     }
                 }
             } catch { /* ignore malformed URLs */ }
         });
         return () => { listener.then(l => l.remove()); };
+    }, [appLookup]);
+
+    // Resolve any deep link that arrived before apps finished loading
+    useEffect(() => {
+        if (appLookup.size > 0 && pendingDeepLinkRef.current) {
+            const appId = pendingDeepLinkRef.current;
+            pendingDeepLinkRef.current = null;
+            const target = appLookup.get(appId);
+            if (target) {
+                setSelectedApp(target);
+            } else {
+                setDevToast(`App \u2018${appId}\u2019 not found in Orion Store`);
+            }
+        }
     }, [appLookup]);
 
     const handleReloadApps = useCallback(() => {
@@ -3143,7 +3172,7 @@ const App: React.FC = () => {
     // The About tab is excluded so that pulling on it is a no-op.
     usePullToRefresh({
         onRefresh: handleReloadApps,
-        disabled: Capacitor.isNativePlatform() || isRefreshing || !isAppDataTab
+        disabled: Capacitor.isNativePlatform() || isRefreshing || !isAppDataTab || (effectiveRemoteConfig?.maintenanceMode && !bypassMaintenance)
     });
 
     const handleSearchQueryChange = useCallback((query: string) => {

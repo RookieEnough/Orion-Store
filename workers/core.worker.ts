@@ -112,9 +112,11 @@ const getParsedSize = (app: AppItem): number => {
 };
 
 // --- CORE LOGIC ---
+const PC_INDICATOR_TAGS = new Set(['windows', 'pc', 'desktop', 'win32', 'win64']);
+
 const normalizePlatform = (raw: unknown): 'Android' | 'PC' | 'TV' => {
     const s = String(raw || '').trim().toLowerCase();
-    if (s === 'pc') return 'PC';
+    if (s === 'pc' || s === 'desktop' || s === 'windows') return 'PC';
     if (s === 'tv') return 'TV';
     return 'Android';
 };
@@ -124,6 +126,16 @@ const sanitizeApp = (app: unknown): AppItem => {
     const rawCategory = String(source.category || 'Utility').trim();
     // Normalize to title-case to prevent duplicate filter tabs (e.g. "utility" → "Utility")
     const normalizedCategory = rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1).toLowerCase();
+    const tags = Array.isArray(source.tags) ? source.tags.map((tag) => String(tag).trim()) : [];
+    let platform = normalizePlatform(source.platform) as AppItem['platform'];
+
+    // Defensive re-classification: if an app defaulted to Android but carries
+    // PC-indicator tags, re-classify it to PC. This catches data issues in the
+    // remote apps.json where the platform field is missing or incorrect.
+    if (platform === ('Android' as AppItem['platform']) && tags.some((tag) => PC_INDICATOR_TAGS.has(tag.toLowerCase()))) {
+        platform = 'PC' as AppItem['platform'];
+    }
+
     return {
         ...source,
         id: String(source.id || source.packageName || source.name || ''),
@@ -131,8 +143,8 @@ const sanitizeApp = (app: unknown): AppItem => {
         description: String(source.description || ''),
         author: String(source.author || 'Unknown'),
         category: normalizedCategory,
-        tags: Array.isArray(source.tags) ? source.tags.map((tag) => String(tag).trim()) : [],
-        platform: normalizePlatform(source.platform) as AppItem['platform'],
+        tags,
+        platform,
         icon: sanitizeUrl(String(source.icon || '')),
         version: String(source.version || 'Latest'),
         latestVersion: String(source.latestVersion || 'Latest'),
