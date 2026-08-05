@@ -10,6 +10,8 @@
     "mirror": "node .github/scripts/apk_hunter.js",
     "lint": "tsc --noEmit",
     "resources": "node scripts/generate_assets.js",
+    "translations:extract": "node scripts/extract_all_translations.mjs",
+    "translations:scaffold": "node scripts/scaffold_locales.mjs",
     "knip": "knip",
     "test": "vitest run",
     "test:watch": "vitest"

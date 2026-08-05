@@ -7,6 +7,13 @@ import AppTracker from '../plugins/AppTracker';
 import { APP_FONT_OPTIONS, getAppFontDefinition } from '../constants';
 import { getPullToRefreshCharacter, PixelCharacterFace } from './PullToRefreshCharacter';
 import PullToRefreshCharacterPickerSheet from './PullToRefreshCharacterPickerSheet';
+import {
+    getLanguagePreference,
+    LanguagePreference,
+    resolveLanguage,
+    setLanguagePreference,
+    subscribeLanguage,
+} from '../i18n';
 
 // Lazy load heavy power modals
 const ShizukuPowerModal = lazy(() => import('./ShizukuPowerModal'));
@@ -26,7 +33,7 @@ interface SettingsModalProps {
     initialMenu?: SubMenu;
 }
 
-type SubMenu = 'none' | 'network' | 'storage' | 'visuals' | 'interface' | 'queue' | 'identity' | 'installer' | 'developer';
+type SubMenu = 'none' | 'network' | 'storage' | 'visuals' | 'language' | 'interface' | 'queue' | 'identity' | 'installer' | 'developer';
 
 // --- ANTI-CHEAT CONFIGURATION ---
 const SALT_KEY = "ORION_PROTOCOL_OMEGA_8842_SECURE_HASH_V1";
@@ -567,6 +574,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [apkInstallers, setApkInstallers] = useState<Array<{ packageName: string; label: string; isSystemInstaller: boolean }>>([]);
     const [apkInstallersLoading, setApkInstallersLoading] = useState(false);
     const [apkInstallersError, setApkInstallersError] = useState<string | null>(null);
+    const [languagePreference, setLanguagePreferenceState] = useState<LanguagePreference>(getLanguagePreference);
+
+    useEffect(() => subscribeLanguage(() => setLanguagePreferenceState(getLanguagePreference())), []);
 
     // Modal State Control
     const [activeModal, setActiveModal] = useState<'none' | 'guardian' | 'sentinel'>('none');
@@ -589,6 +599,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         network: 'Network & Updates',
         storage: 'Storage & Cleanup',
         visuals: 'Visuals & Theme',
+        language: 'Language',
         interface: 'Interface',
         queue: 'Update Center',
         installer: 'Orion Xtra',
@@ -606,6 +617,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         { id: 'storage', icon: 'fa-broom', color: 'text-orange-500', bg: 'bg-orange-500/10', title: 'Storage & Janitor', desc: 'Cleanup behavior and saved space' },
         { id: 'queue', icon: 'fa-download', color: 'text-indigo-500', bg: 'bg-indigo-500/10', title: 'Download Queue', desc: `${activeDlCount} active, ${readyCount} ready, ${pendingUpdatesCount} updates`, badge: totalQueueItems },
         { id: 'visuals', icon: 'fa-palette', color: 'text-purple-500', bg: 'bg-purple-500/10', title: 'Visuals & Theme', desc: 'Fonts, motion, glass, density' },
+        { id: 'language', icon: 'fa-language', color: 'text-cyan-500', bg: 'bg-cyan-500/10', title: 'Language', desc: 'Choose the interface language' },
         { id: 'interface', icon: 'fa-layer-group', color: 'text-green-500', bg: 'bg-green-500/10', title: 'Interface', desc: 'Layout and visible tabs' },
     ];
 
@@ -1089,6 +1101,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         </SettingsSection>
     );
 
+    const renderLanguageSettings = () => {
+        const chooseLanguage = (preference: LanguagePreference) => {
+            setLanguagePreferenceState(preference);
+            setLanguagePreference(preference);
+        };
+        return (
+            <SettingsSection eyebrow="Language and region" title="Interface language">
+                <SelectablePanel
+                    selected={languagePreference === 'system'}
+                    title="System default"
+                    meta={resolveLanguage('system') === 'pt-BR' ? 'Português (Brasil)' : 'English'}
+                    onClick={() => chooseLanguage('system')}
+                />
+                <SelectablePanel
+                    selected={languagePreference === 'en'}
+                    title="English"
+                    meta="English"
+                    onClick={() => chooseLanguage('en')}
+                />
+                <SelectablePanel
+                    selected={languagePreference === 'pt-BR'}
+                    title="Português (Brasil)"
+                    meta="Português (Brasil)"
+                    onClick={() => chooseLanguage('pt-BR')}
+                />
+                <InfoCard icon="fa-circle-info" iconClassName="text-cyan-400">
+                    Language changes are applied immediately and saved for the next launch.
+                </InfoCard>
+            </SettingsSection>
+        );
+    };
+
     const renderInstallerPicker = () => (
         <div
             className="backdrop-scrim absolute inset-0 z-30 flex items-end justify-center bg-black/55 p-3 sm:items-center sm:p-6"
@@ -1563,6 +1607,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             {activeMenu === 'storage' && renderStorageSettings()}
                             {activeMenu === 'queue' && renderQueue()}
                             {activeMenu === 'visuals' && renderVisuals()}
+                            {activeMenu === 'language' && renderLanguageSettings()}
                             {activeMenu === 'interface' && renderInterfaceSettings()}
                             {activeMenu === 'developer' && renderDeveloperSettings()}
                         </>

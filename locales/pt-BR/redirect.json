@@ -1,0 +1,14 @@
+{
+  "accessibility.skip_to_main": "Ir para o conteúdo principal",
+  "app.selected": "aplicativo selecionado",
+  "document.title": "Abrir no Orion Store",
+  "fallback.label": "Não foi possível abrir no Orion Store",
+  "fallback.message": "Instale a versão mais recente do Orion Store neste dispositivo e tente abrir novamente.",
+  "fallback.retry": "Tentar novamente",
+  "fallback.title": "O Orion Store não está disponível",
+  "footer.deep_link": "Link direto",
+  "header.subtitle": "Redirecionamento para Android",
+  "opening.label": "Abrindo no Orion Store",
+  "opening.message": "Se o Orion Store estiver instalado, o aplicativo será aberto automaticamente.",
+  "opening.status": "Aguardando o Orion Store…"
+}

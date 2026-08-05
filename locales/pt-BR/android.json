@@ -1,0 +1,11 @@
+{
+  "app.name": "Orion Store",
+  "download.background_channel": "Downloads em segundo plano",
+  "download.background_description": "Mantém os downloads do Orion Store em andamento enquanto o aplicativo está em segundo plano.",
+  "download.background_progress": "{{progress}}% — O Orion Store continuará em segundo plano",
+  "download.background_status": "O Orion Store continuará em segundo plano",
+  "download.channel_name": "Progresso dos downloads",
+  "download.file": "Baixando {{fileName}}",
+  "download.multiple_in_progress": "{{count}} downloads em andamento",
+  "download.single_in_progress": "Baixando…"
+}

@@ -1,0 +1,11 @@
+{
+  "app.name": "Orion Store",
+  "download.background_channel": "Background Downloads",
+  "download.background_description": "Keeps Orion Store downloads running while the app is in the background.",
+  "download.background_progress": "{{progress}}% — Orion Store will keep going in the background",
+  "download.background_status": "Orion Store will keep going in the background",
+  "download.channel_name": "Download Progress",
+  "download.file": "Downloading {{fileName}}",
+  "download.multiple_in_progress": "{{count}} downloads in progress",
+  "download.single_in_progress": "Downloading…"
+}

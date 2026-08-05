@@ -1,0 +1,14 @@
+{
+  "accessibility.skip_to_main": "Skip to Main Content",
+  "app.selected": "selected app",
+  "document.title": "Open in Orion Store",
+  "fallback.label": "Unable To Open In Orion Store",
+  "fallback.message": "Install the latest Orion Store build on this device, then try the handoff again.",
+  "fallback.retry": "Try Again",
+  "fallback.title": "Orion Store Is Not Available",
+  "footer.deep_link": "Deep Link",
+  "header.subtitle": "Android Redirect",
+  "opening.label": "Opening In Orion Store",
+  "opening.message": "If Orion Store is installed, this handoff will complete automatically.",
+  "opening.status": "Waiting for Orion Store…"
+}

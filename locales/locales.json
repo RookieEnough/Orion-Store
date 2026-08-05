@@ -1,0 +1,194 @@
+[
+  {
+    "code": "en",
+    "name": "English",
+    "direction": "ltr",
+    "status": "source"
+  },
+  {
+    "code": "ar",
+    "name": "Arabic",
+    "direction": "rtl",
+    "status": "template"
+  },
+  {
+    "code": "bn",
+    "name": "Bengali",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "cs",
+    "name": "Czech",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "da",
+    "name": "Danish",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "de",
+    "name": "German",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "el",
+    "name": "Greek",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "es",
+    "name": "Spanish",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "fil",
+    "name": "Filipino",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "fi",
+    "name": "Finnish",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "fr",
+    "name": "French",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "he",
+    "name": "Hebrew",
+    "direction": "rtl",
+    "status": "template"
+  },
+  {
+    "code": "hi",
+    "name": "Hindi",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "hu",
+    "name": "Hungarian",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "id",
+    "name": "Indonesian",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "it",
+    "name": "Italian",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "ja",
+    "name": "Japanese",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "ko",
+    "name": "Korean",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "ms",
+    "name": "Malay",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "nl",
+    "name": "Dutch",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "no",
+    "name": "Norwegian",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "pl",
+    "name": "Polish",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "pt-BR",
+    "name": "Portuguese (Brazil)",
+    "direction": "ltr",
+    "status": "in-progress"
+  },
+  {
+    "code": "ro",
+    "name": "Romanian",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "ru",
+    "name": "Russian",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "sv",
+    "name": "Swedish",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "th",
+    "name": "Thai",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "tr",
+    "name": "Turkish",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "uk",
+    "name": "Ukrainian",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "vi",
+    "name": "Vietnamese",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "zh-CN",
+    "name": "Chinese (Simplified)",
+    "direction": "ltr",
+    "status": "template"
+  },
+  {
+    "code": "zh-TW",
+    "name": "Chinese (Traditional)",
+    "direction": "ltr",
+    "status": "template"
+  }
+]
