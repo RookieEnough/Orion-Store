@@ -1,10 +1,10 @@
-# Pastas de tradução para Orion-Store
+# Translation folders for Orion-Store
 
-Esta pasta contém os arquivos de apoio para traduções (i18n). Coloque arquivos de tradução em JSON dentro de subpastas com o código do idioma (ex.: `pt-BR`, `en`, `es`).
+This folder contains supporting files for translations (i18n). Place translation files as JSON inside subfolders named with the language code (e.g., `pt-BR`, `en`, `es`).
 
-Formato esperado:
-- Arquivos JSON com pares chave:valor.
-- Exemplo: `locales/pt-BR/common.json` contém `{"hello": "Olá"}`.
+Expected format:
+- JSON files with key:value pairs.
+- Example: `locales/pt-BR/common.json` contains `{"hello": "Olá"}`.
 
-Observações:
-- Se preferir outro formato (YAML, .ts, etc.) ou outra estrutura (por domínio/feature), diga e eu adapto.
+Notes:
+- If you prefer another format (YAML, .ts, etc.) or a different structure (by domain/feature), tell me and I'll adapt.
