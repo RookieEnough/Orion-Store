@@ -83,7 +83,7 @@ const BundlePreviewModal = lazy(() => import('./components/BundlePreviewModal'))
 const ProfileStatsModal = lazy(() => import('./components/ProfileStatsModal'));
 const VirusTotalScanModal = lazy(() => import('./components/VirusTotalScanModal'));
 
-const CURRENT_STORE_VERSION = '1.3.5';
+const CURRENT_STORE_VERSION = '1.3.6';
 const UNITY_GAME_ID = '5996387';
 const ADS_TEST_MODE = false;
 
