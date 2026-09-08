@@ -52,7 +52,13 @@ export interface ApkInstallerInfo {
   isSystemInstaller: boolean;
 }
 
+export interface DeviceArchitectureResult {
+  primaryArch: string;
+  supportedAbis: string[];
+}
+
 export interface AppTrackerPlugin {
+  getDeviceArchitecture(): Promise<DeviceArchitectureResult>;
   getAppInfo(options: { packageName: string }): Promise<AppInfoResult>;
   getMultipleAppInfo(options: { packageNames: string[] }): Promise<Record<string, AppInfoResult>>;
   downloadFile(options: { url: string, fileName: string }): Promise<{ downloadId: string }>;

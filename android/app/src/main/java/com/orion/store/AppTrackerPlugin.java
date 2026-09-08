@@ -1582,6 +1582,32 @@ public class AppTrackerPlugin extends Plugin {
         call.resolve();
     }
 
+    @PluginMethod
+    public void getDeviceArchitecture(PluginCall call) {
+        try {
+            JSObject ret = new JSObject();
+            String primaryArch = "unknown";
+            JSArray supportedAbis = new JSArray();
+
+            String[] abis = Build.SUPPORTED_ABIS;
+            if (abis != null && abis.length > 0) {
+                primaryArch = abis[0];
+                for (String abi : abis) {
+                    supportedAbis.put(abi);
+                }
+            } else if (Build.CPU_ABI != null) {
+                primaryArch = Build.CPU_ABI;
+                supportedAbis.put(Build.CPU_ABI);
+            }
+
+            ret.put("primaryArch", primaryArch);
+            ret.put("supportedAbis", supportedAbis);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to retrieve device architecture: " + e.getMessage());
+        }
+    }
+
     // --- DOWNLOADER TASK ---
     private class DownloadTask implements Runnable {
         String urlStr, fileName;
