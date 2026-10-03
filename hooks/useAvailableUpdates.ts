@@ -6,7 +6,7 @@ import { getPreferredVersion, hasAvailableUpdate } from '../utils/appVersioning'
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-export const useAvailableUpdates = (apps: AppItem[]) => {
+const useAvailableUpdates = (apps: AppItem[]) => {
   const { installedVersions, appStreams, ignoredUpdates } = useSettingsStore((state) => ({
     installedVersions: state.installedVersions,
     appStreams: state.appStreams,

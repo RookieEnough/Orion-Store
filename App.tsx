@@ -22,10 +22,11 @@ import { LocalNotifications, ActionPerformed } from '@capacitor/local-notificati
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { UnityAds } from 'capacitor-unity-ads';
 import { shallow } from 'zustand/shallow';
-import { DEV_SOCIALS, DEFAULT_FAQS, DEFAULT_DEV_PROFILE, DEFAULT_SUPPORT_EMAIL, DEFAULT_EASTER_EGG, DEFAULT_DONATION, CACHE_VERSION, NETWORK_TIMEOUT_MS, getAppFontDefinition } from './constants';
+import { DEV_SOCIALS, DEFAULT_FAQS, DEFAULT_DEV_PROFILE, DEFAULT_SUPPORT_EMAIL, DEFAULT_EASTER_EGG, DEFAULT_DONATION, CACHE_VERSION, NETWORK_TIMEOUT_MS, CUSTOM_FONT_FAMILY, getAppFontDefinition } from './constants';
 import { Platform, AppItem, AppFontKey, Tab, StoreConfig, SortOption, StoreCollection, BundleItem, UpdateStream } from './types';
 import ClassicAppList from './components/ClassicAppList';
 import ExpandedNewUpdatedGrid from './components/ExpandedNewUpdatedGrid';
+import MyAppsView from './components/MyAppsView';
 const ModernAppList = lazy(() => import('./components/ModernAppList').then(m => ({ default: m.default })));
 const ModernHomeSkeleton = lazy(() => import('./components/ModernAppList').then(m => ({ default: m.ModernHomeSkeleton })));
 import Header from './components/Header';
@@ -60,6 +61,7 @@ import CoreWorker from './workers/core.worker?worker';
 
 const FAQModal = lazy(() => import('./components/FAQModal'));
 const AdDonationModal = lazy(() => import('./components/AdDonationModal'));
+const AppChangeRequestModal = lazy(() => import('./components/AppChangeRequestModal'));
 const AboutTabContainer = lazy(() => import('./components/AboutTabContainer'));
 const SelectedAppModalContainer = lazy(() => import('./components/SelectedAppModalContainer'));
 const SubmissionModal = lazy(() => import('./components/SubmissionModal'));
@@ -83,7 +85,7 @@ const BundlePreviewModal = lazy(() => import('./components/BundlePreviewModal'))
 const ProfileStatsModal = lazy(() => import('./components/ProfileStatsModal'));
 const VirusTotalScanModal = lazy(() => import('./components/VirusTotalScanModal'));
 
-const CURRENT_STORE_VERSION = '1.4.0';
+const CURRENT_STORE_VERSION = '1.5.0';
 const UNITY_GAME_ID = '5996387';
 const ADS_TEST_MODE = false;
 
@@ -121,6 +123,15 @@ const APP_FONT_STYLESHEET_URLS: Partial<Record<AppFontKey, string>> = {
     publicSans: 'https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap'
 };
 const APP_FONT_LINK_ID = 'orion-app-font';
+const APP_CUSTOM_FONT_STYLE_ID = 'orion-custom-font-style';
+
+const getCustomFontFormat = (mimeType: string, fileName: string) => {
+    const normalizedMime = mimeType.toLowerCase();
+    const extension = fileName.split('.').pop()?.toLowerCase() || '';
+    if (normalizedMime.includes('woff2') || extension === 'woff2') return 'woff2';
+    if (normalizedMime.includes('opentype') || extension === 'otf') return 'opentype';
+    return 'truetype';
+};
 
 type ViewTransitionCapableDocument = Document & {
     startViewTransition?: (updateCallback: () => void | Promise<void>) => {
@@ -343,6 +354,7 @@ const App: React.FC = () => {
     const settings = useSettingsStore((state) => ({
         theme: state.theme,
         appFont: state.appFont,
+        customFonts: state.customFonts,
         isOled: state.isOled,
         hiddenTabs: state.hiddenTabs,
         autoUpdateEnabled: state.autoUpdateEnabled,
@@ -350,6 +362,7 @@ const App: React.FC = () => {
         deleteApk: state.deleteApk,
         disableAnimations: state.disableAnimations,
         compactMode: state.compactMode,
+        bottomNavScale: state.bottomNavScale,
         highRefreshRate: state.highRefreshRate,
         pullToRefreshCharacter: state.pullToRefreshCharacter,
         hapticEnabled: state.hapticEnabled,
@@ -369,6 +382,8 @@ const App: React.FC = () => {
         localMaintenanceMode: state.localMaintenanceMode,
         virusTotalApiKey: state.virusTotalApiKey,
         forcedStoreUpdate: state.forcedStoreUpdate,
+        installedVersions: state.installedVersions,
+        lastRemoteVersions: state.lastRemoteVersions,
         setVirusTotalApiKey: state.setVirusTotalApiKey,
         setTheme: state.setTheme,
         setAppStream: state.setAppStream,
@@ -382,10 +397,12 @@ const App: React.FC = () => {
         incrementAdWatch: state.incrementAdWatch,
         setIsLegend: state.setIsLegend,
         registerSubmission: state.registerSubmission,
+        registerChangeRequest: state.registerChangeRequest,
         setHasSeenModernUITutorial: state.setHasSeenModernUITutorial,
         userProfile: state.userProfile,
         setForcedStoreUpdate: state.setForcedStoreUpdate,
-        clearForcedStoreUpdate: state.clearForcedStoreUpdate
+        clearForcedStoreUpdate: state.clearForcedStoreUpdate,
+        setBottomNavScale: state.setBottomNavScale
     }), shallow);
     const data = useDataStore((state) => ({
         apps: state.apps,
@@ -394,6 +411,7 @@ const App: React.FC = () => {
         activeDownloads: state.activeDownloads,
         readyToInstall: state.readyToInstall,
         pendingCleanup: state.pendingCleanup,
+        appLibrary: state.appLibrary,
         setApps: state.setApps,
         setImportedApps: state.setImportedApps,
         setSearchQuery: state.setSearchQuery,
@@ -404,7 +422,10 @@ const App: React.FC = () => {
         startDownload: state.startDownload,
         cancelDownload: state.cancelDownload,
         setReadyToInstall: state.setReadyToInstall,
-        setPendingCleanup: state.setPendingCleanup
+        setPendingCleanup: state.setPendingCleanup,
+        recordAppInstalled: state.recordAppInstalled,
+        removeAppLibraryFile: state.removeAppLibraryFile,
+        setAppLibrary: state.setAppLibrary
     }), shallow);
     const workerRef = useRef<Worker | null>(null);
 
@@ -423,6 +444,7 @@ const App: React.FC = () => {
     const [errorMsg, setErrorMsg] = useState('Failed to load apps');
     const [showFAQ, setShowFAQ] = useState(false);
     const [showAdDonation, setShowAdDonation] = useState(false);
+    const [showAppChangeRequest, setShowAppChangeRequest] = useState(false);
     const [showSubmissionModal, setShowSubmissionModal] = useState(false);
     const [showCustomBundleModal, setShowCustomBundleModal] = useState(false);
     const [submissionCooldown, setSubmissionCooldown] = useState<string | null>(null);
@@ -534,6 +556,7 @@ const App: React.FC = () => {
         || !!vtScanTarget
         || showSettingsModal
         || showAdDonation
+        || showAppChangeRequest
         || showSubmissionModal
 
         || showFAQ
@@ -705,6 +728,53 @@ const App: React.FC = () => {
         pc: appsByPlatform[Platform.PC].length,
         tv: appsByPlatform[Platform.TV].length
     }), [appsByPlatform]);
+
+    useEffect(() => {
+        const currentData = useDataStore.getState();
+        const currentSettings = useSettingsStore.getState();
+        const nextLibrary = { ...currentData.appLibrary };
+        let changed = false;
+
+        allKnownApps.forEach((app) => {
+            const existingEntry = nextLibrary[app.id];
+            const installedVersion = currentSettings.installedVersions[app.id] || '';
+            const remoteVersion = currentSettings.lastRemoteVersions[app.id] || '';
+            const readyFile = currentData.readyToInstall[app.id];
+            const cleanupEntry = currentData.pendingCleanup[app.id];
+            const cleanupFile = typeof cleanupEntry === 'string' ? cleanupEntry : cleanupEntry?.fileName;
+            const fileName = readyFile || cleanupFile || existingEntry?.fileName;
+            const wasInstalled = existingEntry?.status === 'installed';
+            const isInstalled = !!installedVersion || !!remoteVersion || wasInstalled;
+
+            if (!isInstalled && !fileName) return;
+
+            const now = Date.now();
+            const nextEntry = {
+                status: isInstalled ? 'installed' as const : 'downloaded' as const,
+                fileName,
+                version: installedVersion || remoteVersion || existingEntry?.version,
+                downloadedAt: existingEntry?.downloadedAt ?? (
+                    typeof cleanupEntry === 'object' ? cleanupEntry?.timestamp : undefined
+                ) ?? now,
+                installedAt: existingEntry?.installedAt ?? (isInstalled ? now : undefined),
+                lastSeenAt: existingEntry?.lastSeenAt ?? now
+            };
+
+            if (
+                !existingEntry
+                || existingEntry.status !== nextEntry.status
+                || existingEntry.fileName !== nextEntry.fileName
+                || existingEntry.version !== nextEntry.version
+                || existingEntry.downloadedAt !== nextEntry.downloadedAt
+                || existingEntry.installedAt !== nextEntry.installedAt
+            ) {
+                nextLibrary[app.id] = nextEntry;
+                changed = true;
+            }
+        });
+
+        if (changed) currentData.setAppLibrary(nextLibrary);
+    }, [allKnownApps, data.appLibrary, data.pendingCleanup, data.readyToInstall, settings.installedVersions, settings.lastRemoteVersions]);
 
     useEffect(() => {
         const storeState = useDataStore.getState();
@@ -955,6 +1025,7 @@ const App: React.FC = () => {
                     }
 
                     if (file || currentData.readyToInstall[app.id]) {
+                        currentData.recordAppInstalled(app.id, result.version, file || currentData.readyToInstall[app.id]);
                         const newReady = { ...currentData.readyToInstall };
                         const targetFile = file || newReady[app.id];
                         delete newReady[app.id];
@@ -1007,6 +1078,14 @@ const App: React.FC = () => {
         allApps.forEach((app) => {
             const result = scanResults[app.id];
             const readyFile = newReadyToInstall[app.id];
+
+            if (result?.installed && installingIdRef.current !== app.id) {
+                useDataStore.getState().recordAppInstalled(
+                    app.id,
+                    result.version,
+                    readyFile || useDataStore.getState().appLibrary[app.id]?.fileName
+                );
+            }
 
             if (!result?.installed || !readyFile || installingIdRef.current === app.id) {
                 return;
@@ -1569,10 +1648,30 @@ const App: React.FC = () => {
     }, [settings.theme, settings.isOled]);
 
     useEffect(() => {
-        document.documentElement.style.setProperty('--app-font-family', getAppFontDefinition(settings.appFont).family);
+        const customFont = settings.customFonts.find((font) => `custom:${font.id}` === settings.appFont);
+        let customStyle = document.getElementById(APP_CUSTOM_FONT_STYLE_ID) as HTMLStyleElement | null;
+
+        if (customFont) {
+            if (!customStyle) {
+                customStyle = document.createElement('style');
+                customStyle.id = APP_CUSTOM_FONT_STYLE_ID;
+                document.head.appendChild(customStyle);
+            }
+            customStyle.textContent = `@font-face { font-family: 'Orion Custom Font'; src: url('${customFont.dataUrl}') format('${getCustomFontFormat(customFont.mimeType, customFont.fileName)}'); font-display: swap; }`;
+            document.documentElement.style.setProperty('--app-font-family', CUSTOM_FONT_FAMILY);
+            document.body.style.setProperty('font-family', CUSTOM_FONT_FAMILY, 'important');
+            const externalLink = document.getElementById(APP_FONT_LINK_ID);
+            externalLink?.remove();
+            return;
+        }
+
+        customStyle?.remove();
+        const fontDef = getAppFontDefinition(settings.appFont);
+        document.documentElement.style.setProperty('--app-font-family', fontDef.family);
+        document.body.style.setProperty('font-family', fontDef.family, 'important');
         const timer = window.setTimeout(() => ensureAppFontStylesheet(settings.appFont), 0);
         return () => window.clearTimeout(timer);
-    }, [settings.appFont]);
+    }, [settings.appFont, settings.customFonts]);
 
     useEffect(() => {
         if (Capacitor.isNativePlatform()) {
@@ -1708,6 +1807,7 @@ const App: React.FC = () => {
                 window.dispatchEvent(new Event('orion-close-lightbox'));
                 return;
             }
+            if (showAppChangeRequest) { setShowAppChangeRequest(false); return; }
             if (vtScanTarget) { setVtScanTarget(null); return; }
             if (selectedApp) { setSelectedApp(null); return; }
             if (expandedModernView) {
@@ -1747,7 +1847,7 @@ const App: React.FC = () => {
         };
         const backListener = CapacitorApp.addListener('backButton', handleBack);
         return () => { backListener.then(h => h.remove()); };
-    }, [shouldBlockWithForcedStoreUpdate, selectedApp, selectedBundle, showSettingsModal, showFAQ, showSubmissionModal, showAdDonation, activeTab, showNotice, showReleaseNotes, canResetCurrentBrowseState, restorePrimaryBrowseState, showAllSorted, expandedModernView, vtScanTarget, showProfileStats, showCustomBundleModal, showModernUITutorial, isTestingForcedUpdate, returnToExpandedView]);
+    }, [shouldBlockWithForcedStoreUpdate, selectedApp, selectedBundle, showSettingsModal, showFAQ, showSubmissionModal, showAdDonation, showAppChangeRequest, activeTab, showNotice, showReleaseNotes, canResetCurrentBrowseState, restorePrimaryBrowseState, showAllSorted, expandedModernView, vtScanTarget, showProfileStats, showCustomBundleModal, showModernUITutorial, isTestingForcedUpdate, returnToExpandedView]);
 
     const handleDownloadStart = useCallback((appId: string, downloadId: string, fileName: string) => {
         data.startDownload(appId, downloadId, fileName);
@@ -1782,6 +1882,48 @@ const App: React.FC = () => {
             triggerHaptic('notification', undefined, NotificationType.Success);
         } catch (e) { }
     }, [data, triggerHaptic, settings.removeLastRemoteVersion]);
+
+    const handleDeleteLibraryApk = useCallback(async (app: AppItem) => {
+        const currentData = useDataStore.getState();
+        const readyFile = currentData.readyToInstall[app.id];
+        const cleanupEntry = currentData.pendingCleanup[app.id];
+        const cleanupFile = typeof cleanupEntry === 'string' ? cleanupEntry : cleanupEntry?.fileName;
+        const libraryFile = currentData.appLibrary[app.id]?.fileName;
+        const fileName = readyFile || cleanupFile || libraryFile;
+
+        if (!Capacitor.isNativePlatform()) {
+            const nextReady = { ...currentData.readyToInstall };
+            const nextCleanup = { ...currentData.pendingCleanup };
+            delete nextReady[app.id];
+            delete nextCleanup[app.id];
+            currentData.setReadyToInstall(nextReady);
+            currentData.setPendingCleanup(nextCleanup);
+            currentData.removeAppLibraryFile(app.id);
+            useSettingsStore.getState().removeLastRemoteVersion(app.id);
+            return;
+        }
+
+        if (!fileName) {
+            currentData.removeAppLibraryFile(app.id);
+            return;
+        }
+
+        try {
+            await AppTracker.deleteFile({ fileName });
+            const nextReady = { ...currentData.readyToInstall };
+            const nextCleanup = { ...currentData.pendingCleanup };
+            delete nextReady[app.id];
+            delete nextCleanup[app.id];
+            currentData.setReadyToInstall(nextReady);
+            currentData.setPendingCleanup(nextCleanup);
+            currentData.removeAppLibraryFile(app.id);
+            useSettingsStore.getState().removeLastRemoteVersion(app.id);
+            triggerHaptic('notification', undefined, NotificationType.Success);
+        } catch (error) {
+            setErrorMsg('APK could not be deleted.');
+            setShowErrorToast(true);
+        }
+    }, [triggerHaptic]);
 
     const handleInstallFile = async (app: AppItem, fileName: string) => {
         if (!Capacitor.isNativePlatform()) return;
@@ -3018,6 +3160,12 @@ const App: React.FC = () => {
         setShowSettingsModal(true);
     }, []);
 
+    const handleOpenDownloadQueue = useCallback(() => {
+        setSettingsInitialMenu('queue');
+        preloadSettingsModal();
+        setShowSettingsModal(true);
+    }, []);
+
     // Fire-and-forget preload; pointerdown calls this so the chunk is already
     // resolved by the time the click event flips the modal visible.
     const handleOpenSettingsPreload = useCallback(() => {
@@ -3621,6 +3769,18 @@ const App: React.FC = () => {
                             {activeTab === 'android' && renderAppGrid(Platform.ANDROID)}
                             {activeTab === 'pc' && renderAppGrid(Platform.PC)}
                             {activeTab === 'tv' && renderAppGrid(Platform.TV)}
+                            {activeTab === 'myapps' && (
+                                <MyAppsView
+                                    apps={allKnownApps}
+                                    layout={settings.storeLayout}
+                                    onOpenApp={handleAppSelect}
+                                    onInstall={handleInstallFile}
+                                    onUpdate={handleDownloadAction}
+                                    onDeleteApk={handleDeleteLibraryApk}
+                                    onCancelDownload={handleCancelDownloadById}
+                                    onOpenQueue={handleOpenDownloadQueue}
+                                />
+                            )}
                             {activeTab === 'about' && (
                                 <Suspense fallback={<div className="flex justify-center p-12"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div></div>}>
                                     <AboutTabContainer
@@ -3692,7 +3852,7 @@ const App: React.FC = () => {
                     </button>
 
                     </div>
-                    <BottomNav activeTab={activeTab} onTabChange={handleBottomNavChange} hiddenTabs={settings.hiddenTabs} glassEffect={settings.glassEffect} />
+                    <BottomNav activeTab={activeTab} onTabChange={handleBottomNavChange} hiddenTabs={settings.hiddenTabs} glassEffect={settings.glassEffect} scale={settings.bottomNavScale} />
 
                     <Suspense fallback={null}>
                         {selectedBundle && (
@@ -3721,7 +3881,21 @@ const App: React.FC = () => {
                                 onExportAPK={handleExportAPK}
                                 isScanning={scanningId === selectedApp.id}
                                 onVirusTotalScan={() => setVtScanTarget(selectedApp)}
+                                onRequestChange={() => setShowAppChangeRequest(true)}
                             />
+                        )}
+                        {showAppChangeRequest && selectedApp && (
+                            <Suspense fallback={null}>
+                                <AppChangeRequestModal
+                                    app={selectedApp}
+                                    onClose={() => setShowAppChangeRequest(false)}
+                                    onSuccess={() => {
+                                        settings.registerChangeRequest();
+                                        triggerHaptic('notification', undefined, NotificationType.Success);
+                                    }}
+                                    cooldownLabel={submissionCooldown ?? undefined}
+                                />
+                            </Suspense>
                         )}
                         {vtScanTarget && (
                             <VirusTotalScanModal

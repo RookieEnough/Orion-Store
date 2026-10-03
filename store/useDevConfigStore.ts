@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { get, set, del } from 'idb-keyval';
-export type DevConfigLoadStatus = 'idle' | 'loading' | 'success' | 'error';
+type DevConfigLoadStatus = 'idle' | 'loading' | 'success' | 'error';
 
-export interface DevConfigState {
+interface DevConfigState {
   enabled: boolean;
   url: string;
   status: DevConfigLoadStatus;

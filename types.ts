@@ -25,7 +25,7 @@ export enum SortOption {
 }
 
 export type UpdateStream = 'Stable' | 'Beta' | 'Alpha' | 'Nightly';
-export type AppFontKey = 'spaceGrotesk' | 'inter' | 'poppins' | 'manrope' | 'outfit' | 'dmSans' | 'plusJakartaSans' | 'rubik' | 'nunitoSans' | 'publicSans' | 'systemDefault';
+export type AppFontKey = 'spaceGrotesk' | 'inter' | 'poppins' | 'manrope' | 'outfit' | 'dmSans' | 'plusJakartaSans' | 'rubik' | 'nunitoSans' | 'publicSans' | 'systemDefault' | `custom:${string}`;
 export type PullToRefreshCharacterKey = 'cat' | 'dog' | 'pokeball' | 'shield' | 'owl' | 'robot' | 'ghost' | 'kitty' | 'bunny' | 'batman';
 
 export interface AppVariant {
@@ -156,7 +156,7 @@ export interface StoreConfig {
   storefrontModules?: StorefrontModuleConfig[]; // Optional homepage modules from config.json
 }
 
-export type Tab = 'android' | 'pc' | 'tv' | 'about' | 'updates';
+export type Tab = 'android' | 'pc' | 'tv' | 'myapps' | 'about' | 'updates';
 
 export interface LeaderboardEntry {
     username: string;

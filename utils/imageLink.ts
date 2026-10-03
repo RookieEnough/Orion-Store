@@ -15,7 +15,7 @@
 // We reject any link whose host starts with `private-user` (private
 // GitHub user images), because those are not publicly cacheable.
 
-export const ACCEPTED_IMAGE_EXTENSIONS = [
+const ACCEPTED_IMAGE_EXTENSIONS = [
     '.jpg',
     '.jpeg',
     '.png',
@@ -56,29 +56,6 @@ function endsWithImageExtension(path: string): boolean {
 
 function isPrivateUserHost(host: string): boolean {
     return host.startsWith('private-user');
-}
-
-/**
- * Returns true if the URL is an image link the submission form should accept.
- */
-export function isAcceptedImageLink(url: string): boolean {
-    if (!url) return false;
-    const trimmed = url.trim();
-    if (!trimmed) return false;
-    if (!/^https?:\/\//i.test(trimmed)) return false;
-    try {
-        const u = new URL(trimmed);
-        if (isPrivateUserHost(u.hostname)) return false;
-        if (endsWithImageExtension(u.pathname)) return true;
-        if (isGooglePlayScrapedImage(u.hostname, u.pathname)) return true;
-        if (isGithubRaw(u.hostname)) return true;
-        if (isCamoProxy(u.hostname)) return true;
-        if (isGitlabRaw(u.hostname, u.pathname)) return true;
-        if (isCodebergRaw(u.hostname, u.pathname)) return true;
-        return false;
-    } catch {
-        return false;
-    }
 }
 
 /**

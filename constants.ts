@@ -4,7 +4,6 @@ import { AppCategory, AppFontKey, AppItem, Platform, FAQItem, DevProfile, Donati
 // System Constants
 export const CACHE_VERSION = 'v1_6'; // Increment this to force-clear client cache in future updates
 export const NETWORK_TIMEOUT_MS = 8000;
-export const STORAGE_QUOTA_BUFFER = 1024 * 512; // Keep 512KB free
 
 // --- REMOTE DATA ENDPOINTS ---
 export const RELEASE_NOTES_URL = 'https://raw.githubusercontent.com/RookieEnough/Orion-Data/main/release_notes.json';
@@ -34,9 +33,6 @@ export const CATEGORY_GRADIENTS: Record<string, string> = {
 export const MICROG_DEPENDENT_APPS = ['youtube-revanced', 'yt-music-revanced', 'google-photos-revanced'];
 export const MICROG_INFO_URL = 'https://github.com/microg/GmsCore/wiki';
 
-// Empty to force remote fetch
-export const MOCK_APPS: AppItem[] = [];
-
 export const DEV_SOCIALS = {
   github: 'https://github.com/RookieEnough',
   x: 'https://x.com/_Rookie_Z',
@@ -60,6 +56,7 @@ export const DEFAULT_SUPPORT_EMAIL = 'orionstoredev@gmail.com';
 export const DEFAULT_EASTER_EGG = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 
 export const DEFAULT_APP_FONT: AppFontKey = 'spaceGrotesk';
+export const CUSTOM_FONT_FAMILY = "'Orion Custom Font', sans-serif";
 
 export const APP_FONT_OPTIONS: ReadonlyArray<{
   key: AppFontKey;
@@ -81,6 +78,8 @@ export const APP_FONT_OPTIONS: ReadonlyArray<{
 
 export const getAppFontDefinition = (fontKey: AppFontKey): (typeof APP_FONT_OPTIONS)[number] =>
   APP_FONT_OPTIONS.find((option) => option.key === fontKey) || APP_FONT_OPTIONS[0]!;
+
+export const getCustomFontKey = (fontId: string): AppFontKey => `custom:${fontId}`;
 
 export const DEFAULT_FAQS: FAQItem[] = [
   {

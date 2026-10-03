@@ -6,7 +6,7 @@ export interface AppInfoResult {
   versionCode?: number;
 }
 
-export interface DownloadProgressResult {
+interface DownloadProgressResult {
   progress: number;
   status: 'PENDING' | 'RUNNING' | 'SUCCESSFUL' | 'FAILED';
   downloaded: number;
@@ -39,25 +39,25 @@ export interface NetworkSecurityResult {
   isHiddenSsid: boolean;
 }
 
-export interface PermissionsStatusResult {
+interface PermissionsStatusResult {
   storage: boolean;
   location: boolean;
   media: boolean;
   isLegacy: boolean;
 }
 
-export interface ApkInstallerInfo {
+interface ApkInstallerInfo {
   packageName: string;
   label: string;
   isSystemInstaller: boolean;
 }
 
-export interface DeviceArchitectureResult {
+interface DeviceArchitectureResult {
   primaryArch: string;
   supportedAbis: string[];
 }
 
-export interface AppTrackerPlugin {
+interface AppTrackerPlugin {
   getDeviceArchitecture(): Promise<DeviceArchitectureResult>;
   getAppInfo(options: { packageName: string }): Promise<AppInfoResult>;
   getMultipleAppInfo(options: { packageNames: string[] }): Promise<Record<string, AppInfoResult>>;

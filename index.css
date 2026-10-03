@@ -23,12 +23,16 @@ html {
 }
 
 body {
-  font-family: var(--app-font-family);
+  font-family: var(--app-font-family, 'Space Grotesk', sans-serif);
   @apply bg-surface text-theme-text;
   overscroll-behavior: none;
   height: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+*, ::before, ::after {
+  font-family: inherit;
 }
 
 button,
@@ -176,7 +180,8 @@ body.no-glass .backdrop-blur-sm:not(.backdrop-scrim),
 body.perf-mode .backdrop-blur-xl:not(.backdrop-scrim),
 body.perf-mode .backdrop-blur-lg:not(.backdrop-scrim),
 body.perf-mode .backdrop-blur-md:not(.backdrop-scrim),
-body.perf-mode .backdrop-blur-sm:not(.backdrop-scrim) {
+body.perf-mode .backdrop-blur-sm:not(.backdrop-scrim)
+{
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 }
@@ -188,20 +193,12 @@ body.no-glass .bg-surface\/60,
 body.no-glass .bg-surface\/40,
 body.no-glass .bg-card\/95,
 body.no-glass .bg-card\/90,
-body.no-glass .backdrop-blur-xl:not(.backdrop-scrim),
-body.no-glass .backdrop-blur-lg:not(.backdrop-scrim),
-body.no-glass .backdrop-blur-md:not(.backdrop-scrim),
-body.no-glass .backdrop-blur-sm:not(.backdrop-scrim),
 body.perf-mode .bg-surface\/95,
 body.perf-mode .bg-surface\/90,
 body.perf-mode .bg-surface\/60,
 body.perf-mode .bg-surface\/40,
 body.perf-mode .bg-card\/95,
-body.perf-mode .bg-card\/90,
-body.perf-mode .backdrop-blur-xl:not(.backdrop-scrim),
-body.perf-mode .backdrop-blur-lg:not(.backdrop-scrim),
-body.perf-mode .backdrop-blur-md:not(.backdrop-scrim),
-body.perf-mode .backdrop-blur-sm:not(.backdrop-scrim) {
+body.perf-mode .bg-card\/90 {
     background-color: var(--glass-solid-bg) !important;
     border-color: var(--glass-solid-border) !important;
     box-shadow: var(--glass-solid-shadow) !important;
@@ -213,6 +210,13 @@ body.perf-mode nav {
     background-color: var(--glass-solid-bg) !important;
     border-color: var(--glass-solid-border) !important;
     box-shadow: var(--glass-solid-shadow) !important;
+}
+
+/* Prevent shadow-bleed flicker on cards inside scroll containers in no-glass mode */
+body.no-glass .no-scrollbar .bg-card,
+body.perf-mode .no-scrollbar .bg-card {
+    transition: background-color 0.24s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: none !important;
 }
 
 body.native-ui .shadow-2xl {
@@ -448,7 +452,6 @@ img {
   animation: splash-shape-anim 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.45s forwards;
 }
 /* --- END SPLASH PREVIEW --- */
-
 
 :root {
   --bg-surface: #eef2f7;
@@ -765,8 +768,6 @@ html.oled {
   }
 }
 
-
-
 /* Subtle elevation glow for dark modes (borderless cards still pop) */
 html.dusk .orion-shadow-surface {
     box-shadow: inset 0 1px 0 0 rgba(168, 162, 255, 0.06), 0 1px 3px rgba(2, 6, 23, 0.25);
@@ -947,3 +948,304 @@ body.perf-mode .orion-shadow-frame::before {
     0% { transform: translate(-50%, 0) rotate(0deg); }
     100% { transform: translate(-50%, 0) rotate(360deg); }
 }
+
+/* --- Material You 3 My Apps --- */
+.my-apps-layout {
+  --my-apps-accent: #6366f1;
+  --my-apps-accent-soft: color-mix(in srgb, var(--my-apps-accent) 12%, transparent);
+  --my-apps-card-1: color-mix(in srgb, var(--bg-card) 86%, var(--my-apps-accent) 8%);
+  --my-apps-card-2: color-mix(in srgb, var(--bg-card) 92%, var(--element-bg) 8%);
+}
+
+.my-apps-header {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+  padding: 1rem 1rem 1.25rem;
+  border-radius: 0 0 2rem 2rem;
+  background:
+    radial-gradient(140% 130% at 88% 0%, color-mix(in srgb, var(--my-apps-accent) 15%, transparent) 0%, transparent 48%),
+    linear-gradient(135deg, var(--my-apps-card-1), var(--my-apps-card-2));
+  box-shadow: 0 20px 40px -38px color-mix(in srgb, var(--my-apps-accent) 55%, transparent);
+}
+
+.my-apps-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(110deg, rgba(255, 255, 255, 0.12), transparent 36%);
+  opacity: 0.35;
+}
+
+.my-apps-header-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.my-apps-wave {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 3.25rem;
+  color: var(--my-apps-accent);
+  pointer-events: none;
+}
+
+.my-apps-title-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 1.5rem;
+  padding: 0.1rem 0.65rem;
+  border-radius: 0.6rem 0.85rem 0.6rem 0.85rem;
+  background: color-mix(in srgb, var(--my-apps-accent) 11%, transparent);
+  color: color-mix(in srgb, var(--my-apps-accent) 86%, var(--text-main) 14%);
+}
+
+.my-apps-filter-strip {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.45rem 1rem 0.9rem;
+  margin: -0.15rem -1rem 0.5rem;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  mask-image: linear-gradient(90deg, transparent 0, black 1rem, black calc(100% - 1.5rem), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, black 1rem, black calc(100% - 1.5rem), transparent 100%);
+}
+
+.my-apps-filter-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.my-apps-filter {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.65rem;
+  padding: 0.35rem 0.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 78%, var(--element-bg) 22%);
+  color: var(--text-sub);
+  box-shadow: 0 8px 22px -18px rgba(15, 23, 42, 0.72);
+  transition: transform 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.my-apps-filter:hover {
+  background: color-mix(in srgb, var(--element-bg) 72%, var(--my-apps-accent) 8%);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+.my-apps-filter-active {
+  background: var(--my-apps-accent);
+  color: white;
+  box-shadow: 0 12px 26px -18px var(--my-apps-accent);
+}
+
+.my-apps-filter-active:hover {
+  background: var(--my-apps-accent);
+  color: white;
+}
+
+.my-apps-filter-count {
+  display: inline-flex;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.25rem;
+  border-radius: 0.6rem 0.75rem 0.6rem 0.75rem;
+  background: color-mix(in srgb, var(--element-bg) 76%, transparent);
+}
+
+.my-apps-filter-active .my-apps-filter-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.my-apps-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.my-apps-row {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-color) 66%, transparent);
+  border-radius: 1.5rem;
+  background:
+    linear-gradient(128deg, color-mix(in srgb, var(--my-apps-accent) 6%, transparent), transparent 58%),
+    color-mix(in srgb, var(--bg-card) 95%, var(--bg-surface) 5%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 24%, transparent),
+    0 8px 24px -20px rgba(15, 23, 42, 0.5);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+html.dusk .my-apps-row,
+html.dark .my-apps-row {
+  border-color: color-mix(in srgb, white 12%, transparent);
+  background:
+    linear-gradient(128deg, color-mix(in srgb, var(--my-apps-accent) 8%, transparent), transparent 58%),
+    color-mix(in srgb, var(--bg-card) 92%, white 4%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 26px -20px rgba(0, 0, 0, 0.6);
+}
+
+html.dusk .my-apps-row:hover,
+html.dark .my-apps-row:hover {
+  border-color: color-mix(in srgb, var(--my-apps-accent) 35%, white 10%);
+}
+
+.my-apps-row:hover {
+  border-color: color-mix(in srgb, var(--my-apps-accent) 25%, var(--border-color) 75%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 26%, transparent),
+    0 16px 36px -28px rgba(15, 23, 42, 0.7);
+  transform: translateY(-2px);
+}
+
+.my-apps-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 1rem;
+}
+
+.my-apps-meta-chip {
+  display: inline-flex;
+  min-height: 1.4rem;
+  align-items: center;
+  max-width: 100%;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--element-bg) 72%, transparent);
+  color: var(--text-sub);
+}
+
+.my-apps-status-chip {
+  display: inline-flex;
+  min-height: 1.5rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 0.5rem;
+}
+
+.my-apps-action {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.95rem;
+  border: 0;
+  border-radius: 0.75rem;
+  transition: transform 150ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.my-apps-action:active {
+  transform: scale(0.97);
+}
+
+.my-apps-action-primary {
+  background: var(--my-apps-accent);
+  color: white;
+  box-shadow: 0 12px 24px -20px var(--my-apps-accent);
+}
+
+.my-apps-action-tonal {
+  background: color-mix(in srgb, var(--element-bg) 82%, transparent);
+  color: var(--text-sub);
+}
+
+.my-apps-action-destructive {
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  color: color-mix(in srgb, #ef4444 84%, var(--text-main) 16%);
+}
+
+.my-apps-action-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border-radius: 0.75rem;
+}
+
+.my-apps-empty {
+  display: flex;
+  min-height: 15rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--my-apps-accent) 8%, transparent), transparent 58%),
+    color-mix(in srgb, var(--bg-card) 88%, var(--element-bg) 12%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .my-apps-row,
+  .my-apps-filter,
+  .my-apps-action {
+    transition: none;
+  }
+}
+
+.orion-bottom-nav-scale {
+  transform: translateZ(0) scale(var(--bottom-nav-scale, 1));
+  transform-origin: bottom center;
+  will-change: transform;
+}
+
+body.no-anim .orion-bottom-nav-scale {
+  transition: none;
+}
+
+.m3-slider {
+  width: 100%;
+  height: 0.25rem;
+  margin: 1.25rem 0;
+  appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary, #6366f1) 0%, var(--primary, #6366f1) var(--slider-progress, 50%), var(--element-bg) var(--slider-progress, 50%), var(--element-bg) 100%);
+  outline: none;
+  cursor: pointer;
+}
+
+.m3-slider::-webkit-slider-thumb {
+  width: 1.5rem;
+  height: 1.5rem;
+  appearance: none;
+  border: 0.22rem solid var(--primary, #6366f1);
+  border-radius: 50% 45% 55% 50% / 48% 52% 48% 52%;
+  background: white;
+  box-shadow: 0 0.4rem 1rem -0.5rem rgba(99, 102, 241, 0.9);
+}
+
+.m3-slider::-moz-range-thumb {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 0.22rem solid var(--primary, #6366f1);
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0.4rem 1rem -0.5rem rgba(99, 102, 241, 0.9);
+}
+

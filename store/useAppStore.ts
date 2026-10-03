@@ -14,6 +14,26 @@ export interface CleanupEntry {
   timestamp: number;
 }
 
+interface CustomAppFont {
+  id: string;
+  name: string;
+  fileName: string;
+  mimeType: string;
+  dataUrl: string;
+  addedAt: number;
+}
+
+export type AppLibraryStatus = 'downloading' | 'downloaded' | 'installed';
+
+export interface AppLibraryEntry {
+  status: AppLibraryStatus;
+  fileName?: string;
+  version?: string;
+  downloadedAt: number;
+  installedAt?: number;
+  lastSeenAt: number;
+}
+
 export interface TabViewState {
   query: string;
   category: string;
@@ -24,6 +44,7 @@ export interface TabViewState {
 interface SettingsState {
   theme: Theme;
   appFont: AppFontKey;
+  customFonts: CustomAppFont[];
   storeLayout: 'classic' | 'modern';
   isOled: boolean;
   hiddenTabs: string[];
@@ -37,6 +58,7 @@ interface SettingsState {
   installerLabel: string;
   disableAnimations: boolean;
   compactMode: boolean;
+  bottomNavScale: number;
   highRefreshRate: boolean;
   pullToRefreshCharacter: PullToRefreshCharacterKey;
   hapticEnabled: boolean;
@@ -46,6 +68,7 @@ interface SettingsState {
   isContributor: boolean;
   adWatchCount: number;
   submissionCount: number;
+  changeRequestCount: number;
   lastSubmissionTime: number;
   lastLeaderboardSubmissionTime: number;
   useRemoteJson: boolean;
@@ -74,6 +97,8 @@ interface SettingsState {
   // Actions
   setTheme: (theme: Theme) => void;
   setAppFont: (font: AppFontKey) => void;
+  addCustomFont: (font: CustomAppFont) => void;
+  removeCustomFont: (fontId: string) => void;
   setStoreLayout: (layout: 'classic' | 'modern') => void;
   toggleOled: () => void;
   toggleHiddenTab: (tab: string) => void;
@@ -85,6 +110,7 @@ interface SettingsState {
   setInstallerPreference: (installerPreference: 'system' | 'chooser' | 'package', installerPackage?: string, installerLabel?: string) => void;
   toggleDisableAnimations: () => void;
   toggleCompactMode: () => void;
+  setBottomNavScale: (scale: number) => void;
   toggleHighRefreshRate: () => void;
   setPullToRefreshCharacter: (character: PullToRefreshCharacterKey) => void;
   toggleHaptic: () => void;
@@ -93,6 +119,7 @@ interface SettingsState {
   setIsLegend: (isLegend: boolean) => void;
   incrementAdWatch: () => void;
   registerSubmission: () => void;
+  registerChangeRequest: () => void;
   registerLeaderboardSubmission: () => void;
   setSubmissionCount: (count: number) => void;
   setUseRemoteJson: (useRemote: boolean) => void;
@@ -148,6 +175,9 @@ interface DataState {
   // Pending Cleanup
   pendingCleanup: Record<string, CleanupEntry | string>;
 
+  // App Library
+  appLibrary: Record<string, AppLibraryEntry>;
+
   // Favorites
   favorites: string[]; // List of App IDs
 
@@ -168,6 +198,9 @@ interface DataState {
   cancelDownload: (appId: string) => void;
   setReadyToInstall: (map: Record<string, string>) => void;
   setPendingCleanup: (map: Record<string, CleanupEntry | string>) => void;
+  recordAppInstalled: (appId: string, version?: string, fileName?: string) => void;
+  removeAppLibraryFile: (appId: string) => void;
+  setAppLibrary: (entries: Record<string, AppLibraryEntry>) => void;
   toggleFavorite: (appId: string) => void;
 }
 
@@ -198,6 +231,7 @@ const getInitialTheme = (): Theme => {
 const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   theme: getInitialTheme(),
   appFont: DEFAULT_APP_FONT,
+  customFonts: [],
   storeLayout: 'classic', // Default to classic for lighter new installs
   isOled: false,
   hiddenTabs: [],
@@ -211,6 +245,7 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   installerLabel: '',
   disableAnimations: false,
   compactMode: false,
+  bottomNavScale: 1,
   highRefreshRate: false,
   pullToRefreshCharacter: 'cat',
   hapticEnabled: true,
@@ -220,6 +255,7 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   isContributor: false,
   adWatchCount: 0,
   submissionCount: 0,
+  changeRequestCount: 0,
   lastSubmissionTime: 0,
   lastLeaderboardSubmissionTime: 0,
   useRemoteJson: true,
@@ -247,6 +283,13 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
 
   setTheme: (theme) => { try { localStorage.setItem('app-theme', theme); } catch {} set({ theme }); },
   setAppFont: (appFont) => set({ appFont }),
+  addCustomFont: (font) => set((state) => ({
+    customFonts: [...state.customFonts, font]
+  })),
+  removeCustomFont: (fontId) => set((state) => ({
+    customFonts: state.customFonts.filter((font) => font.id !== fontId),
+    appFont: state.appFont === `custom:${fontId}` ? DEFAULT_APP_FONT : state.appFont
+  })),
   setStoreLayout: (layout) => set({ storeLayout: layout }),
   toggleOled: () => set((state) => {
     const next = !state.isOled;
@@ -281,6 +324,7 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
   incrementCoinFlipHint: () => set((state) => ({ coinFlipHintCount: Math.min(state.coinFlipHintCount + 1, 3) })),
   toggleDisableAnimations: () => set((state) => ({ disableAnimations: !state.disableAnimations })),
   toggleCompactMode: () => set((state) => ({ compactMode: !state.compactMode })),
+  setBottomNavScale: (bottomNavScale) => set({ bottomNavScale }),
   toggleHighRefreshRate: () => set((state) => ({ highRefreshRate: !state.highRefreshRate })),
   setPullToRefreshCharacter: (pullToRefreshCharacter) => set({
     pullToRefreshCharacter: (((pullToRefreshCharacter as string) === 'pikachu')
@@ -301,6 +345,11 @@ const createSettingsSlice: StateCreator<SettingsState> = (set) => ({
     return { adWatchCount: newCount, isContributor, isLegend };
   }),
   registerSubmission: () => set((state) => ({
+    submissionCount: state.submissionCount + 1,
+    lastSubmissionTime: Date.now()
+  })),
+  registerChangeRequest: () => set((state) => ({
+    changeRequestCount: state.changeRequestCount + 1,
     submissionCount: state.submissionCount + 1,
     lastSubmissionTime: Date.now()
   })),
@@ -445,6 +494,7 @@ export const useSettingsStore = create<SettingsState>()(
       partialize: (state) => ({
         theme: state.theme,
         appFont: state.appFont,
+        customFonts: state.customFonts,
         storeLayout: state.storeLayout,
         isOled: state.isOled,
         hiddenTabs: state.hiddenTabs,
@@ -458,6 +508,7 @@ export const useSettingsStore = create<SettingsState>()(
         installerLabel: state.installerLabel,
         disableAnimations: state.disableAnimations,
         compactMode: state.compactMode,
+        bottomNavScale: state.bottomNavScale,
         highRefreshRate: state.highRefreshRate,
         pullToRefreshCharacter: state.pullToRefreshCharacter,
         hapticEnabled: state.hapticEnabled,
@@ -467,6 +518,7 @@ export const useSettingsStore = create<SettingsState>()(
         isContributor: state.isContributor,
         adWatchCount: state.adWatchCount,
         submissionCount: state.submissionCount,
+        changeRequestCount: state.changeRequestCount,
         lastSubmissionTime: state.lastSubmissionTime,
         lastLeaderboardSubmissionTime: state.lastLeaderboardSubmissionTime,
         useRemoteJson: state.useRemoteJson,
@@ -527,6 +579,7 @@ const createDataSlice: StateCreator<DataState> = (set) => ({
   downloadStatus: {},
   readyToInstall: {},
   pendingCleanup: {},
+  appLibrary: {},
   favorites: [],
 
   setApps: (apps) => set({ apps }),
@@ -574,11 +627,25 @@ const createDataSlice: StateCreator<DataState> = (set) => ({
     const newStatus = { ...state.downloadStatus };
     delete newStatus[appId];
 
+    const previousEntry = state.appLibrary[appId];
+    const now = Date.now();
+
     return {
       activeDownloads: newActive,
       downloadProgress: newProgress,
       downloadStatus: newStatus,
-      readyToInstall: { ...state.readyToInstall, [appId]: fileName }
+      readyToInstall: { ...state.readyToInstall, [appId]: fileName },
+      appLibrary: {
+        ...state.appLibrary,
+        [appId]: {
+          status: 'downloaded',
+          fileName,
+          version: previousEntry?.version,
+          downloadedAt: previousEntry?.downloadedAt ?? now,
+          installedAt: previousEntry?.installedAt,
+          lastSeenAt: now
+        }
+      }
     };
   }),
 
@@ -601,6 +668,37 @@ const createDataSlice: StateCreator<DataState> = (set) => ({
   setReadyToInstall: (map) => set({ readyToInstall: map }),
   setPendingCleanup: (map) => set({ pendingCleanup: map }),
 
+  recordAppInstalled: (appId, version, fileName) => set((state) => {
+    const previousEntry = state.appLibrary[appId];
+    const now = Date.now();
+    return {
+      appLibrary: {
+        ...state.appLibrary,
+        [appId]: {
+          status: 'installed',
+          fileName: fileName || previousEntry?.fileName,
+          version: version || previousEntry?.version,
+          downloadedAt: previousEntry?.downloadedAt ?? now,
+          installedAt: previousEntry?.installedAt ?? now,
+          lastSeenAt: now
+        }
+      }
+    };
+  }),
+
+  removeAppLibraryFile: (appId) => set((state) => {
+    const previousEntry = state.appLibrary[appId];
+    if (!previousEntry) return state;
+    return {
+      appLibrary: {
+        ...state.appLibrary,
+        [appId]: { ...previousEntry, fileName: undefined, lastSeenAt: Date.now() }
+      }
+    };
+  }),
+
+  setAppLibrary: (appLibrary) => set({ appLibrary }),
+
   toggleFavorite: (appId) => set((state) => {
     const exists = state.favorites.includes(appId);
     const next = exists
@@ -620,6 +718,7 @@ export const useDataStore = create<DataState>()(
         importedApps: state.importedApps,
         readyToInstall: state.readyToInstall,
         pendingCleanup: state.pendingCleanup,
+        appLibrary: state.appLibrary,
         favorites: state.favorites,
         tabs: state.tabs // Persist per-tab settings
       }),

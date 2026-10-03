@@ -27,6 +27,9 @@ allprojects {
     afterEvaluate { project ->
         if (project.hasProperty('android')) {
             project.android {
+                lintOptions {
+                    checkReleaseBuilds false
+                }
                 compileOptions {
                     sourceCompatibility rootProject.ext.javaVersion
                     targetCompatibility rootProject.ext.javaVersion

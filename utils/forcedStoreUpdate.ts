@@ -25,7 +25,7 @@ export interface ForcedStoreUpdateSnapshot {
   exported: boolean;
 }
 
-export interface ForcedStoreUpdateResumeOptions {
+interface ForcedStoreUpdateResumeOptions {
   targetVersion: string;
   minStoreVersion?: string | null;
   currentVersion: string;

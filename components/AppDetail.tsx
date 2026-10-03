@@ -33,6 +33,7 @@ interface AppDetailProps {
     onExportAPK?: (app: AppItem, fileName: string) => void;
     isScanning?: boolean; // New prop
     onVirusTotalScan?: () => void;
+    onRequestChange?: () => void;
 }
 
 interface LazyScreenshotProps {
@@ -105,7 +106,7 @@ const AppDetail: React.FC<AppDetailProps> = ({
     app, onClose, onDownload, isInstalling, localVersion, supportEmail, isUpdateAvailable,
     activeDownloadId, cleanupFileName, onCleanupDone,
     currentProgress, currentStatus, readyFileName,
-    onCancelDownload, onDeleteReadyFile, onExportAPK, onNavigateToApp, isScanning, onVirusTotalScan
+    onCancelDownload, onDeleteReadyFile, onExportAPK, onNavigateToApp, isScanning, onVirusTotalScan, onRequestChange
 }) => {
     const { favorites, toggleFavorite } = useDataStore((state) => ({
         favorites: state.favorites,
@@ -814,6 +815,9 @@ const AppDetail: React.FC<AppDetailProps> = ({
                     <div className="flex gap-3">
                         <button onClick={handleFavoriteToggle} className={`w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md flex items-center justify-center transition-colors shadow-sm ${isFavorite ? 'text-rose-500' : 'text-theme-text hover:bg-theme-hover'}`}><i className={`${isFavorite ? 'fas' : 'far'} fa-heart`}></i></button>
                         <button onClick={handleShare} className="w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md flex items-center justify-center hover:bg-theme-hover transition-colors text-theme-text shadow-sm"><i className="fas fa-share-alt"></i></button>
+                        {onRequestChange && (
+                            <button onClick={() => { if (useSettingsStore.getState().hapticEnabled) Haptics.impact({ style: ImpactStyle.Light }); onRequestChange(); }} className="w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md flex items-center justify-center text-theme-text hover:bg-primary/15 hover:text-primary transition-colors shadow-sm" title="Request app change"><i className="fas fa-pen-to-square"></i></button>
+                        )}
                         <button onClick={() => { if (useSettingsStore.getState().hapticEnabled) Haptics.impact({ style: ImpactStyle.Light }); const subject = `Report Issue: ${app.name}`; window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}`; }} className="w-10 h-10 rounded-full bg-theme-element/80 backdrop-blur-md text-theme-sub flex items-center justify-center hover:text-red-500 transition-colors shadow-sm"><i className="fas fa-flag"></i></button>
                     </div>
                 </div>

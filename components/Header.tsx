@@ -32,10 +32,10 @@ const Header: React.FC<HeaderProps> = ({
 
   return (
       <header className="relative z-30 flex w-full items-center justify-between bg-surface px-3 pb-4 pt-[calc(1.15rem+env(safe-area-inset-top))] transition-all duration-300">
-          <div className="flex items-center gap-3 select-none relative group">
+          <div className="flex items-center gap-0.3 select-none relative group">
               <div className="relative">
-                  <div className="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/30 transform rotate-3">
-                      <i className="fas fa-shapes text-lg"></i>
+                  <div className="flex h-12 w-12 items-center justify-center text-primary -rotate-3">
+                      <i className="fas fa-shapes text-[2rem] leading-none [filter:drop-shadow(0_2px_9px_rgba(99,102,241,0.62))]"></i>
                   </div>
               </div>
               

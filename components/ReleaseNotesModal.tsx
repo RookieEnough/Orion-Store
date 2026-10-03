@@ -23,10 +23,23 @@ interface UpdateLog {
 
 const DEFAULT_NOTES: UpdateLog[] = [
     {
-        version: 'v1.2.3',
+        version: 'v1.5.0',
         date: 'Current',
-        title: 'The "Ignore" Update',
+        title: 'Personalization & Visual Polish',
         color: 'text-primary',
+        items: [
+            { label: 'NEW', text: 'All-new My Apps hub for downloaded, installed, and updateable apps.' },
+            { label: 'NEW', text: 'Redesigned clean, minimal font picker with real-time live preview.' },
+            { label: 'FIX', text: 'Resolved dynamic font changing across native Android APK and web builds.' },
+            { label: 'FIX', text: 'Fixed layout clipping and responsive controls across all screen sizes.' },
+            { label: 'NEW', text: 'Android 13+ Material You themed monochrome adaptive icon.' }
+        ]
+    },
+    {
+        version: 'v1.2.3',
+        date: 'Previous',
+        title: 'The "Ignore" Update',
+        color: 'text-theme-sub',
         items: [
             { label: 'NEW', text: 'Added option to ignore app updates for 1 week, until next version, or never.' },
             { label: 'NEW', text: 'Added option to close Developer Options after unlocking.' },

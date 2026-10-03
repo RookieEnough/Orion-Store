@@ -1,6 +1,6 @@
 import { AppItem, UpdateStream } from '../types';
 
-export const normalizeVersion = (value: string): string =>
+const normalizeVersion = (value: string): string =>
   (value || '')
     .toLowerCase()
     .replace(/^v/, '')

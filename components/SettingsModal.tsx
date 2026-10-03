@@ -2,9 +2,9 @@ import React, { useState, useEffect, memo, useRef, lazy, Suspense } from 'react'
 import { Capacitor } from '@capacitor/core';
 import { useSettingsStore, useDataStore } from '../store/useAppStore';
 import { useDevConfigStore } from '../store/useDevConfigStore';
-import { AppItem } from '../types';
+import { AppItem, AppFontKey } from '../types';
 import AppTracker from '../plugins/AppTracker';
-import { APP_FONT_OPTIONS, getAppFontDefinition } from '../constants';
+import { APP_FONT_OPTIONS, CUSTOM_FONT_FAMILY, getAppFontDefinition, getCustomFontKey } from '../constants';
 import { getPullToRefreshCharacter, PixelCharacterFace } from './PullToRefreshCharacter';
 import PullToRefreshCharacterPickerSheet from './PullToRefreshCharacterPickerSheet';
 
@@ -43,13 +43,13 @@ const Toggle = memo(({ checked, onChange }: { checked: boolean; onChange: () => 
     <button
         type="button"
         onClick={onChange}
-        className={`flex h-7 w-12 items-center rounded-full p-1 transition-all duration-200 ${checked
+        className={`relative flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-all duration-200 ${checked
             ? 'border-primary/30 bg-primary shadow-lg shadow-primary/20'
             : 'bg-theme-element'
             }`}
     >
         <div
-            className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'
+            className={`h-5 w-5 shrink-0 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'
                 }`}
         ></div>
     </button>
@@ -559,11 +559,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const settings = useSettingsStore();
     const data = useDataStore();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const fontInputRef = useRef<HTMLInputElement>(null);
 
     const [activeMenu, setActiveMenu] = useState<SubMenu>(initialMenu);
     const [importStatus, setImportStatus] = useState<{ msg: string, type: 'success' | 'error' | 'neutral' }>({ msg: '', type: 'neutral' });
     const [shizukuError, setShizukuError] = useState<string | null>(null);
     const [isFontPickerOpen, setIsFontPickerOpen] = useState(false);
+    const [isNavSizePickerOpen, setIsNavSizePickerOpen] = useState(false);
+    const [fontImportError, setFontImportError] = useState<string | null>(null);
+    const [isImportingFont, setIsImportingFont] = useState(false);
     const [apkInstallers, setApkInstallers] = useState<Array<{ packageName: string; label: string; isSystemInstaller: boolean }>>([]);
     const [apkInstallersLoading, setApkInstallersLoading] = useState(false);
     const [apkInstallersError, setApkInstallersError] = useState<string | null>(null);
@@ -581,7 +585,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
     const activeDlCount = Object.keys(data.activeDownloads).length;
     const readyCount = Object.keys(data.readyToInstall).length;
-    const selectedFont = getAppFontDefinition(settings.appFont);
+    const selectedCustomFont = settings.customFonts.find((font) => getCustomFontKey(font.id) === settings.appFont);
+    const selectedFont = selectedCustomFont
+        ? { label: selectedCustomFont.name, family: CUSTOM_FONT_FAMILY }
+        : getAppFontDefinition(settings.appFont);
     const selectedRefreshCharacter = getPullToRefreshCharacter(settings.pullToRefreshCharacter);
     const menuTitleMap: Record<SubMenu, string> = {
         none: 'Settings',
@@ -590,7 +597,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         storage: 'Storage & Cleanup',
         visuals: 'Visuals & Theme',
         interface: 'Interface',
-        queue: 'Update Center',
+        queue: 'Download Queue',
         installer: 'Orion Xtra',
         developer: 'Developer Options'
     };
@@ -671,6 +678,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 // Progress & legend
                 adWatchCount: state.adWatchCount,
                 submissionCount: state.submissionCount,
+                changeRequestCount: state.changeRequestCount,
                 lastSubmissionTime: state.lastSubmissionTime,
                 lastLeaderboardSubmissionTime: state.lastLeaderboardSubmissionTime,
                 isLegend: state.isLegend,
@@ -679,11 +687,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 // Visual preferences
                 theme: state.theme,
                 appFont: state.appFont,
+                customFonts: state.customFonts,
                 storeLayout: state.storeLayout,
                 isOled: state.isOled,
                 hiddenTabs: state.hiddenTabs,
                 disableAnimations: state.disableAnimations,
                 compactMode: state.compactMode,
+                bottomNavScale: state.bottomNavScale,
                 highRefreshRate: state.highRefreshRate,
                 pullToRefreshCharacter: state.pullToRefreshCharacter,
                 hapticEnabled: state.hapticEnabled,
@@ -770,6 +780,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     // Progress & legend
                     adWatchCount: d.adWatchCount ?? currentState.adWatchCount,
                     submissionCount: d.submissionCount ?? currentState.submissionCount,
+                    changeRequestCount: d.changeRequestCount ?? currentState.changeRequestCount,
                     lastSubmissionTime: d.lastSubmissionTime ?? currentState.lastSubmissionTime,
                     lastLeaderboardSubmissionTime: d.lastLeaderboardSubmissionTime ?? currentState.lastLeaderboardSubmissionTime,
                     isLegend: d.isLegend ?? currentState.isLegend,
@@ -778,11 +789,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     // Visual
                     theme: d.theme ?? currentState.theme,
                     appFont: d.appFont ?? currentState.appFont,
+                    customFonts: Array.isArray(d.customFonts) ? d.customFonts : currentState.customFonts,
                     storeLayout: d.storeLayout ?? currentState.storeLayout,
                     isOled: d.isOled ?? currentState.isOled,
                     hiddenTabs: Array.isArray(d.hiddenTabs) ? d.hiddenTabs : currentState.hiddenTabs,
                     disableAnimations: d.disableAnimations ?? currentState.disableAnimations,
                     compactMode: d.compactMode ?? currentState.compactMode,
+                    bottomNavScale: Number.isFinite(d.bottomNavScale) ? d.bottomNavScale : currentState.bottomNavScale,
                     highRefreshRate: d.highRefreshRate ?? currentState.highRefreshRate,
                     pullToRefreshCharacter: d.pullToRefreshCharacter ?? currentState.pullToRefreshCharacter,
                     hapticEnabled: d.hapticEnabled ?? currentState.hapticEnabled,
@@ -842,6 +855,58 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         } else {
             settings.toggleUseShizuku();
         }
+    };
+
+    const handleCustomFontFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        setFontImportError(null);
+        if (!file) return;
+
+        const extension = file.name.split('.').pop()?.toLowerCase() || '';
+        if (!['ttf', 'otf', 'woff2'].includes(extension)) {
+            setFontImportError('Choose a TTF, OTF, or WOFF2 file.');
+            event.target.value = '';
+            return;
+        }
+
+        const maxBytes = 8 * 1024 * 1024;
+        if (file.size > maxBytes) {
+            setFontImportError('Fonts must be 8 MB or smaller.');
+            event.target.value = '';
+            return;
+        }
+
+        setIsImportingFont(true);
+        const reader = new FileReader();
+        reader.onerror = () => {
+            setFontImportError('Could not read this font.');
+            setIsImportingFont(false);
+            event.target.value = '';
+        };
+        reader.onload = () => {
+            const dataUrl = reader.result;
+            if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+                setFontImportError('Could not import this font.');
+                setIsImportingFont(false);
+                event.target.value = '';
+                return;
+            }
+
+            const id = `font-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const name = file.name.replace(/\.[^.]+$/, '').trim() || 'Custom Font';
+            settings.addCustomFont({
+                id,
+                name,
+                fileName: file.name,
+                mimeType: file.type || `font/${extension}`,
+                dataUrl,
+                addedAt: Date.now()
+            });
+            settings.setAppFont(getCustomFontKey(id));
+            setIsImportingFont(false);
+            event.target.value = '';
+        };
+        reader.readAsDataURL(file);
     };
 
     const closeInstallerPicker = () => {
@@ -1042,7 +1107,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         <i className="fas fa-chevron-right text-xs"></i>
                     </div>
                 }
-                onClick={() => setIsFontPickerOpen(true)}
+                onClick={() => { setFontImportError(null); setIsFontPickerOpen(true); }}
             />
             <SettingsRow
                 icon="fa-hand-pointer"
@@ -1086,8 +1151,116 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 desc="Smaller cards with denser spacing"
                 action={<Toggle checked={settings.compactMode} onChange={settings.toggleCompactMode} />}
             />
+            <SettingsRow
+                icon="fa-arrows-left-right"
+                accentClass="bg-teal-500/10 text-teal-400"
+                title="Nav Dock Size"
+                desc="Adjust the bottom navigation scale"
+                meta={
+                    <div className="flex items-center gap-2 text-theme-sub">
+                        <span className="rounded-full bg-theme-element px-3 py-1 text-[10px] font-black">
+                            {Math.round(settings.bottomNavScale * 100)}%
+                        </span>
+                        <i className="fas fa-chevron-right text-xs" />
+                    </div>
+                }
+                onClick={() => setIsNavSizePickerOpen(true)}
+            />
         </SettingsSection>
     );
+
+    const renderNavSizePicker = () => {
+        const scale = Number.isFinite(settings.bottomNavScale) ? settings.bottomNavScale : 1;
+        const progress = ((scale - 0.85) / (1.15 - 0.85)) * 100;
+        return (
+            <div
+                className="backdrop-scrim absolute inset-0 z-30 flex items-end justify-center bg-black/55 p-3 sm:items-center sm:p-6"
+                onClick={() => setIsNavSizePickerOpen(false)}
+            >
+                <div
+                    className="w-full max-w-md overflow-hidden rounded-[2.2rem] bg-surface shadow-2xl animate-slide-up"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <div className="flex items-center justify-between border-b border-theme-border px-5 py-4 bg-surface/95 backdrop-blur-sm">
+                        <div>
+                            <h4 className="text-lg font-black text-theme-text">Nav Dock Size</h4>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-theme-sub">Bottom navigation scale</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsNavSizePickerOpen(false)}
+                            className="flex h-10 w-10 items-center justify-center rounded-full bg-theme-element text-theme-text transition-colors hover:bg-theme-hover"
+                        >
+                            <i className="fas fa-times" />
+                        </button>
+                    </div>
+
+                    <div className="space-y-5 p-5">
+                        <div className="flex justify-center py-1">
+                            <div
+                                className="relative flex w-fit items-center gap-0.5 rounded-[1.75rem] border border-theme-border bg-surface p-1 shadow-2xl"
+                                style={{ transform: `scale(${scale})`, transformOrigin: 'center bottom' }}
+                            >
+                                {[
+                                    { icon: 'fab fa-android', label: 'Apps', active: false },
+                                    { icon: 'fab fa-windows', label: 'PC', active: false },
+                                    { icon: 'fas fa-tv', label: 'TV', active: false },
+                                    { icon: 'fas fa-box-open', label: 'My Apps', active: true },
+                                    { icon: 'fas fa-code', label: 'Dev', active: false },
+                                ].map((item) => (
+                                    <span
+                                        key={item.label}
+                                        className={`flex h-10 items-center justify-center rounded-[1.25rem] px-3 text-xs font-black ${
+                                            item.active ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-theme-sub'
+                                        }`}
+                                    >
+                                        <i className={`${item.icon} text-base`} />
+                                        {item.active && <span className="ml-1">My Apps</span>}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <input
+                                type="range"
+                                min={0.85}
+                                max={1.15}
+                                step={0.05}
+                                value={scale}
+                                onChange={(event) => settings.setBottomNavScale(Number(event.target.value))}
+                                className="m3-slider"
+                                style={{ '--slider-progress': `${progress}%` } as React.CSSProperties}
+                                aria-label="Bottom navigation size"
+                            />
+                            <div className="flex items-center justify-between text-[10px] font-black uppercase text-theme-sub">
+                                <span>Compact</span>
+                                <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">{Math.round(scale * 100)}%</span>
+                                <span>Large</span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                            {[0.85, 1, 1.15].map((preset) => (
+                                <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => settings.setBottomNavScale(preset)}
+                                    className={`rounded-2xl border px-3 py-2.5 text-xs font-black transition-colors ${
+                                        scale === preset
+                                            ? 'border-primary bg-primary/10 text-primary'
+                                            : 'border-theme-border bg-card text-theme-sub hover:bg-theme-element'
+                                    }`}
+                                >
+                                    {Math.round(preset * 100)}%
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     const renderInstallerPicker = () => (
         <div
@@ -1211,72 +1384,159 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
     const renderFontPicker = () => (
         <div
-            className="backdrop-scrim absolute inset-0 z-20 flex items-end justify-center bg-black/45 p-3 backdrop-blur-sm animate-fade-in sm:items-center sm:p-6"
+            className="backdrop-scrim fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in touch-none"
             onClick={() => setIsFontPickerOpen(false)}
         >
             <div
-                className="w-full max-w-md overflow-hidden rounded-[2.2rem] bg-surface shadow-2xl animate-slide-up"
+                className="bg-surface rounded-t-[2rem] sm:rounded-[2rem] w-full max-w-md relative z-10 flex flex-col max-h-[85dvh] sm:max-h-[80vh] overflow-hidden shadow-2xl animate-slide-up"
                 onClick={(event) => event.stopPropagation()}
+                style={{ touchAction: 'auto' }}
             >
-                <div className="flex items-center justify-between border-b border-theme-border px-5 py-4 bg-surface/95 backdrop-blur-sm">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0">
                     <div>
-                        <h4 className="text-lg font-black text-theme-text">Choose Font</h4>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-theme-sub">Preview before applying</p>
+                        <h3 className="text-xl font-black text-theme-text tracking-tight">Fonts</h3>
+                        <p className="text-xs text-theme-sub font-medium">Select app typeface</p>
                     </div>
                     <button
                         type="button"
                         onClick={() => setIsFontPickerOpen(false)}
-                        className="flex h-10 w-10 items-center justify-center rounded-full bg-theme-element text-theme-text transition-colors hover:bg-theme-hover"
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-theme-element text-theme-sub hover:text-theme-text transition-colors"
+                        title="Close"
                     >
-                        <i className="fas fa-times"></i>
+                        <i className="fas fa-times text-xs"></i>
                     </button>
                 </div>
 
-                <div className="space-y-4 p-5">
+                {/* Minimal Live Preview */}
+                <div className="px-4 pt-2 pb-2 shrink-0">
                     <div
-                        className="rounded-[1.8rem] bg-card px-5 py-5 shadow-sm"
+                        className="rounded-2xl bg-card p-4 transition-all"
                         style={{ fontFamily: selectedFont.family }}
                     >
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/80">Live Preview</span>
-                        <h5 className="mt-2 text-2xl font-black tracking-tight text-theme-text">Orion Store</h5>
-                        <p className="mt-2 text-sm text-theme-sub">Fast updates, clean cards, and smooth browsing across the whole app.</p>
-                        <p className="mt-3 text-xs font-bold text-theme-text">Aa Bb Cc 123</p>
+                        <div className="text-2xl font-bold tracking-tight text-theme-text">
+                            Aa Bb Gg 123
+                        </div>
+                        <div className="mt-1 text-xs text-theme-sub truncate">
+                            The quick brown fox jumps over the lazy dog.
+                        </div>
                     </div>
+                </div>
 
-                    <div className="max-h-[52vh] space-y-2 overflow-y-auto no-scrollbar">
-                        {APP_FONT_OPTIONS.map((font) => {
-                            const isActive = settings.appFont === font.key;
-                            return (
+                {/* Scrollable Font List */}
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1.5 no-scrollbar overscroll-contain">
+                    {APP_FONT_OPTIONS.map((font) => {
+                        const isActive = settings.appFont === font.key;
+                        return (
+                            <button
+                                key={font.key}
+                                type="button"
+                                onClick={() => {
+                                    settings.setAppFont(font.key);
+                                    document.documentElement.style.setProperty('--app-font-family', font.family);
+                                    document.body.style.setProperty('font-family', font.family, 'important');
+                                }}
+                                className={`flex w-full items-center justify-between px-4 py-3 rounded-xl transition-all text-left ${
+                                    isActive
+                                        ? 'bg-primary/10 text-primary font-bold'
+                                        : 'hover:bg-theme-element text-theme-text'
+                                }`}
+                                style={{ fontFamily: font.family }}
+                            >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className="text-base truncate">{font.label}</span>
+                                    {font.key === 'spaceGrotesk' && (
+                                        <span className="text-[10px] font-sans font-medium px-2 py-0.5 rounded-full bg-theme-element text-theme-sub">
+                                            Default
+                                        </span>
+                                    )}
+                                    {font.key === 'systemDefault' && (
+                                        <span className="text-[10px] font-sans font-medium px-2 py-0.5 rounded-full bg-theme-element text-theme-sub">
+                                            System
+                                        </span>
+                                    )}
+                                </div>
+                                {isActive && (
+                                    <i className="fas fa-check text-xs text-primary shrink-0 ml-2"></i>
+                                )}
+                            </button>
+                        );
+                    })}
+
+                    {/* Custom Fonts */}
+                    {settings.customFonts.map((font) => {
+                        const fontKey = getCustomFontKey(font.id);
+                        const isActive = settings.appFont === fontKey;
+                        return (
+                            <div
+                                key={font.id}
+                                className={`flex items-center justify-between px-4 py-2.5 rounded-xl transition-all ${
+                                    isActive
+                                        ? 'bg-primary/10 text-primary font-bold'
+                                        : 'hover:bg-theme-element text-theme-text'
+                                }`}
+                            >
                                 <button
-                                    key={font.key}
                                     type="button"
                                     onClick={() => {
-                                        settings.setAppFont(font.key);
-                                        setIsFontPickerOpen(false);
+                                        settings.setAppFont(fontKey);
+                                        document.documentElement.style.setProperty('--app-font-family', CUSTOM_FONT_FAMILY);
+                                        document.body.style.setProperty('font-family', CUSTOM_FONT_FAMILY, 'important');
                                     }}
-                                    className={`flex w-full items-center justify-between gap-4 rounded-[1.6rem] px-4 py-3 text-left transition-all active:scale-98 ${isActive
-                                        ? 'bg-primary/10 text-theme-text shadow-lg shadow-primary/10'
-                                        : 'bg-card text-theme-text hover:bg-theme-element/70'
-                                        }`}
-                                    style={{ fontFamily: font.family }}
+                                    className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                                    style={{ fontFamily: CUSTOM_FONT_FAMILY }}
                                 >
-                                    <div className="min-w-0">
-                                        <span className="block truncate text-base font-black">{font.label}</span>
-                                        <span className="block text-[11px] font-medium text-theme-sub">Aa Bb Cc 123</span>
-                                        {font.key === 'systemDefault' && (
-                                            <span className="mt-1 block text-[10px] font-medium text-theme-sub">
-                                                Uses the WebView system font, which is usually Roboto on Android.
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${isActive ? 'border-primary/20 bg-primary text-white' : 'border-theme-border bg-theme-element text-theme-sub'
-                                        }`}>
-                                        <i className={`fas ${isActive ? 'fa-check' : 'fa-font'} text-xs`}></i>
-                                    </div>
+                                    <span className="text-base truncate">{font.name}</span>
+                                    <span className="text-[10px] font-sans font-medium px-2 py-0.5 rounded-full bg-theme-element text-theme-sub">
+                                        Custom
+                                    </span>
                                 </button>
-                            );
-                        })}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => settings.removeCustomFont(font.id)}
+                                        className="h-7 w-7 flex items-center justify-center rounded-full text-theme-sub hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                        title={`Delete ${font.name}`}
+                                    >
+                                        <i className="fas fa-trash-can text-xs"></i>
+                                    </button>
+                                    {isActive && (
+                                        <i className="fas fa-check text-xs text-primary"></i>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    {/* Import custom font action */}
+                    <div className="pt-2">
+                        <button
+                            type="button"
+                            disabled={isImportingFont}
+                            onClick={() => fontInputRef.current?.click()}
+                            className="flex w-full items-center justify-center gap-2 py-3 px-4 rounded-xl bg-theme-element/50 hover:bg-theme-element text-xs font-semibold text-theme-sub hover:text-theme-text transition-colors disabled:opacity-50"
+                        >
+                            <i className={`fas ${isImportingFont ? 'fa-spinner fa-spin' : 'fa-plus'} text-xs`}></i>
+                            <span>{isImportingFont ? 'Importing...' : 'Import Custom Font'}</span>
+                        </button>
+                        {fontImportError && (
+                            <p className="mt-2 text-center text-xs text-red-500">{fontImportError}</p>
+                        )}
                     </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-3 bg-surface/95 backdrop-blur-sm shrink-0 flex items-center justify-between">
+                    <span className="text-xs text-theme-sub font-medium truncate">
+                        Active: <strong className="text-theme-text font-bold">{selectedFont.label}</strong>
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setIsFontPickerOpen(false)}
+                        className="px-5 py-2 rounded-xl bg-primary text-xs font-bold text-white hover:brightness-105 active:scale-95 transition-all shadow-md shadow-primary/20"
+                    >
+                        Done
+                    </button>
                 </div>
             </div>
         </div>
@@ -1465,18 +1725,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 }
             />
             <div className="orion-shadow-surface rounded-[1.35rem] bg-card overflow-hidden transition-colors">
-                {['android', 'pc', 'tv'].map((tab, idx) => (
-                    <div key={tab} className={`flex items-center justify-between gap-4 px-4 py-4 ${idx !== 2 ? 'border-b border-theme-border' : ''}`}>
-                        <div className="flex items-start gap-3.5">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-theme-element text-theme-sub">
-                                <i className={`${tab === 'pc' ? 'fab' : 'fas'} ${tab === 'android' ? 'fa-mobile-screen' : tab === 'pc' ? 'fa-windows' : 'fa-tv'} text-base`}></i>
+                {['android', 'pc', 'tv', 'myapps'].map((tab, idx) => (
+                    <div key={tab} className={`flex items-center justify-between gap-3 px-4 py-4 ${idx !== 3 ? 'border-b border-theme-border' : ''}`}>
+                        <div className="flex min-w-0 flex-1 items-start gap-3.5">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-theme-element text-theme-sub">
+                                <i className={`${tab === 'pc' ? 'fab' : 'fas'} ${tab === 'android' ? 'fa-mobile-screen' : tab === 'pc' ? 'fa-windows' : tab === 'tv' ? 'fa-tv' : 'fa-box-open'} text-base`}></i>
                             </div>
-                            <div className="min-w-0">
-                                <div className="text-[15px] font-black leading-tight capitalize text-theme-text">{tab} Tab</div>
-                                <div className="mt-0.5 text-[12px] font-bold text-theme-sub">{tab === 'android' ? 'Show in bottom navigation' : tab === 'pc' ? 'PC and desktop apps' : 'TV and big-screen apps'}</div>
+                            <div className="min-w-0 flex-1">
+                                <div className="text-[15px] font-black leading-tight capitalize text-theme-text">{tab === 'myapps' ? 'My Apps' : `${tab} Tab`}</div>
+                                <div className="mt-0.5 text-[12px] font-bold text-theme-sub leading-snug">{tab === 'android' ? 'Show in bottom navigation' : tab === 'pc' ? 'PC and desktop apps' : tab === 'tv' ? 'TV and big-screen apps' : 'App library and download history'}</div>
                             </div>
                         </div>
-                        <Toggle checked={!settings.hiddenTabs.includes(tab)} onChange={() => settings.toggleHiddenTab(tab)} />
+                        <div className="shrink-0 flex items-center">
+                            <Toggle checked={!settings.hiddenTabs.includes(tab)} onChange={() => settings.toggleHiddenTab(tab)} />
+                        </div>
                     </div>
                 ))}
             </div>
@@ -1484,9 +1746,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     );
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
             <div className="backdrop-scrim absolute inset-0 bg-black/80 backdrop-blur-md touch-none" onClick={onClose}></div>
-            <div className="orion-shadow-frame bg-surface rounded-[2rem] w-full max-w-xl relative z-10 animate-slide-up shadow-2xl flex flex-col max-h-[88vh] overflow-hidden compact-allow">
+            <div className="orion-shadow-frame bg-surface rounded-t-[2rem] sm:rounded-[2rem] w-full max-w-xl relative z-10 animate-slide-up shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[88vh] overflow-hidden compact-allow">
                 <div className="px-4 py-4 border-b border-theme-border bg-surface/95 backdrop-blur-sm z-20 orion-shadow-surface">
                     <div className="flex items-center justify-between gap-3">
                         {activeMenu !== 'none' && (
@@ -1497,6 +1759,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     setImportStatus({ msg: '', type: 'neutral' });
                                     setShizukuError(null);
                                     setIsFontPickerOpen(false);
+                                    setIsNavSizePickerOpen(false);
                                     setIsRefreshCharacterPickerOpen(false);
                                     closeInstallerPicker();
                                 }}
@@ -1518,7 +1781,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         </button>
                     </div>
                 </div>
-                <div className="overflow-y-auto p-4 space-y-6 no-scrollbar flex-1 will-change-transform overscroll-contain">
+                <div className="overflow-y-auto p-4 pb-10 space-y-6 no-scrollbar flex-1 will-change-transform overscroll-contain">
                     {activeMenu === 'none' ? (
                         <div className="space-y-4">
                             {menuItems.map(item => (
@@ -1569,8 +1832,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     )}
                 </div>
             </div>
+            <input
+                ref={fontInputRef}
+                type="file"
+                accept=".ttf,.otf,.woff2,font/ttf,font/otf,font/woff2"
+                className="hidden"
+                onChange={handleCustomFontFile}
+            />
             {isInstallerPickerOpen && renderInstallerPicker()}
             {isFontPickerOpen && renderFontPicker()}
+            {isNavSizePickerOpen && renderNavSizePicker()}
             {isRefreshCharacterPickerOpen && (
                 <PullToRefreshCharacterPickerSheet
                     selectedCharacter={settings.pullToRefreshCharacter}

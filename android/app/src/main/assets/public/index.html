@@ -23,6 +23,30 @@
           }
           if (!theme || !valid.includes(theme)) theme = 'light';
           document.documentElement.classList.add(theme);
+
+          // Fast font initialization from persisted store JSON
+          if (stored) {
+            var fontParsed = JSON.parse(stored);
+            if (fontParsed && fontParsed.state && fontParsed.state.appFont) {
+              var fontMap = {
+                spaceGrotesk: "'Space Grotesk', sans-serif",
+                inter: "'Inter', sans-serif",
+                poppins: "'Poppins', sans-serif",
+                manrope: "'Manrope', sans-serif",
+                outfit: "'Outfit', sans-serif",
+                dmSans: "'DM Sans', sans-serif",
+                plusJakartaSans: "'Plus Jakarta Sans', sans-serif",
+                rubik: "'Rubik', sans-serif",
+                nunitoSans: "'Nunito Sans', sans-serif",
+                publicSans: "'Public Sans', sans-serif",
+                systemDefault: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+              };
+              var chosenFont = fontMap[fontParsed.state.appFont];
+              if (chosenFont) {
+                document.documentElement.style.setProperty('--app-font-family', chosenFont);
+              }
+            }
+          }
         } catch (e) {
           document.documentElement.classList.add('light');
         }
@@ -35,6 +59,9 @@
     <link rel="preconnect" href="https://raw.githubusercontent.com" />
     <link rel="dns-prefetch" href="https://raw.githubusercontent.com" />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Nunito+Sans:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&family=Rubik:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <!-- App Icons (Updated to Relative Paths) -->
     <link rel="icon" type="image/png" href="./icon.png" />
@@ -51,7 +78,7 @@
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Space Grotesk', 'sans-serif'],
+              sans: ['var(--app-font-family)', 'Space Grotesk', 'sans-serif'],
             },
             colors: {
               primary: {
@@ -95,19 +122,19 @@
     </script>
 
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-
       body {
-        font-family: 'Space Grotesk', sans-serif;
+        font-family: var(--app-font-family, 'Space Grotesk', sans-serif);
         -webkit-tap-highlight-color: transparent;
       }
 
-      /* Hide scrollbar for clean UI */
+      button, input, optgroup, select, textarea {
+        font-family: inherit;
+      }
 
+      /* Hide scrollbar for clean UI */
       .no-scrollbar::-webkit-scrollbar {
         display: none;
       }
-
       .no-scrollbar {
         -ms-overflow-style: none;
         scrollbar-width: none;
@@ -121,7 +148,6 @@
         from { transform: translateY(100%); opacity: 0; }
         to { transform: translateY(0%); opacity: 1; }
       }
-
       .animate-slide-up {
         animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
@@ -130,13 +156,11 @@
         from { opacity: 0; transform: scale(0.95); }
         to { opacity: 1; transform: scale(1); }
       }
-
       .animate-fade-in {
         animation: fade-in 0.3s ease-out forwards;
       }
 
       /* Theming System with CSS Variables */
-
       :root {
         /* Light Mode (Default) */
         --bg-surface: #f8fafc;
@@ -174,7 +198,7 @@
       }
     </style>
 
-<!-- Updated to relative path -->
+<!-- Updated to relative path -->
 
 <script type="importmap">
 {
@@ -200,16 +224,16 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="./assets/index-CKvAU3f_.js"></script>
+  <script type="module" crossorigin src="./assets/index-CK1Ni0Og.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/react-vendor-qa-ci6LT.js">
-  <link rel="modulepreload" crossorigin href="./assets/capacitor-vendor-BiCCRHHm.js">
-  <link rel="modulepreload" crossorigin href="./assets/vendor-fX7bwKMt.js">
-  <link rel="modulepreload" crossorigin href="./assets/state-vendor-cszTY05-.js">
+  <link rel="modulepreload" crossorigin href="./assets/capacitor-vendor-BOE42JC3.js">
+  <link rel="modulepreload" crossorigin href="./assets/vendor-e294Df_6.js">
+  <link rel="modulepreload" crossorigin href="./assets/state-vendor-CYOHDvLt.js">
   <link rel="modulepreload" crossorigin href="./assets/motion-vendor-B3_Hkhd7.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-4dogNYxd.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-BHxqI44E.css">
 </head>
   <body class="bg-surface text-theme-text transition-colors duration-300">
     <div id="root"></div>
-    <!-- Updated to relative path -->
+    <!-- Updated to relative path -->
   </body>
 </html>

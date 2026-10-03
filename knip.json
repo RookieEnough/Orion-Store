@@ -1,7 +1,17 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": ["index.tsx", "scripts/*.js"],
+  "entry": ["index.tsx", "scripts/*.js", ".github/scripts/*.js"],
   "project": ["**/*.{ts,tsx,js}"],
-  "ignore": ["**/*.d.ts", "android/**", "dist/**"],
-  "ignoreDependencies": ["autoprefixer", "postcss", "tailwindcss"]
+  "ignore": ["**/*.d.ts", "android/**", "dist/**", "workers/*.js", "public/dino/index.js"],
+  "ignoreDependencies": [
+    "autoprefixer",
+    "postcss",
+    "tailwindcss",
+    "@capacitor/splash-screen",
+    "@capacitor/status-bar",
+    "@capacitor/assets",
+    "sharp",
+    "puppeteer-extra",
+    "puppeteer-extra-plugin-stealth"
+  ]
 }

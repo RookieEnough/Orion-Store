@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { PullToRefreshCharacterKey } from '../types';
 
-export interface PullToRefreshCharacter {
+interface PullToRefreshCharacter {
     id: PullToRefreshCharacterKey;
     name: string;
     caption: string;
@@ -340,8 +340,6 @@ export const PULL_TO_REFRESH_CHARACTERS: PullToRefreshCharacter[] = [
         gridEyesClosed: withRow(bunnyGrid, 6, '.bbbbbbbbbb.')
     }
 ];
-
-export const DEFAULT_PULL_TO_REFRESH_CHARACTER: PullToRefreshCharacterKey = 'cat';
 
 export const getPullToRefreshCharacter = (id?: string) => {
     const normalizedId = id === 'pikachu'

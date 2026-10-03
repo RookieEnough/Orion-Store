@@ -221,6 +221,7 @@ const LeaderboardSubmitModal: React.FC<LeaderboardSubmitModalProps> = ({ onClose
               level: settings.submissionCount + Math.floor(settings.adWatchCount / 5),
               adWatchCount: settings.adWatchCount,
               submissionCount: settings.submissionCount,
+              changeRequestCount: settings.changeRequestCount,
               timestamp: Date.now()
           };
 

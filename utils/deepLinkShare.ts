@@ -1,6 +1,6 @@
 export const BADGE_BASE_URL = 'https://rookieenough.github.io/Orion-Data';
 
-export interface DeepLinkShareArtifacts {
+interface DeepLinkShareArtifacts {
   deepLink: string;
   webLink: string;
   badgeImgUrl: string;

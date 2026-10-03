@@ -1,7 +1,7 @@
 import type { ForcedStoreUpdateStatus } from './forcedStoreUpdate';
 import type { VirusTotalStats } from '../hooks/useVirusTotalScan';
 
-export interface ForcedStoreUpdateViewModelInput {
+interface ForcedStoreUpdateViewModelInput {
   currentVersion: string;
   targetVersion: string;
   status: ForcedStoreUpdateStatus;
@@ -26,7 +26,7 @@ export interface ForcedStoreUpdateAction {
   disabled?: boolean;
 }
 
-export interface ForcedStoreUpdateViewModel {
+interface ForcedStoreUpdateViewModel {
   eyebrow: string;
   title: string;
   body: string;
