@@ -253,7 +253,6 @@ The project lives across a few public surfaces:
 - `Ko-fi`: [ko-fi.com/rookie_z](https://ko-fi.com/rookie_z)
 - `PayPal`: [paypal.me/RookieEnough](https://paypal.me/RookieEnough)
 - `UPI ID`: `rookiez@ptyes`
-- 
 
 ---
 
