@@ -3259,9 +3259,24 @@ const App: React.FC = () => {
     }, [appLookup]);
 
     // ── Deep Link Handler ──────────────────────────────────────────────
-    // Handles orionstore://app/{appId} deep links from external sources.
+    // Handles:
+    //   orionstore://app/{appId}          (share links, app id from the catalog)
+    //   orionstore://package/{packageName} (Android "App details in store" row,
+    //                                       rewritten from ACTION_SHOW_APP_INFO in MainActivity)
     // When the app is launched via a deep link, data may not have loaded yet,
-    // so we queue the appId and resolve it once appLookup is populated.
+    // so we queue the target and resolve it once appLookup is populated.
+    // Queued value format: "app:{appId}" or "pkg:{packageName}".
+    const openDeepLinkTarget = useCallback((kind: 'app' | 'pkg', value: string) => {
+        const target = kind === 'app'
+            ? appLookup.get(value)
+            : allKnownApps.find((a) => a.packageName === value);
+        if (target) {
+            setSelectedApp(target);
+        } else {
+            setDevToast(`App \u2018${value}\u2019 not found in Orion Store`);
+        }
+    }, [appLookup, allKnownApps]);
+
     useEffect(() => {
         const listener = CapacitorApp.addListener('appUrlOpen', ({ url }) => {
             try {
@@ -3271,39 +3286,32 @@ const App: React.FC = () => {
                 const scheme = parsed.protocol.replace(':', '');
                 if (scheme !== 'orionstore') return;
                 const segments = (parsed.hostname + parsed.pathname).split('/').filter(Boolean);
-                // Expected: ["app", "{appId}"]
-                if (segments[0] === 'app' && segments[1]) {
-                    const appId = decodeURIComponent(segments[1]);
+                // Expected: ["app", "{appId}"] or ["package", "{packageName}"]
+                const kind = segments[0] === 'app' ? 'app' : segments[0] === 'package' ? 'pkg' : null;
+                if (kind && segments[1]) {
+                    const value = decodeURIComponent(segments[1]);
                     // If apps haven't loaded yet, queue the deep link for later resolution
                     if (appLookup.size === 0) {
-                        pendingDeepLinkRef.current = appId;
+                        pendingDeepLinkRef.current = `${kind}:${value}`;
                         return;
                     }
-                    const target = appLookup.get(appId);
-                    if (target) {
-                        setSelectedApp(target);
-                    } else {
-                        setDevToast(`App \u2018${appId}\u2019 not found in Orion Store`);
-                    }
+                    openDeepLinkTarget(kind, value);
                 }
             } catch { /* ignore malformed URLs */ }
         });
         return () => { listener.then(l => l.remove()); };
-    }, [appLookup]);
+    }, [appLookup, openDeepLinkTarget]);
 
     // Resolve any deep link that arrived before apps finished loading
     useEffect(() => {
         if (appLookup.size > 0 && pendingDeepLinkRef.current) {
-            const appId = pendingDeepLinkRef.current;
+            const pending = pendingDeepLinkRef.current;
             pendingDeepLinkRef.current = null;
-            const target = appLookup.get(appId);
-            if (target) {
-                setSelectedApp(target);
-            } else {
-                setDevToast(`App \u2018${appId}\u2019 not found in Orion Store`);
-            }
+            const sep = pending.indexOf(':');
+            const kind = pending.slice(0, sep) === 'pkg' ? 'pkg' : 'app';
+            openDeepLinkTarget(kind, pending.slice(sep + 1));
         }
-    }, [appLookup]);
+    }, [appLookup, openDeepLinkTarget]);
 
     const handleReloadApps = useCallback(() => {
         if (isRefreshing) return;

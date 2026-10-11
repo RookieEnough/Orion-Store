@@ -1,8 +1,10 @@
 package com.orion.store;
 
+import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -36,6 +38,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         SplashScreen.installSplashScreen(this);
         registerPlugin(AppTrackerPlugin.class);
+        handleShowAppInfo(getIntent());
         super.onCreate(savedInstanceState);
 
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
@@ -92,6 +95,29 @@ public class MainActivity extends BridgeActivity {
                 setupPullToRefresh(webView);
             }
         });
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        handleShowAppInfo(intent);
+        super.onNewIntent(intent);
+    }
+
+    /**
+     * Android's "App details in store" row (App info screen) launches the installer app with
+     * ACTION_SHOW_APP_INFO + EXTRA_PACKAGE_NAME. Capacitor only forwards ACTION_VIEW URLs to
+     * JS (appUrlOpen), so rewrite it to orionstore://package/{packageName}.
+     */
+    private void handleShowAppInfo(Intent intent) {
+        if (intent == null || !"android.intent.action.SHOW_APP_INFO".equals(intent.getAction())) {
+            return;
+        }
+        String pkg = intent.getStringExtra("android.intent.extra.PACKAGE_NAME");
+        if (pkg == null || pkg.isEmpty()) {
+            return;
+        }
+        intent.setAction(Intent.ACTION_VIEW);
+        intent.setData(Uri.parse("orionstore://package/" + Uri.encode(pkg)));
     }
 
     private void setupPullToRefresh(WebView webView) {
