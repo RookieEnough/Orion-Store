@@ -45,6 +45,11 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="orionstore" />
             </intent-filter>
+            <!-- System "App details in store" row (Settings > Apps > App info): Android sends SHOW_APP_INFO + EXTRA_PACKAGE_NAME to the installer. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SHOW_APP_INFO" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
         <service android:name=".platform.DownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
         <receiver android:name=".platform.AdbPairReceiver" android:exported="false" />

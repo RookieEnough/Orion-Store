@@ -166,7 +166,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 fronts = f; lookup = l
                 if (!warmed && f.isNotEmpty()) { warmed = true; warmStorefront(f) }
-                pendingDeepLink?.takeIf { lookup.isNotEmpty() }?.let { pendingDeepLink = null; openById(it, "not found in Orion Store") }
+                pendingDeepLink?.takeIf { lookup.isNotEmpty() }?.let { pendingDeepLink = null; openDeepLinkTarget(it) }
             }
         }
         viewModelScope.launch {
@@ -748,8 +748,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (uri?.scheme != "orionstore") return
         val seg = (listOfNotNull(uri.host) + uri.pathSegments).filter { it.isNotEmpty() }
         if (seg.getOrNull(0) != "app" || seg.getOrNull(1) == null) return
-        val id = Uri.decode(seg[1])
-        if (lookup.isEmpty()) pendingDeepLink = id else openById(id, "not found in Orion Store")
+        queueDeepLink("app:" + Uri.decode(seg[1]))
+    }
+
+    /** "App details in store" row of the system App info screen: ACTION_SHOW_APP_INFO + EXTRA_PACKAGE_NAME (the package, not the catalog id). */
+    fun showAppInfo(i: Intent?) {
+        if (i?.action != "android.intent.action.SHOW_APP_INFO") return
+        val pkg = i.getStringExtra("android.intent.extra.PACKAGE_NAME")?.takeIf { it.isNotEmpty() } ?: return
+        queueDeepLink("pkg:$pkg")
+    }
+
+    // Queued as "app:<id>" or "pkg:<packageName>" until the catalog has loaded.
+    private fun queueDeepLink(target: String) { if (lookup.isEmpty()) pendingDeepLink = target else openDeepLinkTarget(target) }
+
+    private fun openDeepLinkTarget(target: String) {
+        val value = target.substringAfter(':')
+        if (target.startsWith("pkg:")) allApps().firstOrNull { it.packageName == value }?.let { selectApp(it) } ?: toast("App ‘$value’ not found in Orion Store")
+        else openById(value, "not found in Orion Store")
     }
 
     fun openSettings(menu: String = "none") { settingsMenu = menu; if (Overlay.SETTINGS !in overlays) overlays += Overlay.SETTINGS }

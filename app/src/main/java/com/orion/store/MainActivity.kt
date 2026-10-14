@@ -70,5 +70,5 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() { if (ResultHost.launch != null && isFinishing) ResultHost.launch = null; super.onDestroy() }
 
-    private fun handle(i: Intent?) { vm.deepLink(i?.data); vm.onNotificationIntent(i) }
+    private fun handle(i: Intent?) { vm.deepLink(i?.data); vm.showAppInfo(i); vm.onNotificationIntent(i) }
 }
