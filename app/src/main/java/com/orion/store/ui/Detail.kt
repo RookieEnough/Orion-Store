@@ -74,7 +74,9 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     val s = LocalS.current; val d = LocalD.current; val scope = rememberCoroutineScope(); val cs = MaterialTheme.colorScheme
     val app = remember(base, s.resolvedPackageNames) { base.copy(packageName = s.resolvedPackageNames[base.id] ?: base.packageName) }
     val local = s.installedVersions[app.id]
-    val needsUpdate = hasAvailableUpdate(app, local, s.appStreams[app.id] ?: "Stable")
+    val stream = effectiveStreamFor(app, s)
+    val needsUpdate = hasEligibleUpdate(app, local, s)
+    val prereleaseBlocked = s.excludePrereleases && isPrereleaseOnly(app)
     val installed = !local.isNullOrEmpty(); val upToDate = installed && !needsUpdate
     val activeId = d.activeDownloads[app.id]; val cleanup = d.pendingCleanup[app.id]?.fileName; val ready = d.readyToInstall[app.id]
     val status = d.downloadStatus[app.id]; val progress = d.downloadProgress[app.id] ?: 0f
@@ -97,21 +99,42 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     LaunchedEffect(cleanup) { if (cleanup != null) { if (!handled) cleanupPrompt = true } else { cleanupPrompt = false; handled = false } }
 
     fun microGThen(u: String?) {
+        if (isExcludedDownload(app, u, s)) {
+            vm.error("Prereleases are excluded. Turn off Stable releases only in Settings to install this version.")
+            return
+        }
         if (app.id in Defaults.MICROG_DEPENDENT_APPS && ready == null && MICROG_PKGS.none { runCatching { vm.tracker.appInfo(it).installed }.getOrDefault(false) }) { microG = true; return }
         vm.download(app, u)
     }
     fun proceed(v: VersionOption) {
+        if (s.excludePrereleases && v.type != "Stable") {
+            vm.error("Prereleases are excluded. Turn off Stable releases only in Settings to install this version.")
+            return
+        }
         if (v.variants.size > 1) { target = v; variants = true } else microGThen(v.variants.firstOrNull()?.url ?: app.downloadUrl)
     }
     fun action(u: String? = null) {
         if (installing || activeId != null || scanning || unavailable) return
+        if (prereleaseBlocked && ready == null) {
+            vm.error("Only prerelease versions exist. Turn off Stable releases only in Settings to install.")
+            return
+        }
         when {
             u != null -> microGThen(u)
             ready != null -> vm.download(app)
-            target == null && app.availableVersions.size > 1 -> versions = true
+            target == null && app.availableVersions.size > 1 -> {
+                if (s.excludePrereleases && !hasStable(app)) {
+                    vm.error("Only prerelease versions exist. Turn off Stable releases only in Settings to install.")
+                    return
+                }
+                versions = true
+            }
             else -> {
-                val v = target ?: app.availableVersions.firstOrNull()
-                if (v != null) proceed(v) else if (app.variants.size > 1) variants = true else microGThen(app.downloadUrl)
+                val v = target ?: app.availableVersions.firstOrNull { it.type == stream }
+                    ?: if (s.excludePrereleases) null else app.availableVersions.firstOrNull()
+                if (v != null) proceed(v) else if (prereleaseBlocked) {
+                    vm.error("Only prerelease versions exist. Turn off Stable releases only in Settings to install.")
+                } else if (app.variants.size > 1) variants = true else microGThen(app.downloadUrl)
             }
         }
     }
@@ -198,13 +221,14 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                         else -> {
                             val (icon, label) = when {
                                 unavailable -> Sym.Block to "Currently unavailable"
+                                prereleaseBlocked -> Sym.Block to "Prerelease only"
                                 fallback -> Sym.Code to "View on GitHub"
                                 external -> Sym.OpenInNew to "Get from source"
                                 needsUpdate -> Sym.SystemUpdate to "Update now"
                                 app.platform == Platform.PC -> Sym.DesktopWindows to "Get on PC"
                                 else -> Sym.Download to "Download"
                             }
-                            Main(icon, if (installing) "Installing..." else label, enabled = !installing && !fallback && !unavailable, busy = installing) { action() }
+                            Main(icon, if (installing) "Installing..." else label, enabled = !installing && !fallback && !unavailable && !prereleaseBlocked, busy = installing) { action() }
                             if (needsUpdate && !installing && !fallback && !unavailable && isUpdateIgnored(app, s, System.currentTimeMillis()))
                                 Side(Sym.Notifications, "Stop ignoring this update") { vm.set { it.copy(ignoredUpdates = it.ignoredUpdates - app.id) }; vm.haptic(H.SUCCESS); vm.toast("Updates for ${app.name} will show again") }
                             else if (needsUpdate && !installing && !fallback && !unavailable) Box {
@@ -237,7 +261,8 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                             Spacer(Modifier.width(4.dp)); Icon(Sym.VerifiedFilled, "Verified", Modifier.size(16.dp), tint = cs.primary)
                         }
                         statusText(app)?.let { (t, c) -> Text(t, style = MaterialTheme.typography.labelLarge, color = c, modifier = Modifier.padding(top = 2.dp)) }
-                        if (cleanup != null) Box(Modifier.padding(top = 6.dp)) { Tag("Pending cleanup", Caution, Sym.CleaningServices) }
+                        if (prereleaseBlocked) Box(Modifier.padding(top = 6.dp)) { Tag("Prerelease only · excluded by Stable releases only", Caution, Sym.Block) }
+                        else if (cleanup != null) Box(Modifier.padding(top = 6.dp)) { Tag("Pending cleanup", Caution, Sym.CleaningServices) }
                         else if (external) Box(Modifier.padding(top = 6.dp)) { Tag("Hosted on $domain", Caution, Sym.OpenInNew) }
                     }
                 }
@@ -332,11 +357,26 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
 
     if (versions) OrionSheet({ versions = false }) {
         SheetTitle("Select version", Sym.History, "Choose your release channel")
+        if (s.excludePrereleases) Text(
+            "Stable releases only is on. Prereleases are disabled.",
+            Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = cs.onSurfaceVariant,
+        )
         Column(Modifier.navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
             app.availableVersions.forEachIndexed { i, v ->
-                SegmentedListItem({ versions = false; target = v; proceed(v) }, ListItemDefaults.segmentedShapes(i, app.availableVersions.size), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh),
+                val disabled = s.excludePrereleases && v.type != "Stable"
+                SegmentedListItem(
+                    onClick = {
+                        if (disabled) {
+                            vm.error("Prereleases are excluded. Turn off Stable releases only in Settings to install this version.")
+                        } else {
+                            versions = false; target = v; proceed(v)
+                        }
+                    },
+                    ListItemDefaults.segmentedShapes(i, app.availableVersions.size), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh),
                     leadingContent = { IconBox(Sym.Layers, streamColor(v.type)) }, trailingContent = { Icon(Sym.ChevronRight, null) },
-                    supportingContent = { Text(v.date) }) {
+                    supportingContent = { Text(if (disabled) "${v.date} · Excluded" else v.date) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) { Text(v.version, fontWeight = FontWeight.Bold); Spacer(Modifier.width(8.dp)); StreamBadge(v.type) }
                 }
             }

@@ -39,21 +39,39 @@ fun preferredVersion(app: AppItem, stream: String = "Stable"): String {
     return app.availableVersions.firstOrNull()?.version ?: app.latestVersion
 }
 
+fun hasStable(app: AppItem) = app.availableVersions.any { it.type == "Stable" }
+
+fun isPrereleaseOnly(app: AppItem) = app.availableVersions.isNotEmpty() && app.availableVersions.none { it.type == "Stable" }
+
+/** Stream used for automatic selection. The global flag wins over a saved per-app stream; saved values are kept. */
+fun effectiveStreamFor(app: AppItem, s: Settings): String =
+    if (s.excludePrereleases) "Stable" else s.appStreams[app.id] ?: "Stable"
+
+/** Stable version eligible for automatic use, or null when the app has no stable release. */
+fun eligibleStableVersion(app: AppItem): String? =
+    app.availableVersions.firstOrNull { it.type == "Stable" }?.version
+
 fun hasAvailableUpdate(app: AppItem, installed: String?, stream: String = "Stable") = !installed.isNullOrEmpty() && compareVersions(preferredVersion(app, stream), installed) > 0
+
+fun hasEligibleUpdate(app: AppItem, installed: String?, s: Settings): Boolean {
+    if (installed.isNullOrEmpty()) return false
+    if (s.excludePrereleases && !hasStable(app)) return false
+    return hasAvailableUpdate(app, installed, effectiveStreamFor(app, s))
+}
 
 fun isUpdateIgnored(app: AppItem, s: Settings, now: Long): Boolean {
     val ig = s.ignoredUpdates[app.id] ?: return false
     return when (ig.type) {
         "never" -> true
         "week" -> ig.timestamp != null && now - ig.timestamp < ONE_WEEK_MS
-        "version" -> ig.version == preferredVersion(app, s.appStreams[app.id] ?: "Stable")
+        "version" -> ig.version == preferredVersion(app, effectiveStreamFor(app, s))
         else -> false
     }
 }
 
 fun availableUpdates(apps: List<AppItem>, s: Settings, now: Long) = apps.filter { a ->
     val inst = s.installedVersions[a.id]
-    !inst.isNullOrEmpty() && hasAvailableUpdate(a, inst, s.appStreams[a.id] ?: "Stable") && !isUpdateIgnored(a, s, now)
+    !inst.isNullOrEmpty() && hasEligibleUpdate(a, inst, s) && !isUpdateIgnored(a, s, now)
 }
 // endregion
 
@@ -348,7 +366,7 @@ enum class MyAppsFilter(val label: String, val icon: String) { ALL("All", "fa-bo
 data class MyAppRow(
     val app: AppItem, val status: String, val installedVersion: String?, val lastRemoteVersion: String?, val readyFile: String?, val cleanupFile: String?,
     val libraryFile: String?, val downloadKey: String?, val hasSavedApk: Boolean, val hasUpdate: Boolean, val isInstalledNow: Boolean,
-    val libraryStatus: String?, val progress: Float, val downloadedAt: Long, val installedAt: Long?,
+    val libraryStatus: String?, val progress: Float, val downloadedAt: Long, val installedAt: Long?, val stream: String = "Stable",
 ) {
     val savedFile get() = readyFile ?: cleanupFile ?: libraryFile
     val primaryAction get() = when {
@@ -361,7 +379,7 @@ data class MyAppRow(
         else -> if (hasSavedApk) "APK saved" else "Downloaded"
     }
     val versionDetail get() = when {
-        hasUpdate -> preferredVersion(app).let { l -> if (installedVersion != null) "v$installedVersion → v$l" else "v$l" }
+        hasUpdate -> preferredVersion(app, stream).let { l -> if (installedVersion != null) "v$installedVersion → v$l" else "v$l" }
         installedVersion != null -> "v$installedVersion"; lastRemoteVersion != null -> "v$lastRemoteVersion"; else -> "Saved"
     }
 }
@@ -374,7 +392,7 @@ fun buildMyAppsRows(apps: List<AppItem>, s: Settings, d: DataState, updateIds: S
     if (lib == null && !now && !saved && !dl && !upd) return@mapNotNull null
     val status = when { dl -> "downloading"; ready != null -> "ready"; upd -> "update"; now || lib?.status == "installed" -> "installed"; else -> "downloaded" }
     MyAppRow(a, status, inst, s.lastRemoteVersions[a.id], ready, cleanup?.fileName, lib?.fileName, key, saved, upd, now, lib?.status,
-        d.downloadProgress[a.id] ?: 0f, lib?.downloadedAt ?: cleanup?.timestamp ?: 0, lib?.installedAt)
+        d.downloadProgress[a.id] ?: 0f, lib?.downloadedAt ?: cleanup?.timestamp ?: 0, lib?.installedAt, effectiveStreamFor(a, s))
 }.sortedByDescending { it.downloadedAt }
 
 fun MyAppRow.matches(f: MyAppsFilter) = when (f) {
@@ -426,10 +444,30 @@ fun downloadVersionMeta(app: AppItem, url: String?, stream: String = "Stable"): 
     return preferredVersion(app, stream) to stream
 }
 
+fun streamOfUrl(app: AppItem, url: String?): String? =
+    url?.let { u -> app.availableVersions.firstOrNull { v -> v.variants.any { it.url == u } }?.type }
+
+/** True when exclusion is on and this download would resolve to a non-stable release (or to nothing stable). */
+fun isExcludedDownload(app: AppItem, url: String?, s: Settings): Boolean {
+    if (!s.excludePrereleases) return false
+    if (url != null) {
+        val explicit = app.availableVersions.firstOrNull { v -> v.variants.any { it.url == url } }?.type
+        if (explicit != null) return explicit != "Stable"
+    }
+    return !hasStable(app)
+}
+
 fun versionMetaFromFileName(app: AppItem, file: String?, stream: String = "Stable"): Pair<String, String> {
     val f = file?.lowercase() ?: return downloadVersionMeta(app, null, stream)
     app.availableVersions.firstOrNull { v -> sanitizeFileVersionToken(v.version).lowercase().let { it.isNotEmpty() && f.contains(it) } }?.let { return it.version to it.type }
     return downloadVersionMeta(app, null, stream)
+}
+
+/** True when exclusion is on and installing this file would record a non-stable stream. */
+fun isExcludedInstall(app: AppItem, file: String?, s: Settings): Boolean {
+    if (!s.excludePrereleases) return false
+    val stream = versionMetaFromFileName(app, file, "Stable").second
+    return stream != "Stable"
 }
 
 fun normalizePackageName(p: String?) = p?.trim()?.lowercase().orEmpty()
@@ -450,8 +488,8 @@ fun resolveOwnedAppId(group: List<AppItem>, pkgKey: String, installed: String, s
     val owner = s.packageOwners[pkgKey]?.takeIf { it in ids }
     if (owner != null && isSameVersion(s.lastRemoteVersions[owner], installed)) return owner
     group.filter { isSameVersion(s.lastRemoteVersions[it.id], installed) }.singleOrNull()?.let { return it.id }
-    group.filter { isSameVersion(preferredVersion(it, s.appStreams[it.id] ?: "Stable"), installed) }.singleOrNull()?.let { return it.id }
-    if (owner != null && group.none { isComparableVersion(s.lastRemoteVersions[it.id]) || isComparableVersion(preferredVersion(it, s.appStreams[it.id] ?: "Stable")) }) return owner
+    group.filter { isSameVersion(preferredVersion(it, effectiveStreamFor(it, s)), installed) }.singleOrNull()?.let { return it.id }
+    if (owner != null && group.none { isComparableVersion(s.lastRemoteVersions[it.id]) || isComparableVersion(preferredVersion(it, effectiveStreamFor(it, s))) }) return owner
     return null
 }
 // endregion

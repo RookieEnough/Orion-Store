@@ -455,7 +455,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!initializing.add(app.id)) return
         if (s.directInstall && WirelessAdb.supported) WirelessAdb.warm(ctx) // connected by the time the APK lands
         try {
-            val meta = downloadVersionMeta(app, url, s.appStreams[app.id] ?: "Stable")
+            val stream = effectiveStreamFor(app, s)
+            if (isExcludedDownload(app, url, s)) {
+                if (!auto) {
+                    error("Prereleases are excluded. Turn off Stable releases only in Settings to install this version.")
+                    haptic(H.ERROR)
+                }
+                return
+            }
+            val meta = downloadVersionMeta(app, url, stream)
             set { it.copy(appStreams = it.appStreams + (app.id to meta.second)) }
             val target = url ?: app.variants.firstOrNull()?.url ?: app.downloadUrl
             if (target.isEmpty() || target == "#") return
@@ -564,7 +572,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // region install + verification
     fun installFile(app: AppItem, file: String, regular: Boolean = false): kotlinx.coroutines.Job = viewModelScope.launch {
         val k = normalizePackageName(app.packageName)
-        val meta = versionMetaFromFileName(app, file, s.appStreams[app.id] ?: "Stable")
+        if (isExcludedInstall(app, file, s)) {
+            error("Prereleases are excluded. Turn off Stable releases only in Settings to install this version.")
+            haptic(H.ERROR)
+            return@launch
+        }
+        val meta = versionMetaFromFileName(app, file, effectiveStreamFor(app, s))
         // Direct install runs as the shell user (no 24-hour wait, no "unknown apps" permission). When adbd is unreachable the
         // user picks the regular installer explicitly: silently falling back lands on the very wait this setting exists to skip.
         val direct = !regular && s.directInstall && WirelessAdb.supported
@@ -663,7 +676,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val (inst, v) = r[a.id] ?: (false to ""); val file = d0.readyToInstall[a.id]
             if (inst && installingId != a.id) installed += Triple(a.id, v, file ?: d0.appLibrary[a.id]?.fileName)
             if (!inst || file == null || installingId == a.id) return@forEach
-            val exp = versionMetaFromFileName(a, file, s.appStreams[a.id] ?: "Stable").first
+            val exp = versionMetaFromFileName(a, file, effectiveStreamFor(a, s)).first
             if (exp.isNotEmpty() && isComparableVersion(exp) && compareVersions(v, exp) < 0) return@forEach
             doneReady += a.id; if (v.isNotEmpty()) remote[a.id] = v
             normalizePackageName(a.packageName).let { owners[it] = a.id; expectations -= it }
