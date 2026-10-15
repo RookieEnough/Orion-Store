@@ -92,7 +92,7 @@ fun identityExport(s: Settings, favorites: List<String>, now: Long): String {
         put("isOled", s.isOled); put("hiddenTabs", json.encodeToJsonElement(s.hiddenTabs)); put("disableAnimations", s.disableAnimations)
         put("compactMode", s.compactMode); put("bottomNavScale", jsNum(s.bottomNavScale)); put("highRefreshRate", s.highRefreshRate)
         put("pullToRefreshCharacter", s.pullToRefreshCharacter); put("hapticEnabled", s.hapticEnabled); put("glassEffect", s.glassEffect)
-        put("autoUpdateEnabled", s.autoUpdateEnabled); put("wifiOnly", s.wifiOnly); put("deleteApk", s.deleteApk); put("useShizuku", s.useShizuku)
+        put("autoUpdateEnabled", s.autoUpdateEnabled); put("wifiOnly", s.wifiOnly); put("excludePrereleases", s.excludePrereleases); put("deleteApk", s.deleteApk); put("useShizuku", s.useShizuku)
         put("installerPreference", s.installerPreference); put("installerPackage", s.installerPackage); put("installerLabel", s.installerLabel)
         put("useRemoteJson", s.useRemoteJson); put("loadLocalData", s.loadLocalData); put("appStreams", json.encodeToJsonElement(s.appStreams))
         put("ignoredUpdates", json.encodeToJsonElement(s.ignoredUpdates)); put("userProfile", s.userProfile?.let { json.encodeToJsonElement(it) } ?: JsonNull)
@@ -136,7 +136,7 @@ fun mergeIdentity(d: JsonObject, c: Settings): Settings =
         bottomNavScale = d.or("bottomNavScale", c.bottomNavScale).takeIf { it.isFinite() } ?: c.bottomNavScale,
         highRefreshRate = d.or("highRefreshRate", c.highRefreshRate), pullToRefreshCharacter = d.or("pullToRefreshCharacter", c.pullToRefreshCharacter),
         hapticEnabled = d.or("hapticEnabled", c.hapticEnabled), glassEffect = d.or("glassEffect", c.glassEffect),
-        autoUpdateEnabled = d.or("autoUpdateEnabled", c.autoUpdateEnabled), wifiOnly = d.or("wifiOnly", c.wifiOnly), deleteApk = d.or("deleteApk", c.deleteApk),
+        autoUpdateEnabled = d.or("autoUpdateEnabled", c.autoUpdateEnabled), wifiOnly = d.or("wifiOnly", c.wifiOnly), excludePrereleases = d.or("excludePrereleases", c.excludePrereleases), deleteApk = d.or("deleteApk", c.deleteApk),
         useShizuku = d.or("useShizuku", c.useShizuku), installerPreference = d.or("installerPreference", c.installerPreference),
         installerPackage = d.or("installerPackage", c.installerPackage), installerLabel = d.or("installerLabel", c.installerLabel),
         useRemoteJson = d.or("useRemoteJson", c.useRemoteJson), loadLocalData = d.or("loadLocalData", c.loadLocalData),
@@ -359,6 +359,7 @@ fun SettingsScreen(vm: MainViewModel) {
                     "network" -> Section("Downloads") {
                         Toggle(Sym.Wifi, "Wi-Fi only", "Skip downloads on cellular data", s.wifiOnly) { vm.set { it.copy(wifiOnly = !it.wifiOnly) } }
                         Toggle(Sym.Autorenew, "Auto-update apps", "Refresh apps in the background", s.autoUpdateEnabled) { vm.set { it.copy(autoUpdateEnabled = !it.autoUpdateEnabled) } }
+                        Toggle(Sym.Block, "Stable releases only", "Exclude Beta, Alpha and Nightly releases", s.excludePrereleases) { vm.set { it.copy(excludePrereleases = !it.excludePrereleases) } }
                     }
                     "installer" -> {
                         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

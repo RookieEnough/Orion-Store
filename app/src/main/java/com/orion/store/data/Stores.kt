@@ -37,6 +37,8 @@ import kotlin.math.max
     val virusTotalApiKey: String = "",
     val autoUpdateEnabled: Boolean = false,
     val wifiOnly: Boolean = false,
+    /** When true, only stable releases are selected automatically; Beta, Alpha and Nightly are excluded. */
+    val excludePrereleases: Boolean = false,
     val deleteApk: Boolean = false,
     val useShizuku: Boolean = false,
     /** Install through Orion's built-in wireless ADB (shell user), skipping the 24-hour unverified-app wait. */

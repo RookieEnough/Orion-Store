@@ -181,7 +181,7 @@ fun cardState(app: AppItem): Pair<CardState, Float> {
     return when {
         app.id in d.activeDownloads -> CardState.DOWNLOADING to (d.downloadProgress[app.id] ?: 0f)
         app.id in d.readyToInstall -> CardState.READY to 1f
-        hasAvailableUpdate(app, local, s.appStreams[app.id] ?: "Stable") -> CardState.UPDATE to 0f
+        hasEligibleUpdate(app, local, s) -> CardState.UPDATE to 0f
         !local.isNullOrEmpty() -> CardState.INSTALLED to 0f
         else -> CardState.NONE to 0f
     }
@@ -227,7 +227,7 @@ fun statusText(app: AppItem): Pair<String, Color>? {
     return when (st) {
         CardState.DOWNLOADING -> (if (p > 0f) "Downloading ${p.toInt()}%" else "Starting download") to cs.primary
         CardState.READY -> "Ready to install" to cs.primary
-        CardState.UPDATE -> "Update · v${preferredVersion(app, LocalS.current.appStreams[app.id] ?: "Stable").removePrefix("v")}" to cs.tertiary
+        CardState.UPDATE -> "Update · v${preferredVersion(app, effectiveStreamFor(app, LocalS.current)).removePrefix("v")}" to cs.tertiary
         CardState.INSTALLED -> "Installed · v${local.orEmpty().removePrefix("v")}" to cs.onSurfaceVariant
         CardState.NONE -> null
     }

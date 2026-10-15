@@ -4,7 +4,10 @@ import com.orion.store.data.*
 import com.orion.store.ui.bundleIssueBody
 import com.orion.store.ui.cleanPermName
 import com.orion.store.ui.isProfane
+import com.orion.store.ui.mergeIdentity
 import com.orion.store.ui.webSettingsImport
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 import org.junit.Assert.*
 import org.junit.Test
@@ -81,6 +84,95 @@ class LogicTest {
         val f = webSettingsImport("""{"state":{"adWatchCount":7,"unlockedBadges":{"bad":1}}}""", Settings())
         assertEquals(7, f.adWatchCount)
         assertEquals(Settings(), webSettingsImport("not json", Settings()))
+    }
+
+    @Test fun excludePrereleasesSelection() {
+        val stable = VersionOption("Stable", "2.0", "2026-10-01", listOf(AppVariant("Universal", "https://x/stable.apk", 10)))
+        val beta = VersionOption("Beta", "3.0-beta", "2026-10-10", listOf(AppVariant("Universal", "https://x/beta.apk", 10)))
+        val app = AppItem(id = "a", name = "A", availableVersions = listOf(stable, beta))
+        val off = Settings()
+        val on = Settings(excludePrereleases = true)
+
+        assertFalse(off.excludePrereleases)
+        assertTrue(on.excludePrereleases)
+        // Off preserves existing behavior, including a saved per-app Beta choice.
+        assertEquals("Beta", effectiveStreamFor(app, off.copy(appStreams = mapOf("a" to "Beta"))))
+        assertEquals("3.0-beta", preferredVersion(app, effectiveStreamFor(app, off.copy(appStreams = mapOf("a" to "Beta")))))
+        // On forces Stable for automatic selection but keeps the saved map intact.
+        val saved = on.copy(appStreams = mapOf("a" to "Beta"))
+        assertEquals("Stable", effectiveStreamFor(app, saved))
+        assertEquals(mapOf("a" to "Beta"), saved.appStreams)
+        assertEquals("2.0", preferredVersion(app, effectiveStreamFor(app, saved)))
+        assertEquals("2.0", eligibleStableVersion(app))
+    }
+
+    @Test fun excludePrereleasesStreams() {
+        assertEquals("Stable", CatalogProcessor.detectStream("app.apk", "v1.0", false))
+        assertEquals("Beta", CatalogProcessor.detectStream("app-beta.apk", "v2.0", false))
+        assertEquals("Beta", CatalogProcessor.detectStream("app.apk", "v2.0", true))
+        assertEquals("Alpha", CatalogProcessor.detectStream("app-alpha.apk", "v2.0", false))
+        assertEquals("Nightly", CatalogProcessor.detectStream("app-nightly.apk", "v2.0", false))
+        val app = AppItem(
+            id = "m", name = "M",
+            availableVersions = listOf(
+                VersionOption("Alpha", "4.0-alpha", "2026-10-11", listOf(AppVariant("Universal", "https://x/alpha.apk", 1))),
+                VersionOption("Nightly", "5.0-nightly", "2026-10-12", listOf(AppVariant("Universal", "https://x/nightly.apk", 1))),
+            ),
+        )
+        assertTrue(isPrereleaseOnly(app))
+        assertFalse(hasStable(app))
+        assertEquals(null, eligibleStableVersion(app))
+    }
+
+    @Test fun prereleaseOnlyStaysVisibleButBlocked() {
+        val betaOnly = AppItem(
+            id = "b", name = "B",
+            availableVersions = listOf(VersionOption("Beta", "9.0-beta", "2026-10-12", listOf(AppVariant("Universal", "https://x/beta.apk", 1)))),
+        )
+        assertTrue(isPrereleaseOnly(betaOnly))
+        val on = Settings(excludePrereleases = true)
+        val off = Settings()
+        // Visible either way: the catalog entry itself is untouched.
+        assertEquals("b", betaOnly.id)
+        // Blocked automatically when on, allowed when off.
+        assertTrue(isExcludedDownload(betaOnly, null, on))
+        assertFalse(hasEligibleUpdate(betaOnly, "8.0", on))
+        assertTrue(hasAvailableUpdate(betaOnly, "8.0", "Beta"))
+        assertFalse(isExcludedDownload(betaOnly, null, off))
+        // Explicit prerelease URL cannot bypass the flag.
+        assertTrue(isExcludedDownload(betaOnly, "https://x/beta.apk", on))
+        assertFalse(isExcludedDownload(betaOnly, "https://x/beta.apk", off))
+        // Filename-based install resolution also reports the prerelease stream.
+        assertTrue(isExcludedInstall(betaOnly, "B_9.0-beta.apk", on))
+        assertFalse(isExcludedInstall(betaOnly, "B_9.0-beta.apk", off))
+    }
+
+    @Test fun updatesRespectExclusion() {
+        val stable = VersionOption("Stable", "2.0", "2026-10-01", listOf(AppVariant("Universal", "https://x/stable.apk", 10)))
+        val beta = VersionOption("Beta", "3.0", "2026-10-10", listOf(AppVariant("Universal", "https://x/beta.apk", 10)))
+        val app = AppItem(id = "u", name = "U", availableVersions = listOf(stable, beta))
+        val on = Settings(excludePrereleases = true, installedVersions = mapOf("u" to "1.0"))
+        val off = Settings(installedVersions = mapOf("u" to "1.0"))
+        assertEquals(listOf("u"), availableUpdates(listOf(app), on, 0).map { it.id })
+        assertEquals(listOf("u"), availableUpdates(listOf(app), off, 0).map { it.id })
+        // Installed at latest stable: the newer Beta is not an eligible update when excluded.
+        val upToDateStable = Settings(excludePrereleases = true, installedVersions = mapOf("u" to "2.0"))
+        assertTrue(availableUpdates(listOf(app), upToDateStable, 0).isEmpty())
+        val betaChaser = Settings(installedVersions = mapOf("u" to "2.0"), appStreams = mapOf("u" to "Beta"))
+        assertEquals(listOf("u"), availableUpdates(listOf(app), betaChaser, 0).map { it.id })
+    }
+
+    @Test fun excludePrereleasesPersistence() {
+        assertFalse(Settings().excludePrereleases)
+        val s = Settings(excludePrereleases = true)
+        assertEquals(s, json.decodeFromString(Settings.serializer(), json.encodeToString(Settings.serializer(), s)))
+        // Backup/restore carries the flag through the shared identity fields (pure JVM, no Android Base64).
+        val exported = buildJsonObject { put("excludePrereleases", true) }
+        assertTrue(mergeIdentity(exported, Settings()).excludePrereleases)
+        // Older backups without the field keep the safe default instead of crashing.
+        val legacy = mergeIdentity(buildJsonObject { put("theme", "dark") }, Settings())
+        assertFalse(legacy.excludePrereleases)
+        assertEquals("dark", legacy.theme)
     }
 
     @Test fun misc() {
