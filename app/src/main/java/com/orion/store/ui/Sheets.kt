@@ -209,6 +209,37 @@ fun ReleaseNotesSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onD
     }
 }
 
+/** Per-app update preview: the app owner's own notes for the exact release being offered. */
+@Composable
+fun UpdateReleaseNotesSheet(vm: MainViewModel, app: AppItem, version: VersionOption, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
+    SheetTitle("What's new", Sym.NewReleases, listOf(app.name, version.version).filter { it.isNotBlank() }.joinToString(" - "))
+    when (val r = vm.releaseNotesState) {
+        null, ReleaseNotesResult.Loading -> Column(
+            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 48.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            LoadingIndicator(Modifier.size(72.dp))
+            Spacer(Modifier.height(16.dp))
+            Text("Loading release notes...", style = ty.bodyMedium, color = cs.onSurfaceVariant)
+        }
+        is ReleaseNotesResult.Loaded -> Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(top = 4.dp, bottom = 32.dp),
+        ) {
+            Text(r.text, style = ty.bodyMedium)
+        }
+        ReleaseNotesResult.Empty -> EmptyState(Sym.NewReleases, "No release notes provided.", "The app owner didn't write notes for this version.")
+        ReleaseNotesResult.NotFound -> EmptyState(Sym.CloudOff, "These release notes are no longer available.", "The release may have been removed or renamed.")
+        ReleaseNotesResult.Unsupported -> EmptyState(Sym.CloudOff, "Release notes are unavailable for this app's source.", "Orion can show notes only for GitHub releases with a stored tag.")
+        is ReleaseNotesResult.Error -> Column(
+            Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 4.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Lead("Couldn't load release notes", r.message, "What's new", cs.error) { Blob(Sym.ErrorOutline, cs.error, 72, MaterialShapes.Cookie7Sided) }
+            CtaButton("Retry", { vm.retryReleaseNotes() }, icon = Sym.Refresh, tonal = true)
+        }
+    }
+}
+
 /** Collapsed: version, title, when. Open: section titles with one-line headlines, and a link to the full notes. */
 @Composable
 private fun ReleaseCard(vm: MainViewModel, r: Release, latest: Boolean, expanded: Boolean, toggle: () -> Unit) {

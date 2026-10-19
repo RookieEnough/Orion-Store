@@ -34,6 +34,7 @@ import com.orion.store.data.*
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import com.orion.store.platform.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -115,6 +116,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var updates by mutableStateOf<List<AppItem>>(emptyList())
     var selectedApp by mutableStateOf<AppItem?>(null); var selectedBundle by mutableStateOf<BundleItem?>(null)
     var vtTarget by mutableStateOf<AppItem?>(null); var changeRequest by mutableStateOf(false)
+    var releaseNotesTarget by mutableStateOf<Pair<AppItem, VersionOption>?>(null)
+        private set
+    var releaseNotesState by mutableStateOf<ReleaseNotesResult?>(null)
+        private set
+    private val releaseNotesLoader = ReleaseNotesLoader()
+    private val releaseNotesJobs = mutableMapOf<String, Job>()
+    private var releaseNotesRequestKey: String? = null
     val overlays = mutableStateListOf<Overlay>()
     var settingsMenu by mutableStateOf("none")
     var profileView by mutableStateOf("profile"); var badgeIndex by mutableStateOf<Int?>(null)
@@ -260,7 +268,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var tour by mutableStateOf(false); var donateOpen by mutableStateOf(false)
     private val turns = kotlinx.coroutines.sync.Mutex()
     private val screenFree get() = startupReady && !forcedBlocking && forcedTest == null && !((config?.maintenanceMode == true || s.localMaintenanceMode) && !bypassMaintenance) &&
-        overlays.isEmpty() && selectedApp == null && selectedBundle == null && vtTarget == null && autoReport == null && !welcomeOpen && !announceNow && !donateOpen &&
+        overlays.isEmpty() && selectedApp == null && selectedBundle == null && vtTarget == null && releaseNotesTarget == null && autoReport == null && !welcomeOpen && !announceNow && !donateOpen &&
         snackbar.currentSnackbarData == null
     // Polls every 400 ms: the gate mixes Compose state with the settings StateFlow. One boolean read, so it costs nothing
     private suspend fun untilFree() { while (!screenFree) delay(400) }
@@ -824,6 +832,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun openSettings(menu: String = "none") { settingsMenu = menu; if (Overlay.SETTINGS !in overlays) overlays += Overlay.SETTINGS }
     fun open(o: Overlay) { if (o !in overlays) overlays += o }
     fun close(o: Overlay) { overlays -= o; if (o == Overlay.PROFILE_STATS) badgeIndex = null }
+
+    // region per-app release notes preview
+    fun openReleaseNotes(app: AppItem, version: VersionOption) {
+        releaseNotesTarget = app to version
+        loadReleaseNotes(app, version, force = false)
+    }
+
+    fun retryReleaseNotes() {
+        val (app, version) = releaseNotesTarget ?: return
+        loadReleaseNotes(app, version, force = true)
+    }
+
+    fun closeReleaseNotes() {
+        releaseNotesTarget = null
+        releaseNotesState = null
+    }
+
+    private fun loadReleaseNotes(app: AppItem, version: VersionOption, force: Boolean) {
+        val key = releaseNotesCacheKey(app.githubRepo, version.tag)
+        if (key == null) { releaseNotesRequestKey = null; releaseNotesState = ReleaseNotesResult.Unsupported; return }
+        if (!force) releaseNotesLoader.cached(app.githubRepo, version.tag)?.let { releaseNotesState = it; return }
+        if (releaseNotesJobs[key]?.isActive == true) {
+            // Reopened while the same request is still running: keep showing it and let its result land here.
+            releaseNotesRequestKey = key
+            if (releaseNotesState == null) releaseNotesState = ReleaseNotesResult.Loading
+            return
+        }
+        releaseNotesRequestKey = key
+        releaseNotesState = ReleaseNotesResult.Loading
+        releaseNotesJobs[key] = viewModelScope.launch {
+            val result = try {
+                releaseNotesLoader.load(app.githubRepo, version.tag, force)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                ReleaseNotesResult.Error("Could not load release notes.")
+            }
+            if (releaseNotesRequestKey == key) releaseNotesState = result
+            releaseNotesJobs.remove(key)
+        }
+    }
+    // endregion
 
     fun navTo(t: Tab) { if (t != Tab.ABOUT && t.name.lowercase() in s.hiddenTabs) return; haptic(H.LIGHT); tab = t }
 

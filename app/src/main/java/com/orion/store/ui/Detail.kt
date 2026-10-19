@@ -77,6 +77,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
         availableVersions = if (s.stableOnly) base.availableVersions.filter { it.type == "Stable" }.ifEmpty { base.availableVersions } else base.availableVersions) }
     val local = s.installedVersions[app.id]
     val needsUpdate = hasAvailableUpdate(app, local, s.streamOf(app.id))
+    val notesCandidate = if (needsUpdate) preferredVersionOption(app, s.streamOf(app.id))?.takeIf { it.tag.isNotBlank() } else null
     val installed = !local.isNullOrEmpty(); val upToDate = installed && !needsUpdate
     val activeId = d.activeDownloads[app.id]; val cleanup = d.pendingCleanup[app.id]?.fileName; val ready = d.readyToInstall[app.id]
     val status = d.downloadStatus[app.id]; val progress = d.downloadProgress[app.id] ?: 0f
@@ -256,6 +257,18 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     Cell({ Text(app.size, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1) }, "Size")
                     divider()
                     Cell({ Icon(when (app.platform) { Platform.ANDROID -> Sym.Android; Platform.TV -> Sym.Tv; else -> Sym.DesktopWindows }, null, Modifier.size(24.dp)) }, app.platform)
+                }
+            }
+            notesCandidate?.let { v ->
+                item("whats_new") {
+                    FilledTonalButton(
+                        onClick = { vm.haptic(H.SELECTION); vm.openReleaseNotes(app, v) },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 4.dp),
+                        shapes = ButtonDefaults.shapes(),
+                    ) {
+                        Icon(Sym.NewReleases, null); Spacer(Modifier.width(8.dp))
+                        Text("What's new?", maxLines = 1)
+                    }
                 }
             }
             if (app.screenshots.isNotEmpty()) item("shots") {

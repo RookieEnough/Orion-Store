@@ -18,7 +18,14 @@ val STREAMS = listOf("Stable", "Beta", "Alpha", "Nightly")
 
 @Serializable data class AppVariant(val arch: String = "", val url: String = "", val size: Long? = null)
 
-@Serializable data class VersionOption(val type: String = "Stable", val version: String = "", val date: String = "", val variants: List<AppVariant> = emptyList())
+@Serializable data class VersionOption(
+    val type: String = "Stable",
+    val version: String = "",
+    val date: String = "",
+    val variants: List<AppVariant> = emptyList(),
+    val tag: String = "",
+    val releaseUrl: String = "",
+)
 
 @Serializable data class AppItem(
     val id: String = "",

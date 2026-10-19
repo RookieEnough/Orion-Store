@@ -37,12 +37,15 @@ fun compareVersions(a: String?, b: String?): Int {
     return 0
 }
 
-fun preferredVersion(app: AppItem, stream: String = "Stable"): String {
-    if (app.availableVersions.isEmpty()) return app.latestVersion
-    app.availableVersions.firstOrNull { it.type == stream }?.let { return it.version }
-    if (stream != "Stable") app.availableVersions.firstOrNull { it.type == "Stable" }?.let { return it.version }
-    return app.availableVersions.firstOrNull()?.version ?: app.latestVersion
+fun preferredVersionOption(app: AppItem, stream: String = "Stable"): VersionOption? {
+    if (app.availableVersions.isEmpty()) return null
+    app.availableVersions.firstOrNull { it.type == stream }?.let { return it }
+    if (stream != "Stable") app.availableVersions.firstOrNull { it.type == "Stable" }?.let { return it }
+    return app.availableVersions.firstOrNull()
 }
+
+fun preferredVersion(app: AppItem, stream: String = "Stable"): String =
+    preferredVersionOption(app, stream)?.version ?: app.latestVersion
 
 fun hasAvailableUpdate(app: AppItem, installed: String?, stream: String = "Stable") = !installed.isNullOrEmpty() && compareVersions(preferredVersion(app, stream), installed) > 0
 
@@ -495,6 +498,20 @@ private val GIT_SUFFIX = Regex("""\.git$""", RegexOption.IGNORE_CASE)
 
 fun humanizeRepoName(repo: String) = repo.replace(GIT_SUFFIX, "").replace(Regex("[-_]+"), " ").replace(Regex("""\s+"""), " ").trim()
     .replace(Regex("""\b\w""")) { it.value.uppercase() }
+
+private val GITHUB_REPO = Regex("""^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}$""")
+
+/**
+ * GitHub's release-by-tag endpoint for one exact version, or null when the app has no usable `owner/repo` or tag.
+ * The tag is encoded as exactly one path segment, so `/`, `#` and spaces cannot change the URL's path or fragment.
+ */
+fun releaseNotesApiUrl(githubRepo: String?, tag: String?): String? {
+    val repo = githubRepo?.trim().orEmpty()
+    val ref = tag?.trim().orEmpty()
+    if (ref.isEmpty() || ref == "." || ref == ".." || ref.any { it.isISOControl() } || !GITHUB_REPO.matches(repo)) return null
+    if (repo.split('/').any { it == "." || it == ".." }) return null
+    return "https://api.github.com/repos/$repo/releases/tags/${enc(ref)}"
+}
 
 /** github.com/o/r/blob/x → raw.githubusercontent.com/o/r/x; anything else unchanged. */
 fun sanitizeGitHubImageUrl(url: String): String {

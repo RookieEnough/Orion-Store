@@ -96,6 +96,64 @@ class LogicTest {
         assertEquals(1, r.size); assertEquals("2.0.5", r[0].version); assertEquals("The Labyrinth Update", r[0].name); assertEquals(1_791_960_442_000L, r[0].publishedAt)
     }
 
+    @Test fun releaseNotesApiUrlBuildsGitHubTagEndpoint() {
+        assertEquals("https://api.github.com/repos/JunkFood02/Seal/releases/tags/v1.13.1", releaseNotesApiUrl("JunkFood02/Seal", "v1.13.1"))
+        // Slash, hash and space must stay inside a single path segment
+        assertEquals("https://api.github.com/repos/o/r/releases/tags/v1%2F2", releaseNotesApiUrl("o/r", "v1/2"))
+        assertEquals("https://api.github.com/repos/o/r/releases/tags/v1%232", releaseNotesApiUrl("o/r", "v1#2"))
+        assertEquals("https://api.github.com/repos/o/r/releases/tags/v1%202", releaseNotesApiUrl("o/r", "v1 2"))
+    }
+
+    @Test fun releaseNotesApiUrlRejectsMissingOrMalformedInput() {
+        assertNull(releaseNotesApiUrl(null, "v1"))
+        assertNull(releaseNotesApiUrl("", "v1"))
+        assertNull(releaseNotesApiUrl("   ", "v1"))
+        assertNull(releaseNotesApiUrl("o/r", null))
+        assertNull(releaseNotesApiUrl("o/r", ""))
+        assertNull(releaseNotesApiUrl("o/r", "   "))
+        assertNull(releaseNotesApiUrl("https://github.com/o/r", "v1"))
+        assertNull(releaseNotesApiUrl("o", "v1"))
+        assertNull(releaseNotesApiUrl("o/r/extra", "v1"))
+        assertNull(releaseNotesApiUrl("o//r", "v1"))
+        assertNull(releaseNotesApiUrl("o r", "v1"))
+        assertNull(releaseNotesApiUrl("o/r", "v1\n2"))
+        assertNull(releaseNotesApiUrl("o/r", ".."))
+        assertNull(releaseNotesApiUrl("o-/r", "v1"))
+        assertNull(releaseNotesApiUrl("#", "v1"))
+    }
+
+    @Test fun catalogueKeepsReleaseTagAndUrl() {
+        val mirror = CatalogProcessor.parseMirror(CatalogProcessor.parseRoot("""
+            {"github::github.com::o/app":[{"tag_name":"v1.2.3","name":"1.2.3","published_at":"2026-01-02T03:04:05Z",
+            "html_url":"https://github.com/o/app/releases/tag/v1.2.3",
+            "assets":[{"name":"app-v1.2.3-arm64-v8a.apk","browser_download_url":"https://x/app.apk","size":10}]}]}
+        """.trimIndent()))
+        val out = CatalogProcessor.processItem(AppItem(id = "a", name = "App", githubRepo = "o/app"), mirror)
+        val v = out.availableVersions.single()
+        assertEquals("1.2.3", v.version)
+        assertEquals("v1.2.3", v.tag)
+        assertEquals("https://github.com/o/app/releases/tag/v1.2.3", v.releaseUrl)
+        assertEquals(listOf("ARM64"), v.variants.map { it.arch })
+        assertEquals("1.2.3", out.version)
+    }
+
+    @Test fun catalogueToleratesMissingReleaseUrl() {
+        val mirror = CatalogProcessor.parseMirror(CatalogProcessor.parseRoot("""
+            {"github::github.com::o/app":[{"tag_name":"v2.0","name":"2.0","published_at":"2026-01-02T03:04:05Z",
+            "assets":[{"name":"app-v2.0.apk","browser_download_url":"https://x/app.apk","size":10}]}]}
+        """.trimIndent()))
+        val v = CatalogProcessor.processItem(AppItem(id = "a", name = "App", githubRepo = "o/app"), mirror).availableVersions.single()
+        assertEquals("v2.0", v.tag)
+        assertEquals("", v.releaseUrl)
+    }
+
+    @Test fun versionOptionDefaultsAreBackwardCompatible() {
+        val old = json.decodeFromString(VersionOption.serializer(), """{"type":"Stable","version":"1.0","date":"2026-01-01","variants":[]}""")
+        assertEquals("", old.tag); assertEquals("", old.releaseUrl)
+        val round = json.decodeFromString(VersionOption.serializer(), json.encodeToString(VersionOption.serializer(), VersionOption(version = "2.0", tag = "v2.0", releaseUrl = "u")))
+        assertEquals("v2.0", round.tag); assertEquals("u", round.releaseUrl)
+    }
+
     @Test fun antiFarming() {
         val t = 1_790_000_000_000L
         // Ads: 30 s apart at least, AD_DAILY per rolling day, then nothing until the oldest falls out of the window
