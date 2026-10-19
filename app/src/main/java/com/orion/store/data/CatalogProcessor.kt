@@ -84,7 +84,8 @@ object CatalogProcessor {
     }
 
     // region mirror
-    class Release(val tag: String, val name: String, val prerelease: Boolean, val date: String, val assets: List<Triple<String, String, Long?>>)
+    class Release(val tag: String, val name: String, val prerelease: Boolean, val date: String, val assets: List<Triple<String, String, Long?>>,
+        val htmlUrl: String = "")
 
     fun parseMirror(root: JsonElement?): Map<String, List<Release>> = (root as? JsonObject)?.mapNotNull { (k, v) ->
         val arr = when (v) { is JsonArray -> v; is JsonObject -> JsonArray(listOf(v)); else -> return@mapNotNull null }
@@ -95,7 +96,7 @@ object CatalogProcessor {
                 (o["assets"] as? JsonArray).orEmpty().mapNotNull { e ->
                     val ao = e as? JsonObject ?: return@mapNotNull null
                     Triple((ao["name"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (ao["browser_download_url"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (ao["size"] as? JsonPrimitive)?.longOrNull)
-                })
+                }, s("html_url"))
         }
     }?.toMap().orEmpty()
 
@@ -135,7 +136,7 @@ object CatalogProcessor {
             val tagV = r.tag.takeIf { it.lowercase() !in setOf("latest", "all") }?.let(::extractVersion)
             val ver = extractVersion(assets[0].first) ?: tagV ?: extractVersion(r.name) ?: r.date.ifEmpty { now }.substringBefore('T')
             val variants = assets.map { (n, u, s) -> AppVariant(determineArch(n), u, s) }.sortedBy { ARCH_ORDER[it.arch] ?: 4 }
-            VersionOption(stream, ver, r.date.substringBefore('T'), variants) to dateMillis(r.date)
+            VersionOption(type = stream, version = ver, date = r.date.substringBefore('T'), variants = variants, tag = r.tag, releaseUrl = r.htmlUrl) to dateMillis(r.date)
         }
         if (versions.isEmpty()) return app
         val latest = STREAMS.mapNotNull { st -> versions.filter { it.first.type == st }.maxByOrNull { it.second }?.first }

@@ -317,6 +317,7 @@ private fun Overlays(vm: MainViewModel) {
     // The bundle stays selected while one of its apps is open, so backing out of the detail page lands on the bundle again.
     vm.selectedBundle?.takeIf { vm.selectedApp == null }?.let { BundlePreviewSheet(vm, it) { vm.selectedBundle = null } }
     vm.vtTarget?.let { VirusTotalSheet(vm, it) { vm.vtTarget = null } }
+    vm.releaseNotesTarget?.let { (app, version) -> UpdateReleaseNotesSheet(vm, app, version) { vm.closeReleaseNotes() } }
     if (vm.changeRequest) vm.selectedApp?.let { ChangeRequestSheet(vm, it) { vm.changeRequest = false } }
     vm.autoReport?.let { log -> AutoReportDialog(vm, log) }
 }
