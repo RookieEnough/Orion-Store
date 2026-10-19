@@ -262,8 +262,8 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             notesCandidate?.let { v ->
                 item("whats_new") {
                     FilledTonalButton(
-                        { vm.haptic(H.SELECTION); vm.openReleaseNotes(app, v) },
-                        Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 4.dp),
+                        onClick = { vm.haptic(H.SELECTION); vm.openReleaseNotes(app, v) },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 4.dp),
                         shapes = ButtonDefaults.shapes(),
                     ) {
                         Icon(Sym.NewReleases, null); Spacer(Modifier.width(8.dp))
