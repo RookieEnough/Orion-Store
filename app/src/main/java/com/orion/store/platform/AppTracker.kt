@@ -142,7 +142,7 @@ class AppTracker(private val ctx: Context) {
             else -> handlers.firstOrNull { isSys(it.applicationInfo) && "packageinstaller" in it.packageName }
                 ?: handlers.firstOrNull { "packageinstaller" in it.packageName } ?: handlers.firstOrNull { isSys(it.applicationInfo) }
         }
-        val intent = pick?.let { Intent(base).setClassName(it.packageName, it.name) } ?: Intent.createChooser(base, "Install App")
+        val intent = pick?.let { Intent(base).setClassName(it.packageName, it.name) } ?: Intent.createChooser(base, "安装应用")
         when (ResultHost.run(intent).first) {
             Activity.RESULT_OK -> Unit
             Activity.RESULT_CANCELED -> throw NativeError("INSTALL_CANCELED")
@@ -175,7 +175,7 @@ class AppTracker(private val ctx: Context) {
     suspend fun requestElevated() {
         if (root) return
         try {
-            if (!Shizuku.pingBinder()) throw NativeError("Shizuku is NOT running. Start Shizuku app first.")
+            if (!Shizuku.pingBinder()) throw NativeError("Shizuku 未运行。请先启动 Shizuku 应用。")
             if (Shizuku.checkSelfPermission() == GRANTED) return
             val ok = suspendCancellableCoroutine { c ->
                 val l = object : Shizuku.OnRequestPermissionResultListener {
@@ -187,8 +187,8 @@ class AppTracker(private val ctx: Context) {
                 Shizuku.addRequestPermissionResultListener(l); Shizuku.requestPermission(SHIZUKU_CODE)
                 c.invokeOnCancellation { Shizuku.removeRequestPermissionResultListener(l) }
             }
-            if (!ok) throw NativeError("User denied Shizuku permission.")
-        } catch (e: NativeError) { throw e } catch (e: Throwable) { throw NativeError("Shizuku Error (Check Manifest/Provider): ${e.message}") }
+            if (!ok) throw NativeError("你拒绝了 Shizuku 权限。")
+        } catch (e: NativeError) { throw e } catch (e: Throwable) { throw NativeError("Shizuku 出错（请检查 Manifest/Provider）：${e.message}") }
     }
 
     private fun sh(cmd: String): Process = if (root) Runtime.getRuntime().exec(arrayOf("su", "-c", cmd)) else Shizuku::class.java
@@ -199,8 +199,8 @@ class AppTracker(private val ctx: Context) {
 
     private fun requireShizuku() {
         if (root) return
-        if (!shizukuRunning()) throw NativeError("Shizuku not running")
-        if (Shizuku.checkSelfPermission() != GRANTED) throw NativeError("Shizuku permission missing")
+        if (!shizukuRunning()) throw NativeError("Shizuku 未运行")
+        if (Shizuku.checkSelfPermission() != GRANTED) throw NativeError("缺少 Shizuku 权限")
     }
 
     /** Streams the APK into `pm install`. Root also records Orion as the installer, so Android's "App details in store" and update ownership point here. */
@@ -215,14 +215,14 @@ class AppTracker(private val ctx: Context) {
         var (code, err) = attempt(owner)
         // Some ROMs ship a pm without --update-ownership: install anyway rather than fail the update
         if (code != 0 && "update-ownership" in err) attempt(owner.replace(" --update-ownership", "")).let { code = it.first; err = it.second }
-        if (code != 0) throw NativeError("Install failed (Code $code): $err")
+        if (code != 0) throw NativeError("安装失败（代码 $code）：$err")
     }
 
     /** Root: reinstalls an app's own APKs with Orion as installer. Same signature and version, so data stays; Orion then owns its updates. */
     suspend fun adopt(pkg: String) = withContext(Dispatchers.IO) {
-        val dir = File(pm.getApplicationInfo(pkg, 0).sourceDir).parent ?: throw NativeError("No APK path")
+        val dir = File(pm.getApplicationInfo(pkg, 0).sourceDir).parent ?: throw NativeError("未找到 APK 路径")
         val p = sh("pm install -r -i ${ctx.packageName} \"$dir\"/*.apk")
-        val code = p.waitFor(); if (code != 0) throw NativeError("Adopt failed (Code $code): ${p.err()}")
+        val code = p.waitFor(); if (code != 0) throw NativeError("接管失败（代码 $code）：${p.err()}")
     }
 
     /** Root or Shizuku: user apps Orion did not install, as package to installer label. */
@@ -231,13 +231,13 @@ class AppTracker(private val ctx: Context) {
         runCatching {
             if (isSys(pm.getApplicationInfo(p, 0))) return@runCatching null
             val by = if (Build.VERSION.SDK_INT >= 30) pm.getInstallSourceInfo(p).installingPackageName else pm.getInstallerPackageName(p)
-            if (by == ctx.packageName) null else p to (by?.let { runCatching { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() }.getOrDefault(it) } ?: "Sideloaded")
+            if (by == ctx.packageName) null else p to (by?.let { runCatching { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() }.getOrDefault(it) } ?: "侧载安装")
         }.getOrNull()
     }.toMap()
 
     /** Frees cache across every app at once: Android trims until the requested space is free. */
     suspend fun trimCaches() = withContext(Dispatchers.IO) {
-        requireShizuku(); val p = sh("pm trim-caches 1024G"); if (p.waitFor() != 0) throw NativeError("Trim failed: ${p.err()}")
+        requireShizuku(); val p = sh("pm trim-caches 1024G"); if (p.waitFor() != 0) throw NativeError("清理失败：${p.err()}")
     }
 
     // Sentinel
@@ -262,11 +262,11 @@ class AppTracker(private val ctx: Context) {
     suspend fun toggleSystemApp(pkg: String, enable: Boolean) = withContext(Dispatchers.IO) {
         requireShizuku()
         val p = sh(if (enable) "cmd package install-existing $pkg" else "pm uninstall -k --user 0 $pkg")
-        val exit = p.waitFor(); if (exit != 0) throw NativeError("Operation failed (Code $exit): ${p.err()}")
+        val exit = p.waitFor(); if (exit != 0) throw NativeError("操作失败（代码 $exit）：${p.err()}")
     }
 
     suspend fun revokePermission(pkg: String, perm: String) = withContext(Dispatchers.IO) {
-        requireShizuku(); if (sh("pm revoke $pkg $perm").waitFor() != 0) throw NativeError("Revoke failed. App might crash or restart.")
+        requireShizuku(); if (sh("pm revoke $pkg $perm").waitFor() != 0) throw NativeError("撤销失败，应用可能会崩溃或重启。")
     }
 
     @Suppress("DEPRECATION")
@@ -280,12 +280,12 @@ class AppTracker(private val ctx: Context) {
             // Note: falls back to app-private Downloads when public storage is not writable (scoped storage), path stays readable for hashing
             val out = runCatching { File(ai.sourceDir).copyTo(dest, true) }.getOrElse { File(ai.sourceDir).copyTo(File(Downloads.dir(), name), true) }
             out.absolutePath
-        } catch (e: Exception) { throw NativeError("Extraction failed: ${e.message}") }
+        } catch (e: Exception) { throw NativeError("提取失败：${e.message}") }
     }
 
     fun hash(path: String): String {
-        val f = File(path); if (!f.exists()) throw NativeError("File not found")
-        return hashOrNull(f) ?: throw NativeError("Hash failed")
+        val f = File(path); if (!f.exists()) throw NativeError("未找到文件")
+        return hashOrNull(f) ?: throw NativeError("计算哈希失败")
     }
 
     private fun hashOrNull(f: File): String? = runCatching {
@@ -296,7 +296,7 @@ class AppTracker(private val ctx: Context) {
 
     /** Returns (httpStatus, body), mirrors uploadVirusTotalFile including the 32 MB upload_url hop. */
     suspend fun vtUpload(path: String, apiKey: String): Pair<Int, String> = withContext(Dispatchers.IO) {
-        if (path.isEmpty() || apiKey.isEmpty()) throw NativeError("Missing args")
+        if (path.isEmpty() || apiKey.isEmpty()) throw NativeError("缺少参数")
         val f = File(path).canonicalFile; if (!f.exists() || !f.canRead()) throw NativeError("FILE_MISSING")
         var uploadUrl = "https://www.virustotal.com/api/v3/files"
         if (f.length() >= 32L * 1024 * 1024) {
@@ -304,17 +304,17 @@ class AppTracker(private val ctx: Context) {
             try {
                 c.newCall(Request.Builder().url("https://www.virustotal.com/api/v3/files/upload_url").header("x-apikey", apiKey).header("Accept", "application/json").build()).execute().use { r ->
                     val b = r.body.string()
-                    if (!r.isSuccessful) return@withContext r.code to b.ifEmpty { "Failed to retrieve upload URL" }
+                    if (!r.isSuccessful) return@withContext r.code to b.ifEmpty { "获取上传地址失败" }
                     uploadUrl = com.orion.store.data.json.parseToJsonElement(b).jsonObject["data"]!!.jsonPrimitive.content
                 }
-            } catch (e: Exception) { throw NativeError("Failed to obtain VirusTotal upload URL: ${e.message}") }
+            } catch (e: Exception) { throw NativeError("获取 VirusTotal 上传地址失败：${e.message}") }
         }
         val c = Net.client.newBuilder().callTimeout(0, TimeUnit.MILLISECONDS).connectTimeout(30, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).writeTimeout(0, TimeUnit.MILLISECONDS).build()
         val body = MultipartBody.Builder("----orionvt" + System.currentTimeMillis()).setType(MultipartBody.FORM)
             .addFormDataPart("file", f.name, f.asRequestBody(APK_MIME.toMediaType())).build()
         try {
             c.newCall(Request.Builder().url(uploadUrl).post(body).header("x-apikey", apiKey).header("Accept", "application/json").build()).execute().use { it.code to it.body.string() }
-        } catch (e: Exception) { throw NativeError(e.message ?: "Upload failed") }
+        } catch (e: Exception) { throw NativeError(e.message ?: "上传失败") }
     }
 
     /** Walks shared storage hashing files over 1 KB, emitting batches of 50 (scanResultBatch / scanComplete). */

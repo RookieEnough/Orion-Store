@@ -189,12 +189,12 @@ object CatalogProcessor {
     private fun defaultModules(apps: List<AppItem>, seed: Int): List<ModuleConfig> {
         val s = shuffle(apps, seed + 17).map { it.id }
         return listOf(
-            ModuleConfig("default_category_cards", "category_cards", "Browse by Category", "Swipe the cards, then tap one to show only matching apps", insertAfterCategory = 0.0, animation = "confetti"),
-            ModuleConfig("default_curved_showcase", "curved_apps", "Curated Spotlight", "A quick 6-app mix you should not miss", insertAfterCategory = 2.0, animation = "snowfall", appIds = s.take(6)),
-            ModuleConfig("default_recommended_bundles", "recommendation_bundles", "Recommended App Bundles", "Install in packs for faster setup", insertAfterCategory = 4.0, animation = "spark", bundles = listOf(
-                ModuleBundleConfig("default_bundle_daily", "Daily Driver Kit", "Core apps for your everyday workflow", s.subList(0, minOf(3, s.size)), badge = "Starter", icon = "fa-bolt"),
-                ModuleBundleConfig("default_bundle_media", "Media Escape", "Watch, listen, and unwind quickly", s.slice(minOf(3, s.size) until minOf(6, s.size)), badge = "Popular", icon = "fa-photo-film"),
-                ModuleBundleConfig("default_bundle_power", "Power User Stack", "Advanced tools for people who build and tweak", s.slice(minOf(6, s.size) until minOf(9, s.size)), badge = "Pro", icon = "fa-terminal"),
+            ModuleConfig("default_category_cards", "category_cards", "按分类浏览", "滑动卡片，点按即可筛选出对应应用", insertAfterCategory = 0.0, animation = "confetti"),
+            ModuleConfig("default_curved_showcase", "curved_apps", "精选焦点", "不容错过的 6 款应用速览", insertAfterCategory = 2.0, animation = "snowfall", appIds = s.take(6)),
+            ModuleConfig("default_recommended_bundles", "recommendation_bundles", "推荐应用合集", "打包安装，更快完成配置", insertAfterCategory = 4.0, animation = "spark", bundles = listOf(
+                ModuleBundleConfig("default_bundle_daily", "日常主力套装", "日常使用必备的核心应用", s.subList(0, minOf(3, s.size)), badge = "入门", icon = "fa-bolt"),
+                ModuleBundleConfig("default_bundle_media", "影音休闲包", "看视频、听音乐，快速放松", s.slice(minOf(3, s.size) until minOf(6, s.size)), badge = "热门", icon = "fa-photo-film"),
+                ModuleBundleConfig("default_bundle_power", "进阶玩家工具包", "为爱折腾的用户准备的高级工具", s.slice(minOf(6, s.size) until minOf(9, s.size)), badge = "专业", icon = "fa-terminal"),
             )),
         )
     }
@@ -212,14 +212,14 @@ object CatalogProcessor {
             "recommendation_bundles" -> {
                 val b = m.bundles.orEmpty().mapIndexedNotNull { i, c ->
                     val ap = resolve(c.appIds, map).ifEmpty { return@mapIndexedNotNull null }
-                    val title = c.title.ifEmpty { "Bundle ${i + 1}" }
-                    BundleItem(c.id.ifEmpty { "${m.id}-bundle-$i" }, title, c.description?.ifEmpty { null } ?: "Recommended apps", c.appIds, ap, c.color, c.badge, c.icon, c.monogram?.ifEmpty { null } ?: monogram(title))
+                    val title = c.title.ifEmpty { "合集 ${i + 1}" }
+                    BundleItem(c.id.ifEmpty { "${m.id}-bundle-$i" }, title, c.description?.ifEmpty { null } ?: "推荐应用", c.appIds, ap, c.color, c.badge, c.icon, c.monogram?.ifEmpty { null } ?: monogram(title))
                 }.ifEmpty {
                     val src = resolve(m.appIds, map).ifEmpty { shuffle(apps, seed + index + 67).take(9) }
                     (0..2).mapNotNull { i ->
                         val ch = src.drop(i * 3).take(3).takeIf { it.size >= 2 } ?: return@mapNotNull null
-                        BundleItem("${m.id}-bundle-$i", "Recommended Pack ${i + 1}", "Hand-picked apps that work great together", ch.map { it.id }, ch, null,
-                            listOf("Hot", "Fresh", "Classic")[i], listOf("fa-wand-magic-sparkles", "fa-headphones", "fa-rocket")[i], monogram("Recommended Pack ${i + 1}"))
+                        BundleItem("${m.id}-bundle-$i", "推荐合集 ${i + 1}", "精心挑选、搭配使用的应用", ch.map { it.id }, ch, null,
+                            listOf("热门", "新鲜", "经典")[i], listOf("fa-wand-magic-sparkles", "fa-headphones", "fa-rocket")[i], monogram("推荐合集 ${i + 1}"))
                     }
                 }
                 b.takeIf { it.isNotEmpty() }?.let { ins to StoreCollection(m.id, m.title, CollectionType.RECOMMENDATION_BUNDLES, m.subtitle, animation = an, bundles = it) }
@@ -241,8 +241,8 @@ object CatalogProcessor {
         )
         val rows = byCat.filter { it.value.size >= 3 }.map { (c, l) -> StoreCollection("cat_${c.lowercase()}", "Top in $c", CollectionType.SWIMLANE, filter = c, apps = l.take(12)) }
         var active = modules.filter { forPlatform(it, platform) && it.type != "update_pills" }.ifEmpty { defaultModules(apps, seed) }
-        if (active.none { it.type == "category_cards" }) active = listOf(ModuleConfig("default_category_cards_${platform.lowercase()}", "category_cards", "Browse by Category",
-            "Swipe the cards, then tap one to show only matching apps", insertAfterCategory = 0.0, animation = "confetti")) + active
+        if (active.none { it.type == "category_cards" }) active = listOf(ModuleConfig("default_category_cards_${platform.lowercase()}", "category_cards", "按分类浏览",
+            "滑动卡片，点按即可筛选出对应应用", insertAfterCategory = 0.0, animation = "confetti")) + active
         val inter = active.filter { forPlatform(it, platform) }.mapIndexedNotNull { i, m -> interlude(m, i, apps, map, seed) }.sortedBy { it.first }
         var ii = 0
         while (ii < inter.size && inter[ii].first <= 0) out += inter[ii++].second

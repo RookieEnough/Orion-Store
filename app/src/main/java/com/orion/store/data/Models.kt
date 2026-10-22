@@ -14,8 +14,8 @@ object Device { @Volatile var isTv = false }
 fun AppItem.installsHere() = platform == Platform.ANDROID || (platform == Platform.TV && Device.isTv)
 
 enum class SortOption(val label: String) {
-    HOME("Home Page"), NEWEST("Recently Added"), OLDEST("Oldest Added"), NAME_ASC("Name (A-Z)"),
-    NAME_DESC("Name (Z-A)"), SIZE_ASC("Size (Smallest)"), SIZE_DESC("Size (Largest)")
+    HOME("首页精选"), NEWEST("最新添加"), OLDEST("最早添加"), NAME_ASC("名称 (A-Z)"),
+    NAME_DESC("名称 (Z-A)"), SIZE_ASC("大小（从小到大）"), SIZE_DESC("大小（从大到小）")
 }
 
 enum class Tab(val platform: String?) { ANDROID(Platform.ANDROID), PC(Platform.PC), TV(Platform.TV), MYAPPS(null), ABOUT(null), UPDATES(null) }
@@ -116,7 +116,7 @@ object Defaults {
     const val MICROG_INFO_URL = "https://github.com/microg/GmsCore/wiki"
     val DEV_SOCIALS = SocialLinks("https://github.com/RookieEnough", "https://x.com/_Rookie_Z", "https://discord.com/invite/CrM6y4ujnq", "https://www.buymeacoffee.com/rookiez")
     val DONATION = DonationConfig("https://ko-fi.com/rookie_z", "rookiez@ptyes", "paypal.me/RookieEnough")
-    val DEV_PROFILE = DevProfile("RookieZ", "https://i.pinimg.com/originals/12/79/48/127948a3253396796874286570740594.jpg", "Building the open web, one commit at a time. No ads, no tracking, just code.")
+    val DEV_PROFILE = DevProfile("RookieZ", "https://i.pinimg.com/originals/12/79/48/127948a3253396796874286570740594.jpg", "构建开放网络，一次一个提交。无广告，无跟踪，只有代码。")
     const val SUPPORT_EMAIL = "orionstoredev@gmail.com"
     const val EASTER_EGG = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     const val SELF_PACKAGE = "com.orion.store"
@@ -129,14 +129,14 @@ object Defaults {
     )
     val PTR_CHARACTERS = listOf("cat", "dog", "pokeball", "shield", "owl", "robot", "ghost", "kitty", "bunny", "batman")
     val FAQS = listOf(
-        FAQItem("Why do scanner apps say Orion has trackers?", "Scanner apps like AppManager flag the Unity Ads SDK inside Orion. That SDK exists for exactly one feature: the optional ad-watching in the About tab (Fuel the Code), where watching ads supports me and earns you XP and unlocks badges. No analytics, no data mining, no data selling. The app is open source so anyone can verify it, and ads are 100% optional with nothing running in the background.", "fa-magnifying-glass"),
-        FAQItem("Is Orion Store safe?", "Absolutely. Orion Store is completely open-source. This means our code is public on GitHub for anyone to audit. We believe in transparency: no hidden trackers, no data mining, just a clean gateway to apps.", "fa-shield-cat"),
-        FAQItem("Are apps on Orion safe?", "Yes. I personally review and mod them using tools available on their official repositories to ensure they are safe, functional, and privacy-respecting before they land here.", "fa-check-double"),
-        FAQItem("Are ReVanced builds safe?", "Yes. These builds are automated via GitHub Actions bots, not manually patched. They use the official ReVanced CLI and patches on APKs sourced from APKMirror, Uptodown, and APKPure. The process runs daily at 6 AM. The entire build pipeline is transparent and open-source: https://github.com/RookieEnough/Revanced-AutoBuilds", "fa-robot"),
-        FAQItem("Installation failed?", "If you see 'App not installed' or 'Package conflicts', it's likely a signature mismatch. You cannot install a modded app over the original Play Store version or a different mod. Uninstall the existing app first, then install the one from Orion.", "fa-file-signature"),
-        FAQItem("Download not working?", "Don't panic! Just head to the app's detail page and click the 'Report' icon (⚠️) in the top right corner. It will pre-fill an email so I can fix it ASAP.", "fa-bug"),
-        FAQItem("Will there be more apps?", "Yes, if there'll be more interesting apps to add on. As long as I find open-source or useful tools that deserve a spotlight, the library will keep growing.", "fa-layer-group"),
-        FAQItem("How can I support?", "By donation through ko-fi. Code fuels the store, but coffee fuels the dev! You can find the link in the socials section.", "fa-heart"),
-        FAQItem("Is there any hidden easter egg?", "Where the Architect stares, the secret sleeps.\n\nCount the legs of a spider. Count the vertices of a cube.\n\nStrike the Visage that many times.\n\nThe Golden Truth awaits those who know the rules... and so do I.", "fa-user-secret"),
+        FAQItem("为什么扫描类应用说 Orion 有跟踪器？", "AppManager 之类的扫描应用会标记 Orion 内置的 Unity Ads SDK。这个 SDK 只为一个功能存在：“开发者”标签页里可选的广告任务（为代码加油）——观看广告可以支持开发者，还能获得经验值并解锁徽章。没有数据采集，没有数据挖掘，也不出售数据。应用完全开源，任何人都可以验证，广告完全可选，后台也不会运行任何东西。", "fa-magnifying-glass"),
+        FAQItem("Orion Store 安全吗？", "绝对安全。Orion Store 完全开源，代码公开在 GitHub 上，任何人都可以审计。我们坚信透明：没有隐藏的跟踪器，没有数据挖掘，只是一个干净的应用入口。", "fa-shield-cat"),
+        FAQItem("商店里的应用安全吗？", "安全。上架前我会亲自逐一审查和修改，使用其官方仓库提供的工具确保它们安全、可用且尊重隐私。", "fa-check-double"),
+        FAQItem("ReVanced 构建安全吗？", "安全。这些构建由 GitHub Actions 机器人自动完成，并非人工打补丁，使用官方 ReVanced CLI 和补丁处理来自 APKMirror、Uptodown 和 APKPure 的 APK。流程每天早上 6 点运行，整条构建流水线透明且开源：https://github.com/RookieEnough/Revanced-AutoBuilds", "fa-robot"),
+        FAQItem("安装失败了？", "如果看到“应用未安装”或“软件包冲突”，多半是签名不一致。你不能把修改版直接装在原版（Play 商店版）或另一个修改版之上。请先卸载已装的应用，再安装 Orion 提供的版本。", "fa-file-signature"),
+        FAQItem("下载不了？", "别慌！前往应用详情页，点右上角的“反馈”图标（⚠️），会预填一封邮件，我会尽快修复。", "fa-bug"),
+        FAQItem("以后会有更多应用吗？", "会的，只要还有值得上架的有趣应用。只要我发现优秀的开源项目或实用工具，应用库就会继续增长。", "fa-layer-group"),
+        FAQItem("如何支持开发者？", "通过 Ko-fi 捐赠。代码支撑商店，咖啡支撑开发者！链接在社交栏里。", "fa-heart"),
+        FAQItem("有没有隐藏彩蛋？", "建造者凝视之处，秘密沉睡。\n\n数一数蜘蛛的腿，数一数立方体的顶点。\n\n以同样的次数，敲击那张面孔。\n\n黄金真相等待知晓规则的人……一如我知道的那样。", "fa-user-secret"),
     )
 }

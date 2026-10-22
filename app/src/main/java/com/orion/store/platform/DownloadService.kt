@@ -164,8 +164,8 @@ class DownloadService : Service() {
     private fun note(count: Int, avg: Int): Notification {
         val launch = packageManager.getLaunchIntentForPackage(packageName)?.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         return NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(if (count > 1) "$count downloads in progress" else "Downloading…")
-            .setContentText(if (avg in 1..99) "$avg% · Orion Store will keep going in the background" else "Orion Store will keep going in the background")
+            .setContentTitle(if (count > 1) "$count 个下载进行中" else "正在下载…")
+            .setContentText(if (avg in 1..99) "$avg% · Orion Store 将在后台继续下载" else "Orion Store 将在后台继续下载")
             .setOnlyAlertOnce(true).setOngoing(true).setSilent(true).setCategory(NotificationCompat.CATEGORY_PROGRESS).setPriority(NotificationCompat.PRIORITY_LOW)
             .setProgress(100, avg.coerceIn(0, 100), avg <= 0)
             .apply { launch?.let { setContentIntent(PendingIntent.getActivity(this@DownloadService, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)) } }
@@ -176,7 +176,7 @@ class DownloadService : Service() {
         const val CHANNEL = "orion_downloads_foreground"
         const val ID = 7301
         fun ensureChannel(ctx: Context) = NotificationManagerCompat.from(ctx).createNotificationChannel(
-            NotificationChannelCompat.Builder(CHANNEL, NotificationManagerCompat.IMPORTANCE_LOW).setName("Download Progress").setShowBadge(false).build())
+            NotificationChannelCompat.Builder(CHANNEL, NotificationManagerCompat.IMPORTANCE_LOW).setName("下载进度").setShowBadge(false).build())
         fun sync(ctx: Context) { runCatching { ContextCompat.startForegroundService(ctx, Intent(ctx, DownloadService::class.java)) } }
     }
 }

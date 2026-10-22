@@ -54,9 +54,9 @@ import kotlinx.coroutines.launch
 
 private data class NavItem(val tab: Tab, val icon: ImageVector, val selected: ImageVector, val label: String, val subtitle: String)
 private val NAV = listOf(
-    NavItem(Tab.ANDROID, Sym.Android, Sym.AndroidFilled, "Apps", "apps"), NavItem(Tab.PC, Sym.DesktopWindows, Sym.DesktopWindowsFilled, "PC", "PC"),
-    NavItem(Tab.TV, Sym.Tv, Sym.TvFilled, "TV", "TV"), NavItem(Tab.MYAPPS, Sym.GridView, Sym.GridViewFilled, "My Apps", "my"),
-    NavItem(Tab.ABOUT, Sym.Code, Sym.CodeFilled, "Dev", "About Orion"),
+    NavItem(Tab.ANDROID, Sym.Android, Sym.AndroidFilled, "应用", "应用"), NavItem(Tab.PC, Sym.DesktopWindows, Sym.DesktopWindowsFilled, "电脑", "电脑"),
+    NavItem(Tab.TV, Sym.Tv, Sym.TvFilled, "电视", "电视"), NavItem(Tab.MYAPPS, Sym.GridView, Sym.GridViewFilled, "我的应用", "我的应用"),
+    NavItem(Tab.ABOUT, Sym.Code, Sym.CodeFilled, "开发者", "关于 Orion"),
 )
 
 @Composable
@@ -119,7 +119,7 @@ private fun Home(vm: MainViewModel) {
                         enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
                         ExtendedFloatingActionButton({ vm.batchCleanup() }, containerColor = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer) {
                             Icon(Sym.CleaningServices, null); Spacer(Modifier.width(12.dp))
-                            Column { Text("${d.pendingCleanup.size} files", fontWeight = FontWeight.Bold); Text("Tap to clean", style = MaterialTheme.typography.labelSmall) }
+                            Column { Text("${d.pendingCleanup.size} 个文件", fontWeight = FontWeight.Bold); Text("点按清理", style = MaterialTheme.typography.labelSmall) }
                         }
                     }
                 },
@@ -227,10 +227,10 @@ fun Header(vm: MainViewModel) {
             } else SearchPill(vm, subtitle)
         }
         AnimatedVisibility(vm.storeUpdateAvailable) {
-            FilledTonalIconButton({ vm.fBypassed = false; vm.loadApps(true) }, shapes = IconButtonDefaults.shapes()) { Icon(Sym.SystemUpdate, "Store update") }
+            FilledTonalIconButton({ vm.fBypassed = false; vm.loadApps(true) }, shapes = IconButtonDefaults.shapes()) { Icon(Sym.SystemUpdate, "商店更新") }
         }
         if (Device.isTv) TvBetaPill(vm)
-        if (vm.tab == Tab.ABOUT) IconButton({ vm.haptic(H.LIGHT); vm.open(Overlay.GUIDE) }) { Icon(Sym.MenuBook, "Know Orion") }
+        if (vm.tab == Tab.ABOUT) IconButton({ vm.haptic(H.LIGHT); vm.open(Overlay.GUIDE) }) { Icon(Sym.MenuBook, "了解 Orion") }
         val dl = d.activeDownloads.size; val up = vm.updates.size
         IconButton({ vm.openSettings() }) {
             BadgedBox({
@@ -239,12 +239,12 @@ fun Header(vm: MainViewModel) {
                     up > 0 -> Badge(containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text("$up") }
                     vm.storeUpdateAvailable -> Badge { Text("!") }
                 }
-            }) { Icon(Sym.Settings, "Settings") }
+            }) { Icon(Sym.Settings, "设置") }
         }
         val p = s.userProfile
         IconButton(vm::openProfileStats) {
             Box(Modifier.size(34.dp).clip(CircleShape).background(cs.secondaryContainer), contentAlignment = Alignment.Center) {
-                if (!p?.avatarUrl.isNullOrEmpty()) AsyncImage(pngAvatar(p.avatarUrl), "Profile", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                if (!p?.avatarUrl.isNullOrEmpty()) AsyncImage(pngAvatar(p.avatarUrl), "头像", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 else Text(p?.name?.firstOrNull()?.uppercase() ?: "U", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black, color = cs.onSecondaryContainer)
             }
         }
@@ -258,13 +258,13 @@ private fun TvBetaPill(vm: MainViewModel) {
     val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Surface({ open = true; vm.haptic(H.LIGHT) }, Modifier.padding(end = 4.dp).focusRing(src, Pill), shape = Pill, color = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer, interactionSource = src) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Sym.Tv, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("TV · Beta", style = MaterialTheme.typography.labelLargeEmphasized)
+            Icon(Sym.Tv, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("电视 · 测试版", style = MaterialTheme.typography.labelLargeEmphasized)
         }
     }
-    if (open) AlertDialog({ open = false }, icon = { Icon(Sym.Tv, null) }, title = { Text("Orion on TV is in beta") },
-        text = { Text("Browse with your remote, and install TV and Android apps right on this TV. A few screens are still made for touch. If something feels off, report it and it gets fixed.") },
-        confirmButton = { TextButton({ open = false; vm.tracker.open(TV_BUG_URL) }) { Text("Report a TV bug") } },
-        dismissButton = { TextButton({ open = false }) { Text("Got it") } })
+    if (open) AlertDialog({ open = false }, icon = { Icon(Sym.Tv, null) }, title = { Text("Orion 电视版尚处测试阶段") },
+        text = { Text("用遥控器浏览，直接在这台电视上安装电视版和安卓应用。少数界面仍按触屏设计，若有体验不佳之处，欢迎反馈，我们会尽快修复。") },
+        confirmButton = { TextButton({ open = false; vm.tracker.open(TV_BUG_URL) }) { Text("反馈电视版问题") } },
+        dismissButton = { TextButton({ open = false }) { Text("知道了") } })
 }
 
 private const val TV_BUG_URL = "https://github.com/RookieEnough/Orion-Store/issues/new?title=%5BTV%20beta%5D%20&body=TV%20model%3A%20%0AAndroid%20TV%20version%3A%20%0AWhat%20happened%3A%20"
@@ -273,7 +273,7 @@ private const val TV_BUG_URL = "https://github.com/RookieEnough/Orion-Store/issu
 private fun Logo(vm: MainViewModel) {
     val cs = MaterialTheme.colorScheme
     Box(Modifier.size(40.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(cs.primary).clickable(onClick = vm::titleClick), contentAlignment = Alignment.Center) {
-        Icon(painterResource(R.drawable.ic_splash_logo), "Orion Store", Modifier.size(40.dp), tint = cs.onPrimary)
+        Icon(painterResource(R.drawable.ic_splash_logo), "Orion 商店", Modifier.size(40.dp), tint = cs.onPrimary)
     }
 }
 
@@ -290,17 +290,17 @@ private fun SearchPill(vm: MainViewModel, scope: String) {
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface), cursorBrush = SolidColor(cs.primary),
             decorationBox = { field ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (q.isEmpty()) Text(if (lib) "Search my apps" else "Search $scope", style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    if (q.isEmpty()) Text(if (lib) "搜索我的应用" else "搜索$scope", style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     field()
                 }
             })
         AnimatedContent(q.isNotEmpty(), label = "trail") { typing ->
-            if (typing) IconButton({ set("") }) { Icon(Sym.Close, "Clear search") }
+            if (typing) IconButton({ set("") }) { Icon(Sym.Close, "清除搜索") }
             else Row {
                 AnnouncementButton(vm)
                 val at = remember { mutableStateOf(Offset.Zero) }; val reveal = LocalThemeReveal.current
                 IconButton({ reveal?.run(at.value) { vm.toggleTheme() } ?: vm.toggleTheme() }, Modifier.trackCenter(at)) {
-                    AnimatedContent(s.theme, label = "theme") { Icon(when (it) { "light" -> Sym.LightMode; "dusk" -> Sym.Brightness6; else -> Sym.DarkMode }, "Theme: $it, tap to change") }
+                    AnimatedContent(s.theme, label = "theme") { Icon(when (it) { "light" -> Sym.LightMode; "dusk" -> Sym.Brightness6; else -> Sym.DarkMode }, "主题：" + when (it) { "light" -> "亮色"; "dusk" -> "暮色"; else -> "暗色" } + "，点按切换") }
                 }
             }
         }
@@ -321,11 +321,11 @@ private fun AnnouncementButton(vm: MainViewModel) {
     TooltipBox(
         TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below, 8.dp),
         tooltip = {
-            RichTooltip(title = { Text("From the Orion team") }, caretShape = TooltipDefaults.caretShape(),
+            RichTooltip(title = { Text("来自 Orion 团队") }, caretShape = TooltipDefaults.caretShape(),
                 action = {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton({ tip.dismiss() }) { Text("Later") }
-                        if (unread) TextButton({ vm.dismissAnnouncement(); vm.haptic(H.SELECTION); tip.dismiss() }) { Text("Got it") }
+                        TextButton({ tip.dismiss() }) { Text("稍后") }
+                        if (unread) TextButton({ vm.dismissAnnouncement(); vm.haptic(H.SELECTION); tip.dismiss() }) { Text("知道了") }
                     }
                 },
                 colors = TooltipDefaults.richTooltipColors(containerColor = cs.secondaryContainer, contentColor = cs.onSecondaryContainer,
@@ -340,7 +340,7 @@ private fun AnnouncementButton(vm: MainViewModel) {
                 val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(1f, 1.18f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "p")
                 Badge(Modifier.graphicsLayer { scaleX = pulse; scaleY = pulse })
             } }) {
-                Icon(Sym.Campaign, "Announcement", tint = if (unread) cs.primary else LocalContentColor.current)
+                Icon(Sym.Campaign, "公告", tint = if (unread) cs.primary else LocalContentColor.current)
             }
         }
     }
@@ -394,10 +394,10 @@ private fun GuidePromptDialog(vm: MainViewModel) {
     fun done(open: Boolean) { vm.guidePrompt = false; vm.setFlag("guide", STORE_VERSION); if (open) { vm.haptic(H.SUCCESS); vm.open(Overlay.GUIDE) } }
     AlertDialog({ done(false) },
         icon = { MorphBlob(listOf(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny), 0, 64.dp, cs.primaryContainer) { Icon(Sym.MenuBook, null, Modifier.size(30.dp), tint = cs.onPrimaryContainer) } },
-        title = { Text("Get to know Orion", style = MaterialTheme.typography.headlineSmallEmphasized) },
-        text = { Text("Every feature now lives in one field guide: backups, compact mode, XP and badges, the Hall of Fame, the Dino run and the rest. You can always find it on the Dev tab.") },
-        confirmButton = { Button({ done(true) }, shapes = ButtonDefaults.shapes()) { Text("Show me") } },
-        dismissButton = { TextButton({ done(false) }) { Text("Later") } })
+        title = { Text("认识 Orion", style = MaterialTheme.typography.headlineSmallEmphasized) },
+        text = { Text("所有功能都汇聚在这份功能指南里：备份、紧凑模式、经验值与徽章、名人堂、小恐龙跑酷等等。随时都可以在“开发者”标签页找到它。") },
+        confirmButton = { Button({ done(true) }, shapes = ButtonDefaults.shapes()) { Text("去看看") } },
+        dismissButton = { TextButton({ done(false) }) { Text("稍后") } })
 }
 
 /** Shown on the first start after a background pass that hit a problem. Failed updates stay ready to install with one tap. */
@@ -405,18 +405,18 @@ private fun GuidePromptDialog(vm: MainViewModel) {
 private fun AutoReportDialog(vm: MainViewModel, log: List<AutoResult>) {
     val failed = log.filter { !it.ok }; val ok = log.filter { it.ok }
     AlertDialog(vm::dismissAutoReport, icon = { Icon(Sym.SystemUpdate, null) },
-        title = { Text(if (failed.size == 1) "1 update needs you" else "${failed.size} updates need you") },
+        title = { Text(if (failed.size == 1) "1 个更新需要你处理" else "${failed.size} 个更新需要你处理") },
         text = {
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (ok.isNotEmpty()) Text("Updated in the background: ${ok.joinToString { it.name }}.", style = MaterialTheme.typography.bodyMedium)
+                if (ok.isNotEmpty()) Text("已在后台更新：${ok.joinToString { it.name }}。", style = MaterialTheme.typography.bodyMedium)
                 failed.forEach { r ->
                     Column {
                         Text("${r.name} ${r.version}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text(r.error ?: "Install failed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(r.error ?: "安装失败。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         },
-        confirmButton = { TextButton({ vm.dismissAutoReport(); vm.openSettings("queue") }) { Text("Open queue") } },
-        dismissButton = { TextButton(vm::dismissAutoReport) { Text("Later") } })
+        confirmButton = { TextButton({ vm.dismissAutoReport(); vm.openSettings("queue") }) { Text("打开更新队列") } },
+        dismissButton = { TextButton(vm::dismissAutoReport) { Text("稍后") } })
 }

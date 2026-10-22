@@ -93,7 +93,7 @@ val BADGES: Map<String, Pair<ImageVector, Color>> = mapOf(
 fun BadgeChip(id: String, onClick: () -> Unit) {
     val (icon, c) = BADGES[id] ?: return
     val (bg, fg) = tonal(c)
-    AssistChip(onClick, { Text(id) }, leadingIcon = { Icon(icon, null, Modifier.size(AssistChipDefaults.IconSize), tint = fg) }, shape = Pill, border = null,
+    AssistChip(onClick, { Text(badgeLabel(id)) }, leadingIcon = { Icon(icon, null, Modifier.size(AssistChipDefaults.IconSize), tint = fg) }, shape = Pill, border = null,
         colors = AssistChipDefaults.assistChipColors(containerColor = bg, labelColor = fg))
 }
 
@@ -128,7 +128,7 @@ private fun DevCoin(vm: MainViewModel, profile: DevProfile, slots: List<String>,
                     onError = { if (++stage == 2) deadImages += img })
             } else Column(Modifier.fillMaxSize().background(cs.tertiaryContainer), Arrangement.Center, Alignment.CenterHorizontally) {
                 Icon(Sym.EmojiEventsFilled, null, Modifier.size(40.dp), tint = cs.onTertiaryContainer)
-                Text("Hall of\nFame", textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLargeEmphasized, color = cs.onTertiaryContainer)
+                Text("荣耀\n名人堂", textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLargeEmphasized, color = cs.onTertiaryContainer)
             }
         }
     }
@@ -144,7 +144,7 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
     LaunchedEffect(flipped) { if (flipped) { delay(6000); flipped = false } }
     LaunchedEffect(Unit) { if (s.coinFlipHintCount < 3) { delay(1600); flipped = true; vm.set { it.incrementCoinFlipHint() } } }
     val ads = s.adWatchCount
-    val (rankLabel, rankIcon) = QUEST_BOSSES.lastOrNull { ads >= it.lvl }?.let { "Rank: ${it.rank}" to (BADGES[it.badge]?.first ?: Sym.Shield) } ?: ("Start your journey" to Sym.RocketLaunch)
+    val (rankLabel, rankIcon) = QUEST_BOSSES.lastOrNull { ads >= it.lvl }?.let { "段位：${badgeLabel(it.rank)}" to (BADGES[it.badge]?.first ?: Sym.Shield) } ?: ("开始你的旅程" to Sym.RocketLaunch)
     val slots = s.showcasedBadges.take(3)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
         item("header") { Header(vm) }
@@ -152,7 +152,7 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
             Column(Modifier.fillMaxWidth().padding(top = 8.dp).reveal(0), horizontalAlignment = Alignment.CenterHorizontally) {
                 DevCoin(vm, profile, slots, flipped) { if (flipped) { leaderboard = true; vm.haptic(H.MEDIUM) } else { flipped = true; vm.haptic(H.SELECTION) } }
                 Text(profile.name, style = MaterialTheme.typography.displaySmallEmphasized)
-                Text(if (flipped) "Tap again for the Hall of Fame" else "Tap the coin to flip it", style = MaterialTheme.typography.labelMedium, color = cs.primary)
+                Text(if (flipped) "再次点击查看名人堂" else "点击硬币将其翻面", style = MaterialTheme.typography.labelMedium, color = cs.primary)
                 Text(profile.bio, Modifier.padding(horizontal = 36.dp, vertical = 10.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant)
             }
         }
@@ -160,13 +160,13 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
             FlowRow(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 8.dp).reveal(1), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                 slots.forEachIndexed { i, id -> BadgeChip(id) { if (slots.size == 3) vm.profileClick("badges", i) } }
-                if (slots.size < 3) AssistChip({ vm.profileClick("badges", slots.size) }, { Text("Add badge") }, leadingIcon = { Icon(Sym.Add, null, Modifier.size(AssistChipDefaults.IconSize)) }, shape = Pill)
+                if (slots.size < 3) AssistChip({ vm.profileClick("badges", slots.size) }, { Text("添加徽章") }, leadingIcon = { Icon(Sym.Add, null, Modifier.size(AssistChipDefaults.IconSize)) }, shape = Pill)
             }
         }
-        item("connect") { Group("Connect", Modifier.reveal(2)) {
+        item("connect") { Group("社交", Modifier.reveal(2)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 listOf(Triple(Sym.BrandGitHub, "GitHub", Gray) to socials.github, Triple(Sym.BrandX, "X", Color(0xFF64748B)) to socials.x, Triple(Sym.BrandDiscord, "Discord", Color(0xFF5865F2)) to socials.discord,
-                    Triple(Sym.Public, "Website", Color(0xFF6366F1)) to ORION_SITE)
+                    Triple(Sym.Public, "网站", Color(0xFF6366F1)) to ORION_SITE)
                     .forEachIndexed { i, (spec, url) ->
                         val (bg, fg) = tonal(spec.third)
                         val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -180,7 +180,7 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                     }
             }
         } }
-        item("support") { Group("Support Orion", Modifier.reveal(3)) {
+        item("support") { Group("支持 Orion", Modifier.reveal(3)) {
             val next = QUEST_BOSSES.firstOrNull { ads < it.lvl }?.let { it.lvl to it.rank }
             val (bg, fg) = tonal(Fuchsia)
             var shown by remember { mutableStateOf(false) }; LaunchedEffect(Unit) { shown = true }
@@ -190,28 +190,28 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                     Box(Modifier.size(52.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(fg.copy(.14f)), contentAlignment = Alignment.Center) { Icon(rankIcon, null, tint = fg) }
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Fuel the Code", style = MaterialTheme.typography.titleLargeEmphasized, color = fg)
+                        Text("为代码加油", style = MaterialTheme.typography.titleLargeEmphasized, color = fg)
                         Text(rankLabel, style = MaterialTheme.typography.bodyMedium, color = fg.copy(.85f))
                     }
                     Icon(Sym.PlayArrow, null, tint = fg)
                 }
                 LinearWavyProgressIndicator({ prog }, Modifier.fillMaxWidth().padding(top = 16.dp), color = fg, trackColor = fg.copy(.2f))
-                Text(next?.let { "$ads watched · ${it.first - ads} more to ${it.second}" } ?: "$ads watched · every rank unlocked", Modifier.padding(top = 8.dp),
+                Text(next?.let { "已观看 $ads 个广告 · 还差 ${it.first - ads} 个解锁 ${it.second}" } ?: "已观看 $ads 个广告 · 所有段位已解锁", Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.labelMedium, color = fg.copy(.85f))
             }
             if (donation.kofiUrl != null || donation.upiId != null || donation.paypalUrl != null) Row(Modifier.fillMaxWidth().padding(top = 8.dp)
                 .springClick(RoundedCornerShape(28.dp)) { vm.donateOpen = true; vm.haptic(H.SELECTION) }.background(cs.surfaceContainerHigh).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 TonalIcon(Sym.Coffee, Caution); Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Buy me a coffee", style = MaterialTheme.typography.titleMedium)
-                    Text("Ko-fi, UPI or PayPal", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                    Text("请我喝杯咖啡", style = MaterialTheme.typography.titleMedium)
+                    Text("Ko-fi、UPI 或 PayPal", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 }
                 Icon(Sym.ChevronRight, null)
             }
         } }
-        item("help") { Group("Help", Modifier.reveal(4)) {
+        item("help") { Group("帮助", Modifier.reveal(4)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(Triple(Sym.HelpOutline, "FAQs", "Secrets & safety") to { vm.open(Overlay.FAQ) }, Triple(Sym.NewReleases, "What's new", "Release notes") to { vm.open(Overlay.RELEASE_NOTES) })
+                listOf(Triple(Sym.HelpOutline, "常见问题", "彩蛋与安全须知") to { vm.open(Overlay.FAQ) }, Triple(Sym.NewReleases, "更新内容", "版本说明") to { vm.open(Overlay.RELEASE_NOTES) })
                     .forEach { (spec, go) ->
                         Column(Modifier.weight(1f).springClick(RoundedCornerShape(28.dp)) { vm.haptic(H.LIGHT); go() }.background(cs.surfaceContainerHigh).padding(18.dp)) {
                             TonalIcon(spec.first, cs.primary)
@@ -226,13 +226,13 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Surface(shape = Pill, color = cs.surfaceContainerHigh) { Text("v$STORE_VERSION", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge) }
                     // The quiet RE mark: this build is the native rewrite of the web app
-                    Surface(shape = Pill, color = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text("RE · Native", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLargeEmphasized) }
+                    Surface(shape = Pill, color = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text("RE · 原生版", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLargeEmphasized) }
                     val c = if (s.useRemoteJson) Safe else Caution
                     Surface(shape = Pill, color = tonal(c).first, contentColor = tonal(c).second) {
-                        Text("Source: ${if (s.useRemoteJson) "Remote" else "Local"}", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge)
+                        Text("数据源：${if (s.useRemoteJson) "远程" else "本地"}", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge)
                     }
                 }
-                Text("Made with 💜 for Geeks", Modifier.padding(top = 12.dp).clip(Pill).clickable { vm.profileClick() }.padding(horizontal = 16.dp, vertical = 8.dp),
+                Text("用 💜 为极客打造", Modifier.padding(top = 12.dp).clip(Pill).clickable { vm.profileClick() }.padding(horizontal = 16.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
             }
         }
@@ -267,86 +267,86 @@ fun DevTools(vm: MainViewModel) {
     }
     fun save(t: String) { vm.set { it.copy(githubToken = t) }; editing = false; scope.launch { delay(500); vm.reload() } }
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Developer tools", Modifier.padding(start = 8.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMediumEmphasized)
+        Text("开发者工具", Modifier.padding(start = 8.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMediumEmphasized)
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surfaceContainerHigh)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("GitHub Access", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text("Unlock 5000 requests/hr (Authenticated)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("GitHub 访问", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("解锁每小时 5000 次请求（已认证）", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    TextButton({ editing = !editing; draft = s.githubToken }) { Text(if (editing) "Cancel" else "Edit Token") }
+                    TextButton({ editing = !editing; draft = s.githubToken }) { Text(if (editing) "取消" else "编辑令牌") }
                 }
                 if (editing) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(draft, { draft = it }, Modifier.weight(1f), placeholder = { Text("ghp_...") }, singleLine = true, shape = RoundedCornerShape(16.dp),
                         visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { save(draft) }),
-                        trailingIcon = { IconButton({ show = !show }) { Icon(if (show) Sym.VisibilityOff else Sym.Visibility, if (show) "Hide token" else "Show token") } })
-                    Button({ save(draft) }, shapes = ButtonDefaults.shapes()) { Text("Save") }
+                        trailingIcon = { IconButton({ show = !show }) { Icon(if (show) Sym.VisibilityOff else Sym.Visibility, if (show) "隐藏令牌" else "显示令牌") } })
+                    Button({ save(draft) }, shapes = ButtonDefaults.shapes()) { Text("保存") }
                 } else Row(Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(if (s.githubToken.isNotEmpty()) Safe else MaterialTheme.colorScheme.error))
-                    Text(if (s.githubToken.isEmpty()) "No Token Set (Rate Limited)" else if (show) s.githubToken else "••••••••••••${s.githubToken.takeLast(4)}",
+                    Text(if (s.githubToken.isEmpty()) "未设置令牌（速率受限）" else if (show) s.githubToken else "••••••••••••${s.githubToken.takeLast(4)}",
                         Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 14.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (s.githubToken.isNotEmpty()) {
-                        IconButton({ show = !show }) { Icon(if (show) Sym.VisibilityOff else Sym.Visibility, if (show) "Hide token" else "Reveal token") }
-                        IconButton({ clip.setText(AnnotatedString(s.githubToken)) }) { Icon(Sym.ContentCopy, "Copy token") }
-                        IconButton({ save("") }) { Icon(Sym.DeleteOutline, "Remove token") }
+                        IconButton({ show = !show }) { Icon(if (show) Sym.VisibilityOff else Sym.Visibility, if (show) "隐藏令牌" else "显示令牌") }
+                        IconButton({ clip.setText(AnnotatedString(s.githubToken)) }) { Icon(Sym.ContentCopy, "复制令牌") }
+                        IconButton({ save("") }) { Icon(Sym.DeleteOutline, "移除令牌") }
                     }
                 }
             }
         }
-        Text("UI Debugger (Alignment Check)", Modifier.padding(start = 8.dp, top = 6.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        Text("UI 调试器（对齐检查）", Modifier.padding(start = 8.dp, top = 6.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton({ vm.allApps().firstOrNull()?.let { vm.installToast(it, "test.apk") } }) { Text("Toast: Install") }
-            OutlinedButton({ vm.error("This is a test error message for alignment checking.") }) { Text("Toast: Error") }
-            OutlinedButton({ val t = System.currentTimeMillis(); vm.upd { it.copy(pendingCleanup = mapOf("test-1" to CleanupEntry("a", t), "test-2" to CleanupEntry("b", t), "test-3" to CleanupEntry("c", t))) } }) { Text("Deck: Clean") }
-            OutlinedButton({ vm.set { it.copy(hasSeenModernUITutorial = false) }; vm.tour = false; vm.open(Overlay.TUTORIAL) }) { Text("Trigger: Try New UI") }
-            Button({ vm.forcedTest = "checking" }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error)) { Text("TEST FORCED UPDATE") }
+            OutlinedButton({ vm.allApps().firstOrNull()?.let { vm.installToast(it, "test.apk") } }) { Text("Toast：安装") }
+            OutlinedButton({ vm.error("这是一条用于对齐检查的测试错误信息。") }) { Text("Toast：错误") }
+            OutlinedButton({ val t = System.currentTimeMillis(); vm.upd { it.copy(pendingCleanup = mapOf("test-1" to CleanupEntry("a", t), "test-2" to CleanupEntry("b", t), "test-3" to CleanupEntry("c", t))) } }) { Text("清理卡片：清理") }
+            OutlinedButton({ vm.set { it.copy(hasSeenModernUITutorial = false) }; vm.tour = false; vm.open(Overlay.TUTORIAL) }) { Text("触发：试用新 UI") }
+            Button({ vm.forcedTest = "checking" }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error)) { Text("测试强制更新") }
         }
         rate?.let { (limit, rem, reset) ->
             Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surfaceContainer)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row { Text("GitHub API Quota", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); Text("$rem/$limit", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) }
+                    Row { Text("GitHub API 配额", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); Text("$rem/$limit", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) }
                     LinearProgressIndicator({ if (limit > 0) rem / limit.toFloat() else 0f }, Modifier.fillMaxWidth(), color = if (rem < limit * .2f) MaterialTheme.colorScheme.error else Safe)
-                    Row { Text(if (s.githubToken.isNotEmpty()) "Authenticated" else "Public IP", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
-                        Text("Resets: ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(reset * 1000))}", style = MaterialTheme.typography.labelSmall) }
+                    Row { Text(if (s.githubToken.isNotEmpty()) "已认证" else "公共 IP", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+                        Text("重置于：${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(reset * 1000))}", style = MaterialTheme.typography.labelSmall) }
                 }
             }
         }
-        Text("Package Detective", Modifier.padding(start = 8.dp, top = 6.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        Text("包检查", Modifier.padding(start = 8.dp, top = 6.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(pkg, { pkg = it }, Modifier.weight(1f), placeholder = { Text("com.example.app") }, singleLine = true, shape = RoundedCornerShape(16.dp))
             FilledIconButton({
-                if (pkg.isNotEmpty()) { pkgResult = "Checking..."; scope.launch {
-                    pkgResult = runCatching { withContext(Dispatchers.IO) { vm.tracker.appInfo(pkg.trim()) }.let { "{\n  \"installed\": ${it.installed},\n  \"version\": ${it.version?.let { v -> "\"$v\"" }},\n  \"versionCode\": ${it.versionCode}\n}" } }.getOrElse { "Error: ${it.message}" }
+                if (pkg.isNotEmpty()) { pkgResult = "检查中…"; scope.launch {
+                    pkgResult = runCatching { withContext(Dispatchers.IO) { vm.tracker.appInfo(pkg.trim()) }.let { "{\n  \"installed\": ${it.installed},\n  \"version\": ${it.version?.let { v -> "\"$v\"" }},\n  \"versionCode\": ${it.versionCode}\n}" } }.getOrElse { "错误：${it.message}" }
                 } }
-            }, shapes = IconButtonDefaults.shapes()) { Icon(Sym.Search, "Check package") }
+            }, shapes = IconButtonDefaults.shapes()) { Icon(Sym.Search, "检查包名") }
         }
         if (pkgResult.isNotEmpty()) Code(pkgResult)
-        OutlinedButton({ showJson = !showJson }, Modifier.fillMaxWidth()) { Text("Raw Metadata Explorer", Modifier.weight(1f)); Icon(if (showJson) Sym.ExpandLess else Sym.ExpandMore, null) }
+        OutlinedButton({ showJson = !showJson }, Modifier.fillMaxWidth()) { Text("原始元数据浏览器", Modifier.weight(1f)); Icon(if (showJson) Sym.ExpandLess else Sym.ExpandMore, null) }
         if (showJson) {
-            val raw = remember(d.apps) { if (d.apps.isEmpty()) "Cache Empty" else runCatching { Json(json) { prettyPrint = true }.encodeToString(ListSerializer(AppItem.serializer()), d.apps) }.getOrDefault("Error parsing cache") }
+            val raw = remember(d.apps) { if (d.apps.isEmpty()) "缓存为空" else runCatching { Json(json) { prettyPrint = true }.encodeToString(ListSerializer(AppItem.serializer()), d.apps) }.getOrDefault("解析缓存失败") }
             Code(raw, Modifier.heightIn(max = 320.dp))
         }
         Row(Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Active Mirror", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(vm.mirrorSource.ifEmpty { "Unknown" }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("当前镜像", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(vm.mirrorSource.ifEmpty { "未知" }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             }
-            FilledTonalButton({ vm.set { it.copy(useRemoteJson = !it.useRemoteJson) } }, shapes = ButtonDefaults.shapes()) { Text(if (s.useRemoteJson) "Remote Mode" else "Local Mode") }
+            FilledTonalButton({ vm.set { it.copy(useRemoteJson = !it.useRemoteJson) } }, shapes = ButtonDefaults.shapes()) { Text(if (s.useRemoteJson) "远程模式" else "本地模式") }
         }
-        OutlinedButton({ vm.set { it.withDevUnlocked(false) }; vm.settingsMenu = "none"; vm.haptic(H.WARNING) }, Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("CLOSE DEVELOPER OPTIONS", fontWeight = FontWeight.Black) }
+        OutlinedButton({ vm.set { it.withDevUnlocked(false) }; vm.settingsMenu = "none"; vm.haptic(H.WARNING) }, Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("关闭开发者选项", fontWeight = FontWeight.Black) }
         Button(onNuke, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shapes = ButtonDefaults.shapes(), colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)) {
-            Icon(Sym.DeleteForever, null); Spacer(Modifier.width(8.dp)); Text("NUCLEAR RESET (Wipe & Restart)", fontWeight = FontWeight.Black)
+            Icon(Sym.DeleteForever, null); Spacer(Modifier.width(8.dp)); Text("核弹级重置（清空并重启）", fontWeight = FontWeight.Black)
         }
     }
-    if (nuke) AlertDialog({ nuke = false }, icon = { Icon(Sym.DeleteForever, null) }, title = { Text("Nuclear reset?") },
-        text = { Text("Clears every setting, cache and library record, then restarts Orion. Downloaded APK files stay on disk.") },
+    if (nuke) AlertDialog({ nuke = false }, icon = { Icon(Sym.DeleteForever, null) }, title = { Text("确定核弹级重置？") },
+        text = { Text("将清除所有设置、缓存和应用库记录，然后重启 Orion。已下载的 APK 文件仍会保留在磁盘上。") },
         confirmButton = { Button({
             nuke = false; vm.set { Settings() }; vm.upd { DataState() }
             scope.launch { delay(700); ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.let { ctx.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) }; exitProcess(0) }
-        }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error)) { Text("Wipe & Restart") } },
-        dismissButton = { TextButton({ nuke = false }) { Text("Cancel") } })
+        }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error)) { Text("清空并重启") } },
+        dismissButton = { TextButton({ nuke = false }) { Text("取消") } })
 }
 
 @Composable
@@ -359,15 +359,15 @@ private fun Code(text: String, modifier: Modifier = Modifier) = SelectionContain
 fun DonationSheet(vm: MainViewModel, donation: DonationConfig, onDismiss: () -> Unit) {
     data class DRow(val key: String, val label: String, val helper: String, val value: String, val icon: ImageVector, val c: Color, val copy: String?, val open: String?)
     val rows = listOfNotNull(
-        donation.kofiUrl?.let { DRow("kofi", "Ko-fi", "Support Orion through Ko-fi", it, Sym.Coffee, Color(0xFF29ABE0), null, "Open Ko-fi") },
-        donation.upiId?.let { DRow("upi", "UPI", "Copy the UPI ID to pay from your app", it, Sym.QrCode2, Color(0xFF22C55E), "Copy UPI", null) },
-        donation.paypalUrl?.let { DRow("paypal", "PayPal", "Open PayPal or copy the payment link", it, Sym.Payments, Color(0xFF0070BA), "Copy PayPal", "Open PayPal") },
+        donation.kofiUrl?.let { DRow("kofi", "Ko-fi", "通过 Ko-fi 支持 Orion", it, Sym.Coffee, Color(0xFF29ABE0), null, "打开 Ko-fi") },
+        donation.upiId?.let { DRow("upi", "UPI", "复制 UPI ID，在支付应用中付款", it, Sym.QrCode2, Color(0xFF22C55E), "复制 UPI", null) },
+        donation.paypalUrl?.let { DRow("paypal", "PayPal", "打开 PayPal 或复制付款链接", it, Sym.Payments, Color(0xFF0070BA), "复制 PayPal", "打开 PayPal") },
     )
     if (rows.isEmpty()) return
     val clip = LocalClipboardManager.current; val scope = rememberCoroutineScope()
     var open by remember { mutableStateOf<String?>(null) }; var copied by remember { mutableStateOf<String?>(null) }
     OrionSheet(onDismiss) {
-        SheetTitle("Support Orion", Sym.Favorite, "Choose a payment method to support development.")
+        SheetTitle("支持 Orion", Sym.Favorite, "选择一种支付方式，支持开发工作。")
         rows.forEach { r ->
             Card({ open = if (open == r.key) null else r.key }, Modifier.padding(horizontal = 16.dp, vertical = 5.dp).fillMaxWidth(), shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(if (open == r.key) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
@@ -381,7 +381,7 @@ fun DonationSheet(vm: MainViewModel, donation: DonationConfig, onDismiss: () -> 
                             r.open?.let { Button({ vm.haptic(H.SELECTION); vm.tracker.open(if (r.value.startsWith("http://") || r.value.startsWith("https://")) r.value else "https://${r.value}") }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                                 Icon(Sym.OpenInNew, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(it) } }
                             r.copy?.let { FilledTonalButton({ clip.setText(AnnotatedString(r.value)); copied = r.key; vm.haptic(H.SUCCESS); scope.launch { delay(2000); copied = null } }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
-                                Icon(if (copied == r.key) Sym.Check else Sym.ContentCopy, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(if (copied == r.key) "Copied" else it) } }
+                                Icon(if (copied == r.key) Sym.Check else Sym.ContentCopy, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(if (copied == r.key) "已复制" else it) } }
                         }
                     }
                 }
@@ -403,20 +403,20 @@ fun LeaderboardSheet(vm: MainViewModel, onDismiss: () -> Unit, onSubmit: () -> U
     }
     val cooldown = s.lastSubmissionTime > 0 && System.currentTimeMillis() - s.lastSubmissionTime < 3_600_000
     OrionSheet(onDismiss) {
-        SheetTitle("Hall of Fame", Sym.EmojiEvents, "Global Top Contributors")
+        SheetTitle("名人堂", Sym.EmojiEvents, "全球顶尖贡献者")
         Box(Modifier.fillMaxWidth().heightIn(min = 240.dp, max = 560.dp), contentAlignment = Alignment.Center) {
             val list = entries
             when {
                 error -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Sym.WifiOff, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.error)
-                    Text("Signal Lost", Modifier.padding(8.dp), style = MaterialTheme.typography.titleMedium)
-                    FilledTonalButton({ nonce++ }) { Text("Reconnect") }
+                    Text("信号丢失", Modifier.padding(8.dp), style = MaterialTheme.typography.titleMedium)
+                    FilledTonalButton({ nonce++ }) { Text("重新连接") }
                 }
                 list == null -> ContainedLoadingIndicator()
                 list.isEmpty() -> Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("It's quiet... too quiet.", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("The Hall of Fame is empty.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Be the first legend to rise!", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text("静悄悄……太安静了。", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("名人堂还是空的。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("来当第一位上榜的传奇吧！", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
                 else -> LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     itemsIndexed(list) { i, e ->
@@ -433,8 +433,8 @@ fun LeaderboardSheet(vm: MainViewModel, onDismiss: () -> Unit, onSubmit: () -> U
                                     if (i < 3) Icon(Sym.WorkspacePremium, null, Modifier.padding(start = 4.dp).size(14.dp), tint = rank!!)
                                 }
                                 Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(e.`class`, Modifier.clip(RoundedCornerShape(6.dp)).background(cls.copy(.12f)).border(1.dp, cls.copy(.3f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = cls)
-                                    Text("Lvl ${e.level}", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(classLabel(e.`class`), Modifier.clip(RoundedCornerShape(6.dp)).background(cls.copy(.12f)).border(1.dp, cls.copy(.3f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = cls)
+                                    Text("等级 ${e.level}", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             Column(horizontalAlignment = Alignment.End) {
@@ -447,19 +447,19 @@ fun LeaderboardSheet(vm: MainViewModel, onDismiss: () -> Unit, onSubmit: () -> U
             }
         }
         Button(onSubmit, modifier = Modifier.padding(16.dp).fillMaxWidth().heightIn(min = 56.dp), enabled = !cooldown, shapes = ButtonDefaults.shapes()) {
-            Icon(if (cooldown) Sym.Lock else Sym.RocketLaunch, null); Spacer(Modifier.width(8.dp)); Text(if (cooldown) "Rank Claimed (Wait 1h)" else "Claim Global Rank", fontWeight = FontWeight.Bold)
+            Icon(if (cooldown) Sym.Lock else Sym.RocketLaunch, null); Spacer(Modifier.width(8.dp)); Text(if (cooldown) "已上榜（等待 1 小时）" else "登上全球排行榜", fontWeight = FontWeight.Bold)
         }
-        Text("Rankings are synchronized every hour after user submission", Modifier.fillMaxWidth().padding(bottom = 8.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("排行榜在用户提交后每小时同步一次", Modifier.fillMaxWidth().padding(bottom = 8.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 data class Avatar(val id: String, val name: String, val url: String)
 val CHARACTERS = listOf(
-    Avatar("ears1", "Imp", "https://api.dicebear.com/9.x/big-ears/svg?seed=Avery"), Avatar("pixel1", "8-Bit", "https://api.dicebear.com/9.x/pixel-art/svg?seed=Avery"),
-    Avatar("mecha", "Mecha", "https://api.dicebear.com/9.x/bottts/svg?seed=Mecha&backgroundColor=c0aede"), Avatar("pixel3", "Voxel", "https://api.dicebear.com/9.x/pixel-art/svg?seed=Kimberly"),
-    Avatar("pixel2", "Retro", "https://api.dicebear.com/9.x/pixel-art/svg?seed=Wyatt"), Avatar("ears2", "Pixie", "https://api.dicebear.com/9.x/big-ears/svg?seed=Sara"),
-    Avatar("smile1", "Cheery", "https://api.dicebear.com/9.x/big-smile/svg?seed=Jessica"), Avatar("unit", "Unit 01", "https://api.dicebear.com/9.x/bottts/svg?seed=Unit01&backgroundColor=c0aede"),
-    Avatar("smile2", "Glee", "https://api.dicebear.com/9.x/big-smile/svg?seed=Liliana"), Avatar("pixel4", "Block", "https://api.dicebear.com/9.x/pixel-art/svg?seed=Oliver"),
+    Avatar("ears1", "小恶魔", "https://api.dicebear.com/9.x/big-ears/svg?seed=Avery"), Avatar("pixel1", "8 比特", "https://api.dicebear.com/9.x/pixel-art/svg?seed=Avery"),
+    Avatar("mecha", "机甲", "https://api.dicebear.com/9.x/bottts/svg?seed=Mecha&backgroundColor=c0aede"), Avatar("pixel3", "体素", "https://api.dicebear.com/9.x/pixel-art/svg?seed=Kimberly"),
+    Avatar("pixel2", "复古", "https://api.dicebear.com/9.x/pixel-art/svg?seed=Wyatt"), Avatar("ears2", "小精灵", "https://api.dicebear.com/9.x/big-ears/svg?seed=Sara"),
+    Avatar("smile1", "乐呵呵", "https://api.dicebear.com/9.x/big-smile/svg?seed=Jessica"), Avatar("unit", "初号机", "https://api.dicebear.com/9.x/bottts/svg?seed=Unit01&backgroundColor=c0aede"),
+    Avatar("smile2", "欢欢", "https://api.dicebear.com/9.x/big-smile/svg?seed=Liliana"), Avatar("pixel4", "方块", "https://api.dicebear.com/9.x/pixel-art/svg?seed=Oliver"),
 )
 val LOCAL_BANNED_TERMS = listOf(
     "chut", "chutiya", "chooch", "bhosdi", "bhosad", "madarchod", "mc", "bc", "bhenchod", "behenchod", "gand", "gaand", "lund", "lavda", "lauda", "loda", "jhaatu", "jhat", "kutta", "kamina", "harami",
@@ -514,8 +514,8 @@ fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
             putJsonObject("data") { payload.forEach { (k, v) -> if (v is String) put(k, v) else put(k, (v as Number).toLong()) } }
             put("signature", leaderboardSignature(payload))
         }.toString()
-        runCatching { Net.postJson(WORKER_URL, body) }.onFailure { status = "error"; err = it.message ?: "Unknown Error" }.onSuccess { (code, res) ->
-            if (code !in 200..299) { status = "error"; err = if (code == 429) "Whoa! You can only join once every 24 hours." else runCatching { json.parseToJsonElement(res).jsonObject["error"]!!.jsonPrimitive.content }.getOrDefault("Portal connection failed."); return }
+        runCatching { Net.postJson(WORKER_URL, body) }.onFailure { status = "error"; err = it.message ?: "未知错误" }.onSuccess { (code, res) ->
+            if (code !in 200..299) { status = "error"; err = if (code == 429) "哇哦！每 24 小时只能上榜一次。" else runCatching { json.parseToJsonElement(res).jsonObject["error"]!!.jsonPrimitive.content }.getOrDefault("传送门连接失败。"); return }
             status = "success"
             vm.set { it.registerSubmission(now).copy(lastLeaderboardSubmissionTime = now).withProfile(UserProfile(name.trim(), char.id, char.url), now) }
         }
@@ -523,21 +523,21 @@ fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
     fun submit(sim: Boolean) {
         err = ""; val n = name.trim()
         err = when {
-            n.isEmpty() -> "Please enter a cool name!"; n.length > 15 -> "Name too long (Max 15 chars)"; n.length < 3 -> "Name too short (Min 3 chars)"
-            isProfane(n, blocklist) -> "Let's keep it family friendly!"; !canSubmit && !sim -> "You need 5 contributions to join the Hall of Fame!"
-            !sim && !Xp.plausible(s, System.currentTimeMillis()) -> "Your progress failed the integrity check, so it can't join the leaderboard."; else -> ""
+            n.isEmpty() -> "请输入一个够酷的名字！"; n.length > 15 -> "名字太长（最多 15 个字符）"; n.length < 3 -> "名字太短（至少 3 个字符）"
+            isProfane(n, blocklist) -> "请文明取名！"; !canSubmit && !sim -> "你需要 5 次贡献才能加入名人堂！"
+            !sim && !Xp.plausible(s, System.currentTimeMillis()) -> "你的进度未通过完整性校验，无法登上排行榜。"; else -> ""
         }
         if (err.isNotEmpty()) return
         status = "processing"; scope.launch { delay(2500); if (sim) status = "success" else network() }
     }
     OrionSheet(onDismiss) {
-        SheetTitle("Fame Gate", Sym.MilitaryTech, "Join the Legends")
+        SheetTitle("荣誉之门", Sym.MilitaryTech, "加入传奇行列")
         AnimatedContent(status, Modifier.fillMaxWidth(), label = "gate") { st ->
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (st) {
                     "idle" -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            listOf("Level" to "$level", "XP" to "$xp").forEach { (k, v) ->
+                            listOf("等级" to "$level", "XP" to "$xp").forEach { (k, v) ->
                                 Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(k.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(v, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
                                 }
@@ -546,14 +546,14 @@ fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                         if (saved != null) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.secondaryContainer).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             AsyncImage(pngAvatar(char.url), null, Modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface))
                             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                                Text("Submitting As", style = MaterialTheme.typography.labelSmall); Text(saved.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+                                Text("提交身份", style = MaterialTheme.typography.labelSmall); Text(saved.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Sym.Lock, null, Modifier.size(12.dp)); Text(" Alias Secured", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) }
-                                Text("Forever locked to this device", fontSize = 9.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Sym.Lock, null, Modifier.size(12.dp)); Text(" 别名已锁定", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) }
+                                Text("永久绑定此设备", fontSize = 9.sp)
                             }
                         } else {
-                            Text("Choose Your Avatar", Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelLarge)
+                            Text("选择你的头像", Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelLarge)
                             LazyVerticalGrid(GridCells.Fixed(5), Modifier.heightIn(max = 160.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), userScrollEnabled = false) {
                                 itemsIndexed(CHARACTERS) { _, c ->
                                     val sel = c.id == char.id
@@ -563,33 +563,33 @@ fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                                 }
                             }
                             Text(char.name, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                            OutlinedTextField(name, { if (it.length <= 15) name = it }, Modifier.fillMaxWidth(), label = { Text("Your Alias (locked after first save)") }, placeholder = { Text("Captain Code") },
+                            OutlinedTextField(name, { if (it.length <= 15) name = it }, Modifier.fillMaxWidth(), label = { Text("你的别名（首次保存后锁定）") }, placeholder = { Text("代码船长") },
                                 singleLine = true, shape = RoundedCornerShape(16.dp), supportingText = { Text("${name.length}/15") })
                         }
                         Button({ submit(false) }, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp), enabled = name.isNotEmpty() && canSubmit, shapes = ButtonDefaults.shapes()) {
                             Icon(if (canSubmit) Sym.RocketLaunch else Sym.Lock, null); Spacer(Modifier.width(8.dp))
-                            Text(if (canSubmit) "Beam Me Up!" else "Need 5 Contributions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+                            Text(if (canSubmit) "送我上榜！" else "还需 5 次贡献", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
                         }
                         if (err.isNotEmpty()) Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                        if (s.isDevUnlocked) TextButton({ submit(true) }) { Icon(Sym.BugReport, null, Modifier.size(16.dp)); Text(" Simulate Protocol (Debug)") }
+                        if (s.isDevUnlocked) TextButton({ submit(true) }) { Icon(Sym.BugReport, null, Modifier.size(16.dp)); Text(" 模拟提交（调试）") }
                     }
                     "processing" -> {
                         Box(contentAlignment = Alignment.Center) { LoadingIndicator(Modifier.size(140.dp)); AsyncImage(pngAvatar(char.url), null, Modifier.size(64.dp).clip(CircleShape)) }
-                        Text("Warping to Multiverse...", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-                        Text("Writing to Global Ledger", color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace)
+                        Text("正在跃迁至多元宇宙…", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                        Text("正在写入全球账本", color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace)
                     }
                     "success" -> {
                         Icon(Sym.Verified, null, Modifier.size(72.dp), tint = Safe)
-                        Text("You're In!", style = MaterialTheme.typography.headlineMediumEmphasized)
-                        Text("${name.trim()} has been immortalized in the Hall of Fame.", textAlign = TextAlign.Center)
-                        Text("The leaderboard refreshes every 60 minutes. Check back soon!", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shapes = ButtonDefaults.shapes()) { Text("Return to Base") }
+                        Text("你上榜了！", style = MaterialTheme.typography.headlineMediumEmphasized)
+                        Text("${name.trim()} 已在名人堂留名。", textAlign = TextAlign.Center)
+                        Text("排行榜每 60 分钟刷新一次，稍后再来看看吧！", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shapes = ButtonDefaults.shapes()) { Text("返回基地") }
                     }
                     else -> {
                         Icon(Sym.WifiOff, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error)
-                        Text("Signal Lost", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                        Text("信号丢失", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
                         Text(err, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FilledTonalButton({ status = "idle" }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("Try Again") }
+                        FilledTonalButton({ status = "idle" }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("重试") }
                     }
                 }
                 Spacer(Modifier.height(8.dp))

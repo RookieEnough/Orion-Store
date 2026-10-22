@@ -41,17 +41,17 @@ object OrionAi {
     /** Cloud models get every catalog name (a few tokens each, same text every turn so providers cache it) and draw on what they
      *  know about those apps. On-device models have a small context, so they only see each message's local matches. */
     fun system(tv: Boolean, catalog: List<AppItem>, guide: List<Pair<String, String>>, full: Boolean) = buildString {
-        append("""You are Orion AI inside Orion Store, a free and open source Android app store with no ads. Help people find apps from the Orion catalog.
-- Mention every app you recommend with its catalog number in square brackets, like Metrolist [12]. For app requests suggest 3 to 5 apps, best first, a few words on each.
-- Recommend only apps ${if (full) "in the catalog below. \"Catalog matches\" in a message adds details for likely ones" else "from \"Catalog matches\" in the latest message"}. Never invent apps or numbers. If nothing fits, say so and suggest how to ask.
-- For questions about Orion itself (how to do something, where a setting is, what a feature does), answer from the Orion guide${if (full) " below" else " notes in the message"} in two or three sentences and mention the feature with its guide number, like Palette maker [g12], so the user can open it. Never invent features.
-- For greetings and small talk, answer in one sentence without apps.
-- Plain text only, no markdown, under 90 words.
-- About Orion: Android, PC and TV catalogs, auto-updates, Guardian and Sentinel security tools, backups, themes and palettes, XP and badges.
-- The user is on ${if (tv) "an Android TV, so prefer TV apps, then Android apps" else "an Android phone, so prefer Android apps"}. Suggest PC apps only when asked for PC or Windows software.""")
-        if (full) { append("\n\nOrion guide (number chapter / feature: what it does):\n"); guide.forEachIndexed { i, (t, b) -> append('g').append(i).append(' ').append(t).append(": ").append(b).append('\n') } }
-        if (!full) { append("\nCatalog categories: "); append(catalog.map { it.category }.filter { it.isNotBlank() }.distinct().sorted().joinToString(", ")); return@buildString }
-        append("\n\nCatalog (number name), grouped by platform and category:\n")
+        append("""你是 Orion Store 内置的 Orion AI。Orion Store 是一款免费开源、无广告的安卓应用商店。请帮助用户从 Orion 目录中查找应用。
+- 推荐的每个应用都要在方括号里标注目录编号，例如 Metrolist [12]。用户想要应用时推荐 3 到 5 款，好的排前面，每款附简短说明。
+- 只推荐${if (full) "下方目录中的应用。消息中的“目录匹配”会为可能的结果补充详情" else "最新消息中“目录匹配”里的应用"}。绝不要编造应用或编号。如果没有合适的，请如实说明并给出更好的提问建议。
+- 关于 Orion 本身的问题（怎么做某件事、某个设置在哪、某功能是什么），请根据${if (full) "下方" else "消息中的"}Orion 指南用两三句话回答，并带上编号提及该功能，例如 调色板制作器 [g12]，方便用户直接打开。绝不要编造功能。
+- 打招呼和闲聊时，用一句话回答，不提应用。
+- 只输出纯文本，不要 Markdown，控制在 90 字以内。
+- 关于 Orion：安卓、电脑和电视目录，自动更新，Guardian 与 Sentinel 安全工具，备份，主题与调色板，经验值与徽章。
+- 用户当前使用${if (tv) "的是安卓电视，请优先推荐电视应用，其次是安卓应用" else "的是安卓手机，请优先推荐安卓应用"}。只有用户明确要电脑或 Windows 软件时才推荐电脑应用。""")
+        if (full) { append("\n\nOrion 指南（编号 章节 / 功能：作用）：\n"); guide.forEachIndexed { i, (t, b) -> append('g').append(i).append(' ').append(t).append(": ").append(b).append('\n') } }
+        if (!full) { append("\n目录分类："); append(catalog.map { it.category }.filter { it.isNotBlank() }.distinct().sorted().joinToString(", ")); return@buildString }
+        append("\n\n目录（编号 名称），按平台和分类分组：\n")
         catalog.withIndex().groupBy { it.value.platform.ifBlank { "Android" } }.forEach { (platform, apps) ->
             append("\n# ").append(platform).append(" apps\n")
             apps.groupBy { it.value.category.ifBlank { "Other" } }.toSortedMap().forEach { (cat, list) ->
@@ -95,12 +95,12 @@ object OrionAi {
     }
 
     fun describe(catalog: List<AppItem>, ids: List<Int>, words: Int): String =
-        if (ids.isEmpty()) "Catalog matches: none for this message."
-        else "Catalog matches:\n" + ids.joinToString("\n") { i -> catalog[i].let { "$i ${it.name} (${it.category}, ${it.platform}): ${it.description.replace(Regex("\\s+"), " ").take(words)}" } }
+        if (ids.isEmpty()) "目录匹配：本条消息没有匹配的应用。"
+        else "目录匹配：\n" + ids.joinToString("\n") { i -> catalog[i].let { "$i ${it.name} (${it.category}, ${it.platform}): ${it.description.replace(Regex("\\s+"), " ").take(words)}" } }
 
     /** Streams one reply; [onText] gets the whole text so far after every chunk. Returns the final text. */
     suspend fun stream(p: AiProvider, key: String, model: String, base: String, system: String, turns: List<Turn>, onText: (String) -> Unit): String {
-        val m = model.ifBlank { p.model }.ifBlank { throw AiError("Pick a model in AI settings first.") }
+        val m = model.ifBlank { p.model }.ifBlank { throw AiError("请先在 AI 设置中选择模型。") }
         val acc = StringBuilder()
         fun add(s: String?) { if (!s.isNullOrEmpty()) { acc.append(s); onText(acc.toString()) } }
         when (p) {
@@ -147,7 +147,7 @@ object OrionAi {
                 }
             }
         }
-        return acc.toString().ifBlank { throw AiError("The provider sent an empty answer.") }
+        return acc.toString().ifBlank { throw AiError("服务商返回了空回答。") }
     }
 
     /** Models the key can use, for the picker in AI settings. */
@@ -163,7 +163,7 @@ object OrionAi {
         }.sorted()
     }
 
-    private fun root(p: AiProvider, base: String) = (if (p == AiProvider.CUSTOM) base.trim() else p.base).trimEnd('/').ifEmpty { throw AiError("Add the server address in AI settings.") }
+    private fun root(p: AiProvider, base: String) = (if (p == AiProvider.CUSTOM) base.trim() else p.base).trimEnd('/').ifEmpty { throw AiError("请在 AI 设置中填写服务器地址。") }
 
     private fun authed(p: AiProvider, key: String, b: Request.Builder) = b.apply {
         if (key.isNotBlank()) header("Authorization", "Bearer $key")
@@ -174,10 +174,10 @@ object OrionAi {
         val e = runCatching { json.parseToJsonElement(body).jsonObject["error"] }.getOrNull()
         val msg = (e as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull ?: (e as? JsonPrimitive)?.contentOrNull
         return AiError(when (code) {
-            401, 403 -> "The provider refused this key. Check it in AI settings."
-            404 -> if (model.isNotEmpty()) "The model $model was not found. Pick another one in AI settings." else "The provider address was not found."
-            429 -> "Rate limit or quota reached. Wait a moment, or check your plan with the provider."
-            else -> msg?.take(200) ?: "The provider answered with error $code."
+            401, 403 -> "服务商拒绝了此密钥，请在 AI 设置中检查。"
+            404 -> if (model.isNotEmpty()) "未找到模型 $model，请在 AI 设置中另选一个。" else "未找到服务商地址。"
+            429 -> "已达到速率限制或配额。请稍等，或向服务商确认你的套餐。"
+            else -> msg?.take(200) ?: "服务商返回错误 $code。"
         })
     }
 
@@ -185,9 +185,9 @@ object OrionAi {
         http.newCall(req).execute().use { r ->
             val text = r.body.string()
             if (!r.isSuccessful) throw fail(r.code, text, "")
-            runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: throw AiError("The provider sent something Orion could not read.")
+            runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: throw AiError("服务商返回了 Orion 无法读取的内容。")
         }
-    } catch (e: java.io.IOException) { throw AiError("Could not reach the provider. Check your connection.") }
+    } catch (e: java.io.IOException) { throw AiError("无法连接服务商，请检查网络。") }
 
     /** Server-sent events: each "data:" line is one JSON chunk. Cancelling the coroutine cancels the call, which is what Stop does. */
     private suspend fun sse(req: Request, model: String, onChunk: (JsonObject) -> Unit) = withContext(Dispatchers.IO) {
@@ -210,7 +210,7 @@ object OrionAi {
                 }
             }
         } catch (e: java.io.IOException) {
-            coroutineContext.ensureActive(); throw AiError("Could not reach the provider. Check your connection.")
+            coroutineContext.ensureActive(); throw AiError("无法连接服务商，请检查网络。")
         } finally { hook?.dispose() }
     }
 

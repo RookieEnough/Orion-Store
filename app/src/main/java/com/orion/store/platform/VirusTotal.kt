@@ -27,15 +27,15 @@ private const val VT = "https://www.virustotal.com/api/v3"
 
 private fun parseBody(b: String): JsonObject {
     if (b.isEmpty()) return JsonObject(emptyMap())
-    if (b.trimStart().startsWith("<")) throw Exception("VirusTotal returned an HTML page instead of JSON. This usually means the request was blocked by Cloudflare or the API is temporarily unavailable. Try again in a minute.")
-    return runCatching { json.parseToJsonElement(b).jsonObject }.getOrElse { throw Exception("VirusTotal returned an unexpected response. The API may be temporarily unavailable. Try again later.") }
+    if (b.trimStart().startsWith("<")) throw Exception("VirusTotal 返回了网页而不是 JSON，通常是请求被 Cloudflare 拦截或 API 暂时不可用，请稍后重试。")
+    return runCatching { json.parseToJsonElement(b).jsonObject }.getOrElse { throw Exception("VirusTotal 返回了异常响应，API 可能暂时不可用，请稍后重试。") }
 }
 
-private fun apiError(status: Int, fallback: String = "VirusTotal request failed.") = when {
-    status == 401 || status == 403 -> "API key rejected. Check the key and try again."
-    status == 404 -> "No VirusTotal report exists for this target yet."
-    status == 429 -> "VirusTotal quota reached. Free keys are commonly limited to 4 requests per minute."
-    status >= 500 -> "VirusTotal is having trouble right now. Try again later."
+private fun apiError(status: Int, fallback: String = "VirusTotal 请求失败。") = when {
+    status == 401 || status == 403 -> "API 密钥被拒绝，请检查密钥后重试。"
+    status == 404 -> "该目标还没有 VirusTotal 报告。"
+    status == 429 -> "已达到 VirusTotal 配额上限，免费密钥通常限制每分钟 4 次请求。"
+    status >= 500 -> "VirusTotal 服务当前异常，请稍后重试。"
     else -> fallback
 }
 
@@ -48,7 +48,7 @@ private fun engines(o: JsonObject) = o.map { (k, v) -> v.jsonObject.let { VtEngi
 /** Port of hooks/useVirusTotalScan.ts. Compose state so sheets observe it directly. */
 class VtScan(private val tracker: AppTracker, private val appId: String, private val appName: String, private val packageName: String?, apiKey: String) {
     var view by mutableStateOf(if (apiKey.isNotBlank()) VtView.READY else VtView.KEY)
-    var note by mutableStateOf("Preparing scan...")
+    var note by mutableStateOf("正在准备扫描…")
     var progress by mutableFloatStateOf(0f)
     var result by mutableStateOf<VtResult?>(null)
     var error by mutableStateOf("")
@@ -71,26 +71,26 @@ class VtScan(private val tracker: AppTracker, private val appId: String, private
 
     private suspend fun poll(id: String, key: String, hash: String): VtResult {
         repeat(18) { i ->
-            step(if (i == 0) "Waiting for engines..." else "Collecting engine verdicts...", minOf(94, 58 + i * 2))
+            step(if (i == 0) "等待引擎响应…" else "正在收集引擎判定…", minOf(94, 58 + i * 2))
             delay(if (i < 3) 5000 else 10000)
             val (s, b) = get("/analyses/$id", key)
-            if (s !in 200..299) throw Exception(apiError(s, "Analysis polling failed."))
+            if (s !in 200..299) throw Exception(apiError(s, "轮询扫描结果失败。"))
             val a = b.obj("data").obj("attributes")
             if (a.str("status") == "completed") return VtResult(ScanTargetType.APK, hash, stats(a.obj("stats")), engines(a.obj("results")), true, "https://www.virustotal.com/gui/file/$hash")
         }
-        throw Exception("VirusTotal is still analyzing this app. Try opening the VirusTotal report in a minute.")
+        throw Exception("VirusTotal 仍在分析该应用，请稍后打开 VirusTotal 报告查看。")
     }
 
     private suspend fun scanPath(path: String, key: String): VtResult {
-        step("Calculating SHA-256...", 18)
+        step("正在计算 SHA-256…", 18)
         val hash = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { tracker.hash(path) }
-        step("Checking existing VirusTotal report...", 34)
+        step("正在查询已有 VirusTotal 报告…", 34)
         report(hash, key)?.let { return it }
-        step("Uploading APK only because VirusTotal has no report...", 48)
+        step("VirusTotal 尚无报告，正在上传 APK…", 48)
         val (s, body) = tracker.vtUpload(path, key)
         val b = parseBody(body)
-        if (s !in 200..299) throw Exception(apiError(s, "Upload failed."))
-        val id = b.obj("data").str("id") ?: throw Exception("VirusTotal did not return an analysis id.")
+        if (s !in 200..299) throw Exception(apiError(s, "上传失败。"))
+        val id = b.obj("data").str("id") ?: throw Exception("VirusTotal 未返回分析 ID。")
         return poll(id, key, hash)
     }
 
@@ -103,7 +103,7 @@ class VtScan(private val tracker: AppTracker, private val appId: String, private
 
     private suspend fun downloadAndScan(url: String, key: String): VtResult {
         val name = tempName(url)
-        step("Downloading APK for file scan...", 8)
+        step("正在下载 APK 以供扫描…", 8)
         try {
             Downloads.start(url, name)
             run wait@{
@@ -111,34 +111,34 @@ class VtScan(private val tracker: AppTracker, private val appId: String, private
                     val d = Downloads.status(name)
                     progress = d.progress.coerceIn(8, 40) / 100f
                     if (d.status == DlStatus.SUCCESSFUL) return@wait
-                    if (d.status == DlStatus.FAILED) throw Exception("APK download failed before scanning.")
+                    if (d.status == DlStatus.FAILED) throw Exception("扫描前 APK 下载失败。")
                     delay(1000)
                 }
-                throw Exception("APK download took too long. Try again on a stronger connection.")
+                throw Exception("APK 下载耗时过长，请在网络更好时重试。")
             }
             return scanPath(tracker.resolve(name).absolutePath, key)
         } finally { Downloads.forget(name); runCatching { tracker.deleteFile(name) } }
     }
 
-    fun reset() { result = null; error = ""; progress = 0f; note = "Preparing scan..." }
+    fun reset() { result = null; error = ""; progress = 0f; note = "正在准备扫描…" }
 
     /** Returns the result, or null on error. [haptic] receives "success" | "warning" | "error". */
     suspend fun start(target: ScanTarget?, key: String, haptic: (String) -> Unit): VtResult? {
         val k = key.trim()
         if (k.isEmpty()) { view = VtView.KEY; return null }
-        if (target == null) { error = "No installed APK, downloaded APK, or direct APK file was found for this app."; view = VtView.ERROR; return null }
-        reset(); view = VtView.SCANNING; step("Starting VirusTotal scan...", 8)
+        if (target == null) { error = "未找到此应用的已安装 APK、已下载 APK 或直接 APK 文件。"; view = VtView.ERROR; return null }
+        reset(); view = VtView.SCANNING; step("正在开始 VirusTotal 扫描…", 8)
         return try {
             val r = when (target.type) {
-                ScanTargetType.APK -> scanPath(tracker.extractApk(packageName ?: throw Exception("No Android package is available for this scan target.")), k)
+                ScanTargetType.APK -> scanPath(tracker.extractApk(packageName ?: throw Exception("该扫描目标没有可用的 Android 包名。")), k)
                 ScanTargetType.DOWNLOADED_APK -> scanPath(tracker.resolve(target.detail).absolutePath, k)
                 ScanTargetType.REMOTE_APK -> downloadAndScan(target.detail, k).copy(type = ScanTargetType.REMOTE_APK)
             }.let { if (target.type == ScanTargetType.DOWNLOADED_APK) it.copy(type = target.type) else it }
-            step("Report ready.", 100); delay(350)
+            step("报告已就绪。", 100); delay(350)
             result = r; view = VtView.RESULTS
             haptic(if (r.stats.malicious + r.stats.suspicious >= 5) "warning" else "success"); r
         } catch (e: Exception) {
-            error = e.message ?: "VirusTotal scan failed."; view = VtView.ERROR; haptic("error"); null
+            error = e.message ?: "VirusTotal 扫描失败。"; view = VtView.ERROR; haptic("error"); null
         }
     }
 }
