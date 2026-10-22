@@ -23,8 +23,8 @@ enum class AiProvider(val id: String, val label: String, val base: String, val m
     GROQ("groq", "Groq", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "https://console.groq.com/keys", "gsk_..."),
     DEEPSEEK("deepseek", "DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat", "https://platform.deepseek.com/api_keys", "sk-..."),
     MISTRAL("mistral", "Mistral", "https://api.mistral.ai/v1", "mistral-small-latest", "https://console.mistral.ai/api-keys", "Mistral key"),
-    CUSTOM("custom", "Custom", "", "", "", "Key, if the server needs one"),
-    LOCAL("local", "On device", "", "", "", "");
+    CUSTOM("custom", "自定义", "", "", "", "服务器需要时填密钥"),
+    LOCAL("local", "本地模型", "", "", "", "");
 }
 
 class AiError(msg: String) : Exception(msg)
@@ -46,7 +46,7 @@ object OrionAi {
 - Recommend only apps ${if (full) "in the catalog below. \"Catalog matches\" in a message adds details for likely ones" else "from \"Catalog matches\" in the latest message"}. Never invent apps or numbers. If nothing fits, say so and suggest how to ask.
 - For questions about Orion itself (how to do something, where a setting is, what a feature does), answer from the Orion guide${if (full) " below" else " notes in the message"} in two or three sentences and mention the feature with its guide number, like Palette maker [g12], so the user can open it. Never invent features.
 - For greetings and small talk, answer in one sentence without apps.
-- Plain text only, no markdown, under 90 words.
+- Always respond in Simplified Chinese (简体中文), no matter which language the user types.\n- Plain text only, no markdown, under 90 words (Chinese characters).
 - About Orion: Android, PC and TV catalogs, auto-updates, Guardian and Sentinel security tools, backups, themes and palettes, XP and badges.
 - The user is on ${if (tv) "an Android TV, so prefer TV apps, then Android apps" else "an Android phone, so prefer Android apps"}. Suggest PC apps only when asked for PC or Windows software.""")
         if (full) { append("\n\nOrion guide (number chapter / feature: what it does):\n"); guide.forEachIndexed { i, (t, b) -> append('g').append(i).append(' ').append(t).append(": ").append(b).append('\n') } }
@@ -95,12 +95,12 @@ object OrionAi {
     }
 
     fun describe(catalog: List<AppItem>, ids: List<Int>, words: Int): String =
-        if (ids.isEmpty()) "Catalog matches: none for this message."
-        else "Catalog matches:\n" + ids.joinToString("\n") { i -> catalog[i].let { "$i ${it.name} (${it.category}, ${it.platform}): ${it.description.replace(Regex("\\s+"), " ").take(words)}" } }
+        if (ids.isEmpty()) "目录匹配：本条消息没有匹配项。"
+        else "目录匹配：\n" + ids.joinToString("\n") { i -> catalog[i].let { "$i ${it.name} (${it.category}, ${it.platform}): ${it.description.replace(Regex("\\s+"), " ").take(words)}" } }
 
     /** Streams one reply; [onText] gets the whole text so far after every chunk. Returns the final text. */
     suspend fun stream(p: AiProvider, key: String, model: String, base: String, system: String, turns: List<Turn>, onText: (String) -> Unit): String {
-        val m = model.ifBlank { p.model }.ifBlank { throw AiError("Pick a model in AI settings first.") }
+        val m = model.ifBlank { p.model }.ifBlank { throw AiError("请先在 AI 设置中选择模型。") }
         val acc = StringBuilder()
         fun add(s: String?) { if (!s.isNullOrEmpty()) { acc.append(s); onText(acc.toString()) } }
         when (p) {
@@ -147,7 +147,7 @@ object OrionAi {
                 }
             }
         }
-        return acc.toString().ifBlank { throw AiError("The provider sent an empty answer.") }
+        return acc.toString().ifBlank { throw AiError("服务商返回了空答复。") }
     }
 
     /** Models the key can use, for the picker in AI settings. */
@@ -163,7 +163,7 @@ object OrionAi {
         }.sorted()
     }
 
-    private fun root(p: AiProvider, base: String) = (if (p == AiProvider.CUSTOM) base.trim() else p.base).trimEnd('/').ifEmpty { throw AiError("Add the server address in AI settings.") }
+    private fun root(p: AiProvider, base: String) = (if (p == AiProvider.CUSTOM) base.trim() else p.base).trimEnd('/').ifEmpty { throw AiError("请填写服务器地址 in AI settings.") }
 
     private fun authed(p: AiProvider, key: String, b: Request.Builder) = b.apply {
         if (key.isNotBlank()) header("Authorization", "Bearer $key")
@@ -174,10 +174,10 @@ object OrionAi {
         val e = runCatching { json.parseToJsonElement(body).jsonObject["error"] }.getOrNull()
         val msg = (e as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull ?: (e as? JsonPrimitive)?.contentOrNull
         return AiError(when (code) {
-            401, 403 -> "The provider refused this key. Check it in AI settings."
-            404 -> if (model.isNotEmpty()) "The model $model was not found. Pick another one in AI settings." else "The provider address was not found."
-            429 -> "Rate limit or quota reached. Wait a moment, or check your plan with the provider."
-            else -> msg?.take(200) ?: "The provider answered with error $code."
+            401, 403 -> "服务商拒绝了这个密钥，请在 AI 设置中检查。"
+            404 -> if (model.isNotEmpty()) "未找到模型 $model，请在 AI 设置中换一个。" else "未找到服务商地址。"
+            429 -> "已达到速率或配额上限。请稍等，或向服务商确认你的套餐。"
+            else -> msg?.take(200) ?: "服务商返回错误 $code。"
         })
     }
 
@@ -185,9 +185,9 @@ object OrionAi {
         http.newCall(req).execute().use { r ->
             val text = r.body.string()
             if (!r.isSuccessful) throw fail(r.code, text, "")
-            runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: throw AiError("The provider sent something Orion could not read.")
+            runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: throw AiError("服务商返回了 Orion 无法解读的内容。")
         }
-    } catch (e: java.io.IOException) { throw AiError("Could not reach the provider. Check your connection.") }
+    } catch (e: java.io.IOException) { throw AiError("无法连接服务商，请检查网络。") }
 
     /** Server-sent events: each "data:" line is one JSON chunk. Cancelling the coroutine cancels the call, which is what Stop does. */
     private suspend fun sse(req: Request, model: String, onChunk: (JsonObject) -> Unit) = withContext(Dispatchers.IO) {
@@ -204,13 +204,13 @@ object OrionAi {
                     val d = line.substring(5).trim()
                     if (d == "[DONE]") break
                     runCatching { json.parseToJsonElement(d).jsonObject }.getOrNull()?.let { o ->
-                        o["error"]?.let { throw AiError((it as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull ?: "The provider stopped with an error.") }
+                        o["error"]?.let { throw AiError((it as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull ?: "服务商返回错误：er stopped with an error.") }
                         onChunk(o)
                     }
                 }
             }
         } catch (e: java.io.IOException) {
-            coroutineContext.ensureActive(); throw AiError("Could not reach the provider. Check your connection.")
+            coroutineContext.ensureActive(); throw AiError("无法连接服务商，请检查网络。")
         } finally { hook?.dispose() }
     }
 

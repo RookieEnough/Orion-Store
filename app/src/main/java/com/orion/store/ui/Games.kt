@@ -101,7 +101,7 @@ fun DinoGameSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
         Column(Modifier.weight(1f)) {
             Text("MINI GAME", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black)
             Text("Orion Run", style = MaterialTheme.typography.headlineSmallEmphasized)
-            Text("Play while the store is under maintenance.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("商店维护时来玩一局吧。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     DinoWeb(web, { status = it; if (it == "playing") { over = null; record = false } }, { score = it }, { sc ->
@@ -111,13 +111,13 @@ fun DinoGameSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
         vm.set { st ->
             var n = st.updateDinoHighScore(sc)
             if (xp > 0) n = n.addGameXP(xp.toDouble(), System.currentTimeMillis())
-            listOf(200L to "Dino Rookie", 600L to "Dino Master", 1500L to "Dino Legend").filter { hi >= it.first }.forEach { n = n.unlockBadge(it.second) }
+            listOf(200L to "恐龙新兵", 600L to "恐龙大师", 1500L to "恐龙传说").filter { hi >= it.first }.forEach { n = n.unlockBadge(it.second) }
             n
         }
         vm.haptic(if (record) H.SUCCESS else H.ERROR)
     }, Modifier.padding(16.dp).fillMaxWidth().height(160.dp).clip(RoundedCornerShape(24.dp)))
     Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("This Run" to "${over ?: score}", "All-Time HI" to "${maxOf(s.dinoHighScore, over ?: 0)}", "XP Earned" to "+${(over ?: 0) / 100}").forEach { (l, v) ->
+        listOf("本局得分" to "${over ?: score}", "历史最高" to "${maxOf(s.dinoHighScore, over ?: 0)}", "经验值" to "+${(over ?: 0) / 100}").forEach { (l, v) ->
             Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp)) {
                 Text(l, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(v, style = MaterialTheme.typography.titleLargeEmphasized, color = if (l == "XP Earned") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
@@ -129,9 +129,9 @@ fun DinoGameSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
     }
     Row(Modifier.padding(16.dp).navigationBarsPadding(), verticalAlignment = Alignment.CenterVertically) {
         Icon(Sym.PhoneAndroid, null, tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) { Text("Control", style = MaterialTheme.typography.labelLarge); Text("Action button or tap", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Column(Modifier.weight(1f)) { Text("操作", style = MaterialTheme.typography.labelLarge); Text("动作按钮或点按", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Button({ action(); vm.haptic(H.LIGHT) }, modifier = Modifier.heightIn(min = 56.dp), shapes = ButtonDefaults.shapes()) {
-            Text(when (status) { "crashed" -> "Restart"; "idle" -> "Play"; else -> "Jump" }, style = MaterialTheme.typography.titleMedium)
+            Text(when (status) { "crashed" -> "重新开始"; "idle" -> "开始"; else -> "跳一下" }, style = MaterialTheme.typography.titleMedium)
         }
     }
 }

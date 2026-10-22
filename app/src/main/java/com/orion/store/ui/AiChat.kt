@@ -106,7 +106,7 @@ class AiSession {
                 val turns = history.map { OrionAi.Turn(it.user, it.raw) } + OrionAi.Turn(true, q + "\n\n" + OrionAi.describe(catalog, ids, if (local) 60 else 110) +
                     if (local) OrionAi.guideMatches(GUIDE_TEXT, q, 3).joinToString("") { "\nOrion guide g$it ${GUIDE_TEXT[it].first}: ${GUIDE_TEXT[it].second}" } else "")
                 val show: (String) -> Unit = { t -> reply.text = OrionAi.parse(t).reply }
-                val raw = if (local) LocalLlm.chat(vm.getApplication(), LocalLlm.model(s.aiLocalModel) ?: throw AiError("Pick an on-device model in AI settings."), system, turns, show)
+                val raw = if (local) LocalLlm.chat(vm.getApplication(), LocalLlm.model(s.aiLocalModel) ?: throw AiError("请先在 AI 设置中选择一个本地模型。"), system, turns, show)
                     else OrionAi.stream(p, s.aiKeys[p.id].orEmpty(), s.aiModels[p.id].orEmpty(), s.aiBaseUrl, system, turns, show)
                 val ans = OrionAi.parse(raw)
                 reply.raw = raw; reply.text = ans.reply; reply.apps = ans.picks.mapNotNull { catalog.getOrNull(it) }.distinctBy { it.id }.take(6)
@@ -117,7 +117,7 @@ class AiSession {
                 throw e
             } catch (e: Exception) {
                 messages.remove(reply)
-                messages += AiMsg(false, (e as? AiError)?.message ?: "Something went wrong: ${e.message ?: e.javaClass.simpleName}", error = true)
+                messages += AiMsg(false, (e as? AiError)?.message ?: "出了点问题：${e.message ?: e.javaClass.simpleName}", error = true)
                 if (vm.s.aiSounds) AiSound.error(); vm.haptic(H.ERROR)
             } finally { busy = false }
         }
@@ -159,11 +159,11 @@ object AiSound {
 private val AI_SHAPES = listOf(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny, MaterialShapes.Clover4Leaf, MaterialShapes.Gem, MaterialShapes.Flower, MaterialShapes.SoftBurst)
 /** Starter prompts, a few per topic: one row of topics, three prompts for the picked one. */
 private val STARTERS = listOf(
-    Triple(Sym.MusicNote, "Music", listOf("Listen to music for free", "Download songs for offline", "A better YouTube Music")),
-    Triple(Sym.Movie, "Watch", listOf("Watch movies and shows", "YouTube without ads", "Stream anime")),
-    Triple(Sym.Shield, "Privacy", listOf("Block ads and trackers", "A private browser", "Secure messaging")),
-    Triple(Sym.SportsEsports, "Games", listOf("Play retro console games", "Games that work offline", "Emulate PlayStation games")),
-    Triple(Sym.Lightbulb, "Orion", listOf("How do I make my own palette?", "How do auto updates work?", "What can Guardian do?")),
+    Triple(Sym.MusicNote, "音乐", listOf("免费听音乐", "下载歌曲离线听", "更好的 YouTube Music")),
+    Triple(Sym.Movie, "影视", listOf("看电影和剧集", "无广告的 YouTube", "看动漫")),
+    Triple(Sym.Shield, "隐私", listOf("屏蔽广告和跟踪器", "注重隐私的浏览器", "安全通讯")),
+    Triple(Sym.SportsEsports, "游戏", listOf("玩复古主机游戏", "离线也能玩的游戏", "模拟 PlayStation 游戏")),
+    Triple(Sym.Lightbulb, "Orion", listOf("怎么制作自己的调色板？", "自动更新是怎么工作的？", "守护者能做什么？")),
 )
 private val AiTop @Composable get() = WindowInsets.statusBarsIgnoringVisibility.union(WindowInsets.displayCutout.only(WindowInsetsSides.Top))
 
@@ -190,25 +190,25 @@ fun AiScreen(vm: MainViewModel, onClose: () -> Unit) {
     val last = ai.messages.lastOrNull()?.text
     LaunchedEffect(ai.messages.size, last) { if (ai.messages.isNotEmpty()) list.animateScrollToItem(ai.messages.lastIndex) }
     fun send(t: String) { if (ready) { ai.send(vm, t); input = "" } else settings = true }
-    val label = when { p == AiProvider.LOCAL -> LocalLlm.model(s.aiLocalModel)?.name ?: "On device"; else -> "${p.label} · ${s.aiModels[p.id].orEmpty().ifBlank { p.model }}" }
+    val label = when { p == AiProvider.LOCAL -> LocalLlm.model(s.aiLocalModel)?.name ?: "本地模型"; else -> "${p.label} · ${s.aiModels[p.id].orEmpty().ifBlank { p.model }}" }
     Column(Modifier.fillMaxSize().background(cs.surface).windowInsetsPadding(AiTop).windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars).only(WindowInsetsSides.Bottom))) {
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             AiOrb(40.dp, ai.busy); Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("Orion AI", style = MaterialTheme.typography.titleLargeEmphasized)
-                Text(if (ready) label else "Not connected", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (ready) label else "未连接", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             AnimatedVisibility(ai.messages.isNotEmpty(), enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
-                IconButton({ vm.haptic(H.LIGHT); ai.clear() }) { Icon(Sym.RestartAlt, "New chat") }
+                IconButton({ vm.haptic(H.LIGHT); ai.clear() }) { Icon(Sym.RestartAlt, "新对话") }
             }
             IconButton({ settings = true }) { Icon(Sym.Tune, "AI settings") }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
-                !ready -> AiIntro("Connect an AI", "Use your own key from Gemini, ChatGPT, Claude and more, or download a model that runs right on this phone, even offline.") {
-                    CtaButton("Set up Orion AI", { settings = true }, Modifier.padding(horizontal = 28.dp).padding(top = 20.dp), icon = Sym.Key)
+                !ready -> AiIntro("连接一个 AI", "使用你自己的 Gemini、ChatGPT、Claude 等密钥，或下载一个直接跑在这台手机上的模型，离线也能用。") {
+                    CtaButton("设置 Orion AI", { settings = true }, Modifier.padding(horizontal = 28.dp).padding(top = 20.dp), icon = Sym.Key)
                 }
-                ai.messages.isEmpty() -> AiIntro("Ask for any app", "Describe what you need, or ask anything about Orion.") {
+                ai.messages.isEmpty() -> AiIntro("找任何应用", "描述你的需求，或随便问点关于 Orion 的事。") {
                     Starters { send(it) }
                 }
                 else -> LazyColumn(Modifier.fillMaxSize(), list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -282,7 +282,7 @@ private fun AiBubble(vm: MainViewModel, m: AiMsg) = Row(Modifier.fillMaxWidth())
             if (m.text.isEmpty()) Waiting()
             else Text(m.text, style = MaterialTheme.typography.bodyLarge, color = if (m.error) cs.onErrorContainer else cs.onSurface)
         }
-        if (m.stopped) Text("Stopped", Modifier.padding(start = 12.dp, top = 4.dp), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+        if (m.stopped) Text("已停止", Modifier.padding(start = 12.dp, top = 4.dp), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
         // Features Orion AI pointed at, one tap away: the chat closes and the screen or setting opens
         AnimatedVisibility(m.features.isNotEmpty()) {
             FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -311,7 +311,7 @@ private fun Waiting() = Row(verticalAlignment = Alignment.CenterVertically) {
     }
 }
 
-private val WAITING = listOf("Looking through the catalog", "Matching apps", "Reading descriptions", "Picking the best ones", "Almost there")
+private val WAITING = listOf("正在翻目录", "正在匹配应用", "正在读简介", "正在挑最合适的", "马上就好")
 
 @Composable
 private fun AiAppCard(vm: MainViewModel, app: AppItem, i: Int, n: Int) {
@@ -337,14 +337,14 @@ private fun AiAction(vm: MainViewModel, app: AppItem) {
         CardState.DOWNLOADING -> CircularWavyProgressIndicator(Modifier.size(36.dp))
         CardState.INSTALLED -> FilledTonalButton({
             runCatching { vm.tracker.launch(s.resolvedPackageNames[app.id] ?: app.packageName.orEmpty()) }.onFailure { vm.selectApp(app, "ai") }
-        }, shapes = ButtonDefaults.shapes(), contentPadding = pad) { Text("Open") }
-        CardState.READY -> Button({ vm.download(app) }, shapes = ButtonDefaults.shapes(), contentPadding = pad) { Text("Install") }
-        CardState.UPDATE -> Button({ vm.download(app) }, shapes = ButtonDefaults.shapes(), contentPadding = pad) { Text("Update") }
+        }, shapes = ButtonDefaults.shapes(), contentPadding = pad) { Text("打开") }
+        CardState.READY -> Button({ vm.download(app) }, shapes = ButtonDefaults.shapes(), contentPadding = pad) { Text("安装") }
+        CardState.UPDATE -> Button({ vm.download(app) }, shapes = ButtonDefaults.shapes(), contentPadding = pad) { Text("更新") }
         else -> {
             val url = app.variants.firstOrNull()?.url ?: app.downloadUrl
             val direct = app.installsHere() && app.variants.size <= 1 && url.isNotEmpty() && url != "#" && app.id !in Defaults.MICROG_DEPENDENT_APPS
             if (direct) Button({ vm.download(app) }, shapes = ButtonDefaults.shapes(), contentPadding = pad) { Icon(Sym.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Get") }
-            else FilledTonalButton({ vm.selectApp(app, "ai") }, shapes = ButtonDefaults.shapes(), contentPadding = pad) { Text("View") }
+            else FilledTonalButton({ vm.selectApp(app, "ai") }, shapes = ButtonDefaults.shapes(), contentPadding = pad) { Text("查看") }
         }
     }
 }
@@ -357,12 +357,12 @@ private fun AiInput(text: String, onText: (String) -> Unit, busy: Boolean, onSto
         BasicTextField(text, onText, Modifier.weight(1f).heightIn(min = 56.dp).clip(RoundedCornerShape(28.dp)).background(cs.surfaceContainerHigh).padding(horizontal = 20.dp, vertical = 16.dp),
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface), cursorBrush = SolidColor(cs.primary), maxLines = 5,
             keyboardOptions = KeyboardOptions(KeyboardCapitalization.Sentences, imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { if (!busy && text.isNotBlank()) onSend() }),
-            decorationBox = { f -> Box { if (text.isEmpty()) Text("Describe the app you need", style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant); f() } })
+            decorationBox = { f -> Box { if (text.isEmpty()) Text("描述你想要的应用", style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant); f() } })
         Spacer(Modifier.width(8.dp))
         FilledIconButton({ if (busy) { vm.haptic(H.LIGHT); onStop() } else onSend() }, modifier = Modifier.size(56.dp), enabled = busy || text.isNotBlank(), shapes = IconButtonDefaults.shapes(),
             colors = if (busy) IconButtonDefaults.filledIconButtonColors(containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) else IconButtonDefaults.filledIconButtonColors()) {
             AnimatedContent(busy, label = "send") { b ->
-                if (b) Box(Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(LocalContentColor.current)) else Icon(Sym.ArrowUpward, "Send")
+                if (b) Box(Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(LocalContentColor.current)) else Icon(Sym.ArrowUpward, "发送")
             }
         }
     }
@@ -382,24 +382,24 @@ fun AiSettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
     var reveal by remember { mutableStateOf(false) }
     var models by remember(prov) { mutableStateOf<List<String>?>(null) }; var loading by remember { mutableStateOf(false) }; var err by remember(prov) { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SheetTitle("AI settings", Sym.Key, "Keys stay on this device and only go to the provider you pick")
+        SheetTitle("AI 设置", Sym.Key, "密钥只保存在本机，只发给你选择的服务商")
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ProviderPicker(p) { prov = it.id }
             if (p == AiProvider.LOCAL) LocalModels(local) { local = it }
             else {
-                if (p == AiProvider.CUSTOM) OutlinedTextField(base, { base = it.trim() }, Modifier.fillMaxWidth(), label = { Text("Server address") },
-                    placeholder = { Text("https://example.com/v1") }, supportingText = { Text("Any server that speaks the OpenAI chat format") }, singleLine = true, shape = RoundedCornerShape(20.dp))
-                OutlinedTextField(key, { key = it.trim() }, Modifier.fillMaxWidth(), label = { Text("API key") }, placeholder = { Text(p.keyHint) }, singleLine = true,
+                if (p == AiProvider.CUSTOM) OutlinedTextField(base, { base = it.trim() }, Modifier.fillMaxWidth(), label = { Text("服务器地址") },
+                    placeholder = { Text("https://example.com/v1") }, supportingText = { Text("任何兼容 OpenAI 对话格式的服务器") }, singleLine = true, shape = RoundedCornerShape(20.dp))
+                OutlinedTextField(key, { key = it.trim() }, Modifier.fillMaxWidth(), label = { Text("API 密钥") }, placeholder = { Text(p.keyHint) }, singleLine = true,
                     shape = RoundedCornerShape(20.dp), visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = { IconButton({ reveal = !reveal }) { Icon(if (reveal) Sym.VisibilityOff else Sym.Visibility, if (reveal) "Hide key" else "Show key") } })
-                if (p.keyUrl.isNotEmpty()) TextButton({ vm.tracker.open(p.keyUrl) }) { Icon(Sym.OpenInNew, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Get a ${p.label} key") }
-                OutlinedTextField(model, { model = it.trim() }, Modifier.fillMaxWidth(), label = { Text("Model") }, placeholder = { Text(p.model.ifEmpty { "Model name" }) }, singleLine = true,
-                    shape = RoundedCornerShape(20.dp), supportingText = { Text(if (p.model.isNotEmpty()) "Leave empty for ${p.model}" else "The model name your server uses") },
+                    trailingIcon = { IconButton({ reveal = !reveal }) { Icon(if (reveal) Sym.VisibilityOff else Sym.Visibility, if (reveal) "隐藏密钥" else "显示密钥") } })
+                if (p.keyUrl.isNotEmpty()) TextButton({ vm.tracker.open(p.keyUrl) }) { Icon(Sym.OpenInNew, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("获取 ${p.label} key") }
+                OutlinedTextField(model, { model = it.trim() }, Modifier.fillMaxWidth(), label = { Text("模型") }, placeholder = { Text(p.model.ifEmpty { "模型名称" }) }, singleLine = true,
+                    shape = RoundedCornerShape(20.dp), supportingText = { Text(if (p.model.isNotEmpty()) "留空即使用 ${p.model}" else "你的服务器所用的模型名称") },
                     trailingIcon = {
                         IconButton({
                             loading = true; err = null
-                            scope.launch { runCatching { OrionAi.models(p, key, base) }.onSuccess { models = it; if (it.isEmpty()) err = "No chat models came back for this key." }.onFailure { err = it.message }; loading = false }
-                        }, enabled = !loading && (key.isNotBlank() || p == AiProvider.CUSTOM)) { if (loading) LoadingIndicator(Modifier.size(24.dp)) else Icon(Sym.FilterList, "Browse models") }
+                            scope.launch { runCatching { OrionAi.models(p, key, base) }.onSuccess { models = it; if (it.isEmpty()) err = "这个密钥没有返回任何对话模型。" }.onFailure { err = it.message }; loading = false }
+                        }, enabled = !loading && (key.isNotBlank() || p == AiProvider.CUSTOM)) { if (loading) LoadingIndicator(Modifier.size(24.dp)) else Icon(Sym.FilterList, "浏览模型") }
                     })
                 err?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = cs.error) }
                 models?.takeIf { it.isNotEmpty() }?.let { list ->
@@ -414,12 +414,12 @@ fun AiSettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(cs.surfaceContainer).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TonalIcon(if (sounds) Sym.Notifications else Sym.NotificationsOff, cs.primary); Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Sound effects", style = MaterialTheme.typography.titleMedium)
-                    Text("Little chimes when you send and get replies", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                    Text("音效", style = MaterialTheme.typography.titleMedium)
+                    Text("发送和收到回复时的清脆提示音", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 }
                 Switch(sounds, { sounds = it; vm.haptic(H.SELECTION); if (it) AiSound.receive() })
             }
-            CtaButton("Save", {
+            CtaButton("保存", {
                 vm.set { st ->
                     st.copy(aiProvider = prov, aiKeys = if (key.isBlank()) st.aiKeys - prov else st.aiKeys + (prov to key),
                         aiModels = if (model.isBlank()) st.aiModels - prov else st.aiModels + (prov to model), aiBaseUrl = base, aiLocalModel = local, aiSounds = sounds)
@@ -431,9 +431,9 @@ fun AiSettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
 }
 
 private val CLOUD = AiProvider.entries - AiProvider.LOCAL
-private val PROVIDER_NOTES = mapOf(AiProvider.GEMINI to "Free tier available", AiProvider.OPENAI to "GPT models", AiProvider.CLAUDE to "Claude models",
-    AiProvider.OPENROUTER to "Hundreds of models, one key", AiProvider.GROQ to "Very fast replies", AiProvider.DEEPSEEK to "Low cost",
-    AiProvider.MISTRAL to "Made in Europe", AiProvider.CUSTOM to "Any OpenAI-compatible server")
+private val PROVIDER_NOTES = mapOf(AiProvider.GEMINI to "有免费额度", AiProvider.OPENAI to "GPT 系列模型", AiProvider.CLAUDE to "Claude 系列模型",
+    AiProvider.OPENROUTER to "一个密钥、数百种模型", AiProvider.GROQ to "响应极快", AiProvider.DEEPSEEK to "低成本",
+    AiProvider.MISTRAL to "来自欧洲", AiProvider.CUSTOM to "任意 OpenAI 兼容服务器")
 
 /** Where Orion AI runs: two big choices, then one clean dropdown for the cloud provider. */
 @Composable
@@ -442,7 +442,7 @@ private fun ProviderPicker(p: AiProvider, onPick: (AiProvider) -> Unit) {
     var lastCloud by rememberSaveable { mutableStateOf(if (local) AiProvider.GEMINI.id else p.id) }
     var open by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(false to (Sym.Cloud to "Cloud"), true to (Sym.PhoneAndroid to "On device")).forEach { (dev, look) ->
+        listOf(false to (Sym.Cloud to "云端"), true to (Sym.PhoneAndroid to "本地")).forEach { (dev, look) ->
             val on = local == dev
             ToggleButton(on, { if (dev) onPick(AiProvider.LOCAL) else onPick(OrionAi.provider(lastCloud)) }, Modifier.weight(1f).heightIn(min = 52.dp),
                 shapes = ToggleButtonDefaults.shapesFor(52.dp)) {
@@ -452,7 +452,7 @@ private fun ProviderPicker(p: AiProvider, onPick: (AiProvider) -> Unit) {
     }
     if (!local) ExposedDropdownMenuBox(open, { open = it }) {
         OutlinedTextField(p.label, {}, Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable), readOnly = true, singleLine = true,
-            label = { Text("Provider") }, supportingText = { Text(PROVIDER_NOTES[p].orEmpty()) }, shape = RoundedCornerShape(20.dp),
+            label = { Text("服务商") }, supportingText = { Text(PROVIDER_NOTES[p].orEmpty()) }, shape = RoundedCornerShape(20.dp),
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) })
         ExposedDropdownMenu(open, { open = false }, shape = RoundedCornerShape(20.dp), containerColor = cs.surfaceContainerHigh) {
             CLOUD.forEach { e ->
@@ -472,12 +472,12 @@ private fun LocalModels(picked: String, onPick: (String) -> Unit) {
     val dl by Downloads.state.collectAsState()
     var tick by remember { mutableIntStateOf(0) }
     val free = remember(dl, tick) { LocalLlm.freeMb() }
-    Text(if (LocalLlm.supported) "This phone: $ram GB of memory, ${"%.1f".format(free / 1000.0)} GB free. Models run offline once downloaded. Answers are quicker on bigger phones and simpler than cloud models."
+    Text(if (LocalLlm.supported) "这台手机：内存 $ram GB，可用 ${"%.1f".format(free / 1000.0)} GB。模型下载后可离线运行。手机越好回答越快，效果比云端模型简单一些。"
         else "On-device models need a 64-bit ARM phone. Pick a cloud provider instead.", style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
     if (!LocalLlm.supported) return
     val order = remember(best) { listOf(best) + (LocalLlm.MODELS - best) }
     val engine = remember(dl, tick) { LocalLlm.engineReady(ctx) }
-    if (!engine && dl[LocalLlm.ENGINE_FILE]?.status == DlStatus.RUNNING) Text("Getting the on-device engine first (${LocalLlm.ENGINE_MB} MB) · ${dl[LocalLlm.ENGINE_FILE]?.progress ?: 0}%",
+    if (!engine && dl[LocalLlm.ENGINE_FILE]?.status == DlStatus.RUNNING) Text("先获取本地引擎（${LocalLlm.ENGINE_MB} MB） · ${dl[LocalLlm.ENGINE_FILE]?.progress ?: 0}%",
         style = MaterialTheme.typography.labelMedium, color = cs.primary)
     order.forEachIndexed { i, m ->
         val state = dl[m.fileName]; val running = state?.status == DlStatus.RUNNING
@@ -503,7 +503,7 @@ private fun LocalModels(picked: String, onPick: (String) -> Unit) {
                         IconButton({ LocalLlm.delete(m); if (picked == m.id) onPick(""); tick++; vm.haptic(H.WARNING) }) { Icon(Sym.DeleteOutline, "Delete ${m.name}") }
                     }
                     else -> FilledTonalButton({
-                        runCatching { LocalLlm.download(ctx, m); if (picked.isEmpty()) onPick(m.id); vm.haptic(H.MEDIUM) }.onFailure { vm.error("Download could not start.") }
+                        runCatching { LocalLlm.download(ctx, m); if (picked.isEmpty()) onPick(m.id); vm.haptic(H.MEDIUM) }.onFailure { vm.error("下载失败：无法开始。") }
                     }, enabled = m.mb + 200 < free, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) {
                         Icon(Sym.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (state?.status == DlStatus.FAILED) "Retry" else "Get")
                     }

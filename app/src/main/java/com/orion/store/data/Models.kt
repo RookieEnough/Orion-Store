@@ -14,8 +14,8 @@ object Device { @Volatile var isTv = false }
 fun AppItem.installsHere() = platform == Platform.ANDROID || (platform == Platform.TV && Device.isTv)
 
 enum class SortOption(val label: String) {
-    HOME("Home Page"), NEWEST("Recently Added"), OLDEST("Oldest Added"), NAME_ASC("Name (A-Z)"),
-    NAME_DESC("Name (Z-A)"), SIZE_ASC("Size (Smallest)"), SIZE_DESC("Size (Largest)")
+    HOME("首页"), NEWEST("最新添加"), OLDEST("最早添加"), NAME_ASC("名称 (A-Z)"),
+    NAME_DESC("名称 (Z-A)"), SIZE_ASC("大小 (从小到大)"), SIZE_DESC("大小 (从大到小)")
 }
 
 enum class Tab(val platform: String?) { ANDROID(Platform.ANDROID), PC(Platform.PC), TV(Platform.TV), MYAPPS(null), ABOUT(null), UPDATES(null) }
@@ -129,14 +129,14 @@ object Defaults {
     )
     val PTR_CHARACTERS = listOf("cat", "dog", "pokeball", "shield", "owl", "robot", "ghost", "kitty", "bunny", "batman")
     val FAQS = listOf(
-        FAQItem("Why do scanner apps say Orion has trackers?", "Scanner apps like AppManager flag the Unity Ads SDK inside Orion. That SDK exists for exactly one feature: the optional ad-watching in the About tab (Fuel the Code), where watching ads supports me and earns you XP and unlocks badges. No analytics, no data mining, no data selling. The app is open source so anyone can verify it, and ads are 100% optional with nothing running in the background.", "fa-magnifying-glass"),
-        FAQItem("Is Orion Store safe?", "Absolutely. Orion Store is completely open-source. This means our code is public on GitHub for anyone to audit. We believe in transparency: no hidden trackers, no data mining, just a clean gateway to apps.", "fa-shield-cat"),
-        FAQItem("Are apps on Orion safe?", "Yes. I personally review and mod them using tools available on their official repositories to ensure they are safe, functional, and privacy-respecting before they land here.", "fa-check-double"),
-        FAQItem("Are ReVanced builds safe?", "Yes. These builds are automated via GitHub Actions bots, not manually patched. They use the official ReVanced CLI and patches on APKs sourced from APKMirror, Uptodown, and APKPure. The process runs daily at 6 AM. The entire build pipeline is transparent and open-source: https://github.com/RookieEnough/Revanced-AutoBuilds", "fa-robot"),
-        FAQItem("Installation failed?", "If you see 'App not installed' or 'Package conflicts', it's likely a signature mismatch. You cannot install a modded app over the original Play Store version or a different mod. Uninstall the existing app first, then install the one from Orion.", "fa-file-signature"),
-        FAQItem("Download not working?", "Don't panic! Just head to the app's detail page and click the 'Report' icon (⚠️) in the top right corner. It will pre-fill an email so I can fix it ASAP.", "fa-bug"),
-        FAQItem("Will there be more apps?", "Yes, if there'll be more interesting apps to add on. As long as I find open-source or useful tools that deserve a spotlight, the library will keep growing.", "fa-layer-group"),
-        FAQItem("How can I support?", "By donation through ko-fi. Code fuels the store, but coffee fuels the dev! You can find the link in the socials section.", "fa-heart"),
-        FAQItem("Is there any hidden easter egg?", "Where the Architect stares, the secret sleeps.\n\nCount the legs of a spider. Count the vertices of a cube.\n\nStrike the Visage that many times.\n\nThe Golden Truth awaits those who know the rules... and so do I.", "fa-user-secret"),
+        FAQItem("为什么扫描类应用说 Orion 有跟踪器？", "AppManager 等扫描应用会标记 Orion 内置的 Unity Ads SDK。该 SDK 只为一个功能存在：「关于」页里的可选看广告（为代码加油），看广告可以支持我，还能为你赚取经验值并解锁徽章。没有分析统计，没有数据挖掘，不出售数据。应用完全开源，任何人都可以验证；广告 100% 可选，后台不会有任何东西运行。", "fa-magnifying-glass"),
+        FAQItem("Orion Store 安全吗？", "当然。Orion Store 完全开源，代码公开在 GitHub 上供任何人审查。我们坚持透明：没有隐藏跟踪器，没有数据挖掘，只是一个干净的应用入口。", "fa-shield-cat"),
+        FAQItem("Orion 上的应用安全吗？", "安全。每个应用上架前，我都会使用其官方仓库提供的工具亲自审查和修改，确保安全、可用且尊重隐私。", "fa-check-double"),
+        FAQItem("ReVanced 构建版安全吗？", "安全。这些构建由 GitHub Actions 机器人自动完成，并非人工打补丁。它们使用官方 ReVanced CLI 和补丁，作用于来自 APKMirror、Uptodown 和 APKPure 的 APK。整个流程每天早上 6 点运行，构建管线完全透明开源：https://github.com/RookieEnough/Revanced-AutoBuilds", "fa-robot"),
+        FAQItem("安装失败？", "如果看到“应用未安装”或“软件包冲突”，多半是签名不一致：修改版应用不能直接覆盖安装官方 Play 商店版本或另一个修改版。请先卸载已有的应用，再从 Orion 安装。", "fa-file-signature"),
+        FAQItem("下载不了？", "别慌！前往该应用的详情页，点击右上角的“反馈”图标（⚠️），会自动预填一封邮件，方便我尽快修复。", "fa-bug"),
+        FAQItem("以后会有更多应用吗？", "会的，只要还有值得推荐的开源或实用工具被发现，应用库就会持续扩充。", "fa-layer-group"),
+        FAQItem("如何支持 Orion？", "可以通过 ko-fi 捐赠。代码支撑着商店，咖啡支撑着开发者！链接在社交板块里。", "fa-heart"),
+        FAQItem("有隐藏彩蛋吗？", "建造者凝视之处，秘密沉睡。\n\n数一数蜘蛛的腿，数一数立方体的角。\n\n用同样的次数，敲击那张面孔。\n\n黄金真相等待懂得规则的人……我也一样。", "fa-user-secret"),
     )
 }

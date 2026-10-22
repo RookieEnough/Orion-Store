@@ -87,9 +87,9 @@ fun SheetToastHost(t: SheetToast) {
 }
 
 @Composable
-fun ConfirmDialog(msg: String?, confirm: String = "Confirm", onConfirm: () -> Unit, onDismiss: () -> Unit) {
+fun ConfirmDialog(msg: String?, confirm: String = "确认", onConfirm: () -> Unit, onDismiss: () -> Unit) {
     if (msg != null) AlertDialog(onDismiss, confirmButton = { TextButton({ onDismiss(); onConfirm() }) { Text(confirm) } },
-        dismissButton = { TextButton(onDismiss) { Text("Cancel") } }, icon = { Icon(Sym.WarningAmber, null) }, text = { Text(msg) })
+        dismissButton = { TextButton(onDismiss) { Text("取消") } }, icon = { Icon(Sym.WarningAmber, null) }, text = { Text(msg) })
 }
 
 @Composable
@@ -114,8 +114,8 @@ fun PkgIcon(tracker: AppTracker, pkg: String, size: Int = 44) {
 
 // ---------------- Guardian (ShizukuPowerModal) ----------------
 
-private val LOADING_TEXTS = listOf("Waking up the hamsters...", "Consulting the Oracle...", "Decrypting Matrix code...", "Bribing the CPU...", "Sweeping for bugs...",
-    "Loading magic spells...", "Summoning daemons...", "Calculating pi...", "Charging flux capacitor...", "Reticulating splines...", "Checking gravity settings...", "Polishing pixels...")
+private val LOADING_TEXTS = listOf("正在叫醒仓鼠…", "正在请教先知…", "正在解密矩阵代码…", "正在贿赂 CPU…", "正在清剿 Bug…",
+    "正在加载魔法咒语…", "正在召唤守护进程…", "正在计算圆周率…", "正在给时间机器充电…", "正在铺设样条曲线…", "正在检查重力设置…", "正在抛光像素…")
 private const val UAD_URL = "https://raw.githubusercontent.com/0x192/universal-android-debloater/main/resources/assets/uad_lists.json"
 
 private data class Risk(val label: String, val color: Color)
@@ -158,42 +158,42 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
     suspend fun fetchApps() {
         loading = true
         try { tracker.riskyApps().sortedByDescending { it.permissions.size }.let { apps = it; dCache = it } }
-        catch (e: Exception) { error = e.message ?: "Failed to scan packages." } finally { loading = false }
+        catch (e: Exception) { error = e.message ?: "扫描应用包失败。" } finally { loading = false }
     }
     suspend fun fetchSystemApps() {
         loading = true
         try { tracker.systemApps().sortedWith(compareBy<SysApp> { it.isInstalled }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }).filter { it.isSystem }.let { sysApps = it; sCache = it } }
-        catch (e: Exception) { error = e.message ?: "Failed to fetch system apps." } finally { loading = false }
+        catch (e: Exception) { error = e.message ?: "获取系统应用失败。" } finally { loading = false }
     }
 
     LaunchedEffect(tab, accepted) {
         if (tab == "debloater") {
-            if (uad.isEmpty()) launch { runCatching { parseUad(Net.text(UAD_URL)) }.onSuccess { uad = it }.onFailure { toast.show("Failed to load debloat database", true) } }
+            if (uad.isEmpty()) launch { runCatching { parseUad(Net.text(UAD_URL)) }.onSuccess { uad = it }.onFailure { toast.show("精简数据库加载失败", true) } }
             if (accepted) sCache?.let { sysApps = it; loading = false } ?: fetchSystemApps()
         } else dCache?.let { apps = it; loading = false } ?: fetchApps()
     }
     LaunchedEffect(loading) { while (loading) { delay(1500); msgIdx = (msgIdx + 1) % LOADING_TEXTS.size } }
 
-    fun copy(pkg: String) = runCatching { clip.setText(AnnotatedString(pkg)); vm.haptic(H.SELECTION) }.onFailure { toast.show("Failed to copy", true) }
+    fun copy(pkg: String) = runCatching { clip.setText(AnnotatedString(pkg)); vm.haptic(H.SELECTION) }.onFailure { toast.show("复制失败", true) }
 
-    fun revoke(pkg: String, perm: String) = ask("Revoke ${cleanPermName(perm)}? App might crash.") {
+    fun revoke(pkg: String, perm: String) = ask("撤销 ${cleanPermName(perm)}？应用可能会崩溃。") {
         processing = pkg
-        try { tracker.requestElevated(); tracker.revokePermission(pkg, perm); vm.haptic(H.SUCCESS); toast.show("Permission Revoked"); dCache = null; delay(500); fetchApps() }
-        catch (e: Exception) { toast.show(e.message ?: "Revoke Failed", true) } finally { processing = null }
+        try { tracker.requestElevated(); tracker.revokePermission(pkg, perm); vm.haptic(H.SUCCESS); toast.show("权限已撤销"); dCache = null; delay(500); fetchApps() }
+        catch (e: Exception) { toast.show(e.message ?: "撤销失败", true) } finally { processing = null }
     }
 
     fun extract(pkg: String) = scope.launch {
         processing = pkg
-        try { toast.show("Extracted: ${tracker.extractApk(pkg).substringAfterLast('/')}") }
-        catch (e: Exception) { toast.show(e.message ?: "Extraction Failed", true) } finally { processing = null }
+        try { toast.show("已提取：${tracker.extractApk(pkg).substringAfterLast('/')}") }
+        catch (e: Exception) { toast.show(e.message ?: "提取失败", true) } finally { processing = null }
     }
 
     fun toggle(a: SysApp) {
-        val warn = when (debloatRisk(uad[a.packageName]).label) { "Unsafe" -> "⚠️ DANGER: Critical System App. Bootloop likely!"; "Expert", "Advanced" -> "⚠️ Caution: May break features."; else -> "" }
-        ask("${if (a.isInstalled) "Uninstall" else "Restore"} ${a.name}? $warn".trim()) {
+        val warn = when (debloatRisk(uad[a.packageName]).label) { "Unsafe" -> "⚠️ 危险：关键系统应用，很可能导致循环重启！"; "Expert", "Advanced" -> "⚠️ 谨慎：可能破坏部分功能。"; else -> "" }
+        ask("${if (a.isInstalled) "卸载" else "还原"}「${a.name}」？$warn".trim()) {
             processing = a.packageName
-            try { tracker.toggleSystemApp(a.packageName, !a.isInstalled); toast.show(if (a.isInstalled) "Uninstalled (User 0)" else "Restored"); sCache = null; delay(800); fetchSystemApps() }
-            catch (e: Exception) { toast.show(e.message ?: "Operation Failed", true) } finally { processing = null }
+            try { tracker.toggleSystemApp(a.packageName, !a.isInstalled); toast.show(if (a.isInstalled) "已卸载（User 0）" else "已还原"); sCache = null; delay(800); fetchSystemApps() }
+            catch (e: Exception) { toast.show(e.message ?: "操作失败", true) } finally { processing = null }
         }
     }
 
@@ -202,9 +202,9 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
     LaunchedEffect(Unit) { while (true) { delay(2000); shizuku = tracker.elevatedReady() } }
     data class Mode(val id: String, val label: String, val icon: ImageVector, val blurb: String, val shape: RoundedPolygon)
     val modes = listOf(
-        Mode("permissions", "Perms", Sym.Security, "Spot and revoke risky permissions", MaterialShapes.Cookie9Sided),
-        Mode("surgeon", "Surgeon", Sym.MedicalServices, "Pull the APK out of any app", MaterialShapes.Clover4Leaf),
-        Mode("debloater", "Debloat", Sym.DeleteSweep, "Remove system apps, reversibly", MaterialShapes.SoftBurst),
+        Mode("permissions", "权限管家", Sym.Security, "找出并撤销高危权限", MaterialShapes.Cookie9Sided),
+        Mode("surgeon", "APK 外科医生", Sym.MedicalServices, "从任意应用中提取 APK", MaterialShapes.Clover4Leaf),
+        Mode("debloater", "系统精简", Sym.DeleteSweep, "可逆地移除系统应用", MaterialShapes.SoftBurst),
     )
     val mi = modes.indexOfFirst { it.id == tab }.coerceAtLeast(0); val mode = modes[mi]
 
@@ -220,7 +220,7 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
         Surface(shape = Pill, color = if (shizuku) cs.tertiaryContainer else cs.errorContainer, contentColor = if (shizuku) cs.onTertiaryContainer else cs.onErrorContainer) {
             Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(LocalContentColor.current)); Spacer(Modifier.width(6.dp))
-                Text(if (tracker.root) "Root" else if (shizuku) "Shizuku on" else "Shizuku off", style = ty.labelMedium)
+                Text(if (tracker.root) "Root" else if (shizuku) "Shizuku 已连接" else "Shizuku 未连接", style = ty.labelMedium)
             }
         }
     }
@@ -235,12 +235,12 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
         }
     }
     TextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp), singleLine = true, shape = Pill,
-        placeholder = { Text(if (tab == "debloater") "Search system apps" else "Search apps or packages") }, leadingIcon = { Icon(Sym.Search, null) },
-        trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Sym.Close, "Clear") } },
+        placeholder = { Text(if (tab == "debloater") "搜索系统应用" else "搜索应用或包名") }, leadingIcon = { Icon(Sym.Search, null) },
+        trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Sym.Close, "清除") } },
         colors = TextFieldDefaults.colors(focusedContainerColor = cs.surfaceContainerHigh, unfocusedContainerColor = cs.surfaceContainerHigh,
             focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
     if (tab != "debloater") Row(Modifier.padding(horizontal = 16.dp).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("all" to "All", "user" to "User", "system" to "System").forEach { (id, label) -> Choice(filter == id, label) { filter = id } }
+        listOf("all" to "全部", "user" to "用户", "system" to "系统").forEach { (id, label) -> Choice(filter == id, label) { filter = id } }
     }
 
     val q = query.trim().lowercase()
@@ -259,9 +259,9 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
         tab == "permissions" -> apps.filter { it.permissions.isNotEmpty() }.let { l ->
             Stats(Triple(l.count { it.permissions.size >= 3 }, "Critical", Red), Triple(l.count { it.permissions.size in 1..2 }, "Warning", Yellow), Triple(l.size, "Flagged", Blue))
         }
-        tab == "surgeon" -> Stats(Triple(apps.size, "Apps", Blue), Triple(apps.count { !it.isSystem }, "User", Safe), Triple(apps.count { it.isSystem }, "System", Gray))
-        accepted -> Stats(Triple(sysApps.size, "System apps", Blue), Triple(sysApps.count { !it.isInstalled }, "Removed", Red),
-            Triple(sysApps.count { it.isInstalled && debloatRisk(uad[it.packageName]).label == "Recommended" }, "Safe to cut", Safe))
+        tab == "surgeon" -> Stats(Triple(apps.size, "Apps", Blue), Triple(apps.count { !it.isSystem }, "用户", Safe), Triple(apps.count { it.isSystem }, "系统", Gray))
+        accepted -> Stats(Triple(sysApps.size, "系统应用", Blue), Triple(sysApps.count { !it.isInstalled }, "已移除", Red),
+            Triple(sysApps.count { it.isInstalled && debloatRisk(uad[it.packageName]).label == "Recommended" }, "可安全移除", Safe))
     }
 
     Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -270,16 +270,16 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
                 var k by remember { mutableIntStateOf(0) }
                 LaunchedEffect(Unit) { while (true) { delay(1800); k++ } }
                 MorphBlob(listOf(MaterialShapes.Burst, MaterialShapes.SoftBurst), k, 120.dp, cs.errorContainer) { Icon(Sym.Warning, null, Modifier.size(52.dp), tint = cs.onErrorContainer) }
-                Text("Nuclear Zone", style = ty.displaySmallEmphasized, modifier = Modifier.padding(top = 20.dp))
-                Text("Critical warning", style = ty.titleMediumEmphasized, color = cs.error, modifier = Modifier.padding(top = 4.dp))
-                Text("Uninstalling system apps can brick your device. I am not responsible for bootloops or data loss.", textAlign = TextAlign.Center,
+                Text("核弹区", style = ty.displaySmallEmphasized, modifier = Modifier.padding(top = 20.dp))
+                Text("重要警告", style = ty.titleMediumEmphasized, color = cs.error, modifier = Modifier.padding(top = 4.dp))
+                Text("卸载系统应用可能把设备变成砖头。由此导致的循环重启或数据丢失，概不负责。", textAlign = TextAlign.Center,
                     style = ty.bodyLarge, color = cs.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp).widthIn(max = 420.dp))
                 val h = ButtonDefaults.MediumContainerHeight
-                Button({ scope.launch { try { tracker.requestElevated(); shizuku = true; accepted = true } catch (_: Exception) { toast.show("Shizuku Permission Denied", true) } } },
+                Button({ scope.launch { try { tracker.requestElevated(); shizuku = true; accepted = true } catch (_: Exception) { toast.show("Shizuku 权限被拒绝", true) } } },
                     modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).heightIn(min = h), shapes = ButtonDefaults.shapesFor(h), contentPadding = ButtonDefaults.contentPaddingFor(h),
                     colors = ButtonDefaults.buttonColors(cs.error, cs.onError)) {
                     Icon(Sym.GppMaybe, null, Modifier.size(ButtonDefaults.iconSizeFor(h))); Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(h)))
-                    Text("I accept the risk", style = ButtonDefaults.textStyleFor(h))
+                    Text("我接受风险", style = ButtonDefaults.textStyleFor(h))
                 }
             }
             loading -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -288,10 +288,10 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
                     Text(it, style = ty.titleSmallEmphasized, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
                 }
             }
-            error.isNotEmpty() -> EmptyState(Sym.ErrorOutline, "Scan failed", error, Modifier.align(Alignment.Center))
+            error.isNotEmpty() -> EmptyState(Sym.ErrorOutline, "扫描失败", error, Modifier.align(Alignment.Center))
             tab == "debloater" -> {
                 val list = sysApps.filter { match(it.name, it.packageName, it.isSystem) }
-                if (list.isEmpty()) EmptyState(Sym.SearchOff, "No signals found", modifier = Modifier.align(Alignment.Center))
+                if (list.isEmpty()) EmptyState(Sym.SearchOff, "未发现信号", modifier = Modifier.align(Alignment.Center))
                 else LazyColumn(contentPadding = PaddingValues(16.dp)) {
                     itemsIndexed(list, key = { _, a -> a.packageName }) { i, a ->
                         val r = debloatRisk(uad[a.packageName])
@@ -302,12 +302,12 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
                                     Text(a.name, style = ty.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(a.packageName, Modifier.clickable { copy(a.packageName) }, style = ty.labelSmall, fontFamily = FontFamily.Monospace,
                                         color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { Tag(r.label, r.color); if (!a.isInstalled) Tag("Removed", Gray) }
+                                    Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { Tag(r.label, r.color); if (!a.isInstalled) Tag("已移除", Gray) }
                                 }
                                 if (processing == a.packageName) LoadingIndicator(Modifier.size(40.dp))
                                 else if (a.isInstalled) FilledTonalIconButton({ toggle(a) }, enabled = processing == null, shapes = IconButtonDefaults.shapes(),
-                                    colors = IconButtonDefaults.filledTonalIconButtonColors(cs.errorContainer, cs.onErrorContainer)) { Icon(Sym.DeleteForever, "Uninstall") }
-                                else FilledTonalIconButton({ toggle(a) }, enabled = processing == null, shapes = IconButtonDefaults.shapes()) { Icon(Sym.Restore, "Restore") }
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(cs.errorContainer, cs.onErrorContainer)) { Icon(Sym.DeleteForever, "卸载") }
+                                else FilledTonalIconButton({ toggle(a) }, enabled = processing == null, shapes = IconButtonDefaults.shapes()) { Icon(Sym.Restore, "还原") }
                             }
                         }
                     }
@@ -315,7 +315,7 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
             }
             else -> {
                 val list = (if (tab == "permissions") apps.filter { it.permissions.isNotEmpty() } else apps).filter { match(it.name, it.packageName, it.isSystem) }
-                if (list.isEmpty()) EmptyState(Sym.SearchOff, "No signals found", modifier = Modifier.align(Alignment.Center))
+                if (list.isEmpty()) EmptyState(Sym.SearchOff, "未发现信号", modifier = Modifier.align(Alignment.Center))
                 else LazyColumn(contentPadding = PaddingValues(16.dp)) {
                     itemsIndexed(list, key = { _, a -> a.packageName }) { i, a ->
                         val open = tab == "permissions" && expanded == a.packageName; val r = riskLevel(a.permissions.size)
@@ -339,7 +339,7 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
                                             contentAlignment = Alignment.Center) { Text("${a.permissions.size}", style = ty.titleMediumEmphasized, color = fg) }
                                     }
                                     else if (processing == a.packageName) LoadingIndicator(Modifier.size(40.dp))
-                                    else FilledTonalIconButton({ extract(a.packageName) }, enabled = processing == null, shapes = IconButtonDefaults.shapes()) { Icon(Sym.Unarchive, "Extract APK") }
+                                    else FilledTonalIconButton({ extract(a.packageName) }, enabled = processing == null, shapes = IconButtonDefaults.shapes()) { Icon(Sym.Unarchive, "提取 APK") }
                                 }
                                 AnimatedVisibility(open, enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) + fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec()),
                                     exit = shrinkVertically(MaterialTheme.motionScheme.fastSpatialSpec()) + fadeOut(MaterialTheme.motionScheme.fastEffectsSpec())) {
@@ -352,7 +352,7 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
                                                 if (processing == a.packageName) LoadingIndicator(Modifier.size(32.dp))
                                                 else FilledTonalButton({ revoke(a.packageName, p) }, enabled = processing == null, shapes = ButtonDefaults.shapes(),
                                                     contentPadding = ButtonDefaults.ExtraSmallContentPadding, modifier = Modifier.heightIn(min = ButtonDefaults.ExtraSmallContainerHeight),
-                                                    colors = ButtonDefaults.filledTonalButtonColors(cs.errorContainer, cs.onErrorContainer)) { Text("Revoke", style = ty.labelLarge) }
+                                                    colors = ButtonDefaults.filledTonalButtonColors(cs.errorContainer, cs.onErrorContainer)) { Text("撤销", style = ty.labelLarge) }
                                             }
                                         }
                                     }
@@ -364,7 +364,7 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
             }
         }
     }
-    ConfirmDialog(confirm?.first, "Confirm", { confirm?.second?.let { a -> scope.launch { a() } } }) { confirm = null }
+    ConfirmDialog(confirm?.first, "确认", { confirm?.second?.let { a -> scope.launch { a() } } }) { confirm = null }
 }
 
 // ---------------- Sentinel (SentinelModal + workers/sentinel.worker.ts) ----------------
@@ -387,7 +387,7 @@ class SentinelDb(dir: File) {
     private val maps = HashMap<String, Map<String, String>>()
     private fun shard(b: String) = File(root, "shard_$b.json")
     private fun load(b: String) = maps.getOrPut(b) {
-        runCatching { json.parseToJsonElement(shard(b).readText()).jsonArray.associate { val o = it.jsonObject; o["h"]!!.jsonPrimitive.content to (o["n"]?.jsonPrimitive?.contentOrNull ?: "Unknown Threat") } }.getOrDefault(emptyMap())
+        runCatching { json.parseToJsonElement(shard(b).readText()).jsonArray.associate { val o = it.jsonObject; o["h"]!!.jsonPrimitive.content to (o["n"]?.jsonPrimitive?.contentOrNull ?: "未知威胁") } }.getOrDefault(emptyMap())
     }
     fun ready() = BUCKETS.all { shard(it).exists() }
     fun count() = BUCKETS.sumOf { load(it).size } + KNOWN_THREATS.size
@@ -403,19 +403,19 @@ private data class Info(val text: String, val color: Color, val desc: String, va
 
 private fun encryptionInfo(t: String) = t.uppercase().let {
     when {
-        "WPA3" in it -> Info("Secure", Safe, "Latest security standard.", Sym.EnhancedEncryption)
-        "WPA2" in it -> Info("Good", Blue, "Industry standard protection.", Sym.Lock)
-        "WPA" in it -> Info("Weak", Caution, "Outdated and vulnerable.", Sym.LockOpen)
-        "WEP" in it -> Info("Insecure", Red, "Easily compromised.", Sym.NoEncryption)
-        "OPEN" in it -> Info("Open", Red, "No encryption. High risk.", Sym.LockOpen)
-        else -> Info("Unknown", Gray, "Could not determine status.", Sym.HelpOutline)
+        "WPA3" in it -> Info("安全", Safe, "最新安全标准。", Sym.EnhancedEncryption)
+        "WPA2" in it -> Info("良好", Blue, "行业标准防护。", Sym.Lock)
+        "WPA" in it -> Info("较弱", Caution, "已过时且存在漏洞。", Sym.LockOpen)
+        "WEP" in it -> Info("不安全", Red, "极易被攻破。", Sym.NoEncryption)
+        "OPEN" in it -> Info("开放", Red, "无加密。高风险。", Sym.LockOpen)
+        else -> Info("Unknown", Gray, "无法判定状态。", Sym.HelpOutline)
     }
 }
 
 private fun dnsInfo(servers: List<String>) = when {
-    servers.isEmpty() -> Info("Unknown", Gray, "No DNS servers detected.", Sym.Dns)
-    servers.any { it in TRUSTED_DNS } -> Info("Trusted", Safe, "Using a known, secure DNS.", Sym.VerifiedUser)
-    else -> Info("Unknown", Caution, "Using default or ISP DNS.", Sym.Dns)
+    servers.isEmpty() -> Info("Unknown", Gray, "未检测到 DNS 服务器。", Sym.Dns)
+    servers.any { it in TRUSTED_DNS } -> Info("Trusted", Safe, "正在使用已知的安全 DNS。", Sym.VerifiedUser)
+    else -> Info("Unknown", Caution, "正在使用默认或运营商 DNS。", Sym.Dns)
 }
 
 @Composable
@@ -459,23 +459,23 @@ private fun Advisory() {
     val small = MaterialTheme.typography.bodySmall
     Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(Caution.copy(.1f))) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Sym.Info, null, tint = Caution); Spacer(Modifier.width(8.dp)); Text("A Note on These Findings", style = MaterialTheme.typography.titleSmall) }
-            Text("Sentinel's analysis uses a global threat database. While powerful, automated systems can sometimes produce false positives. This means a flagged file may not actually be malicious. We strongly recommend you verify these findings before taking action.", style = small)
-            Text("How to Double-Check:", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-            Sec("virustotal", "1. Use VirusTotal") {
-                TextButton({ uri.openUri("https://www.virustotal.com/") }) { Icon(Sym.OpenInNew, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Scan Online") }
-                Text("This service analyzes files with 70+ scanners. Use this guide:", style = small)
-                Text("0 detections: Generally safe.", style = small, color = Safe)
-                Text("1-5 detections: Likely a false positive.", style = small, color = Caution)
-                Text("5+ detections: High caution. Treat as dangerous.", style = small, color = Red)
+            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Sym.Info, null, tint = Caution); Spacer(Modifier.width(8.dp)); Text("关于这些结果的重要说明", style = MaterialTheme.typography.titleSmall) }
+            Text("哨兵的分析基于全球威胁特征库。虽然强大，但自动系统有时会误报，被标记的文件未必真的有威胁。强烈建议在采取行动前先复核这些结果。", style = small)
+            Text("如何复核：", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Sec("virustotal", "1. 使用 VirusTotal") {
+                TextButton({ uri.openUri("https://www.virustotal.com/") }) { Icon(Sym.OpenInNew, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("在线扫描") }
+                Text("该服务会用 70+ 引擎分析文件。参考以下标准：", style = small)
+                Text("0 个检测：通常安全。", style = small, color = Safe)
+                Text("1-5 个检测：很可能是误报。", style = small, color = Caution)
+                Text("5 个及以上：高度警惕，按危险处理。", style = small, color = Red)
             }
-            Sec("source", "2. Consider the Source") {
-                Text("Official sources like GitHub, F-Droid, or the Play Store are generally trustworthy. Unofficial websites carry higher risk.", style = small)
-                Text("Why do safe sources get flagged?", style = MaterialTheme.typography.labelLarge)
-                Text("Antivirus scanners sometimes use \"heuristic\" analysis, which means they look for suspicious behaviors. Apps that need advanced permissions (like root) or modify other apps (like ReVanced) can trigger these warnings, even if they are perfectly safe.", style = small)
+            Sec("source", "2. 看看来源") {
+                Text("GitHub、F-Droid 或 Play 商店等官方渠道通常值得信赖。非官方网站风险更高。", style = small)
+                Text("为什么安全来源也会被标记？", style = MaterialTheme.typography.labelLarge)
+                Text("杀毒引擎有时使用“启发式”分析，即寻找可疑行为。需要高级权限（如 root）或会修改其他应用（如 ReVanced）的应用都可能触发这类警告，即使它们完全干净。", style = small)
             }
-            Sec("community", "3. Search the Community") {
-                Text("Search for the file's hash (use the copy button) online. Communities like Reddit often have discussions about specific files.", style = small)
+            Sec("community", "3. 搜索社区讨论") {
+                Text("在网上搜索文件哈希（用复制按钮）。Reddit 等社区常有针对具体文件的讨论。", style = small)
             }
         }
     }
@@ -502,7 +502,7 @@ fun SentinelSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
 
     fun netScan() = scope.launch {
         netScanning = true; net = null
-        try { net = withContext(Dispatchers.IO) { tracker.networkSecurity() } } catch (_: Exception) { toast.show("Failed to run network scan.", true) } finally { netScanning = false }
+        try { net = withContext(Dispatchers.IO) { tracker.networkSecurity() } } catch (_: Exception) { toast.show("网络扫描运行失败。", true) } finally { netScanning = false }
     }
     LaunchedEffect(view) { if (view == "network" && net == null) netScan() }
     BackHandler(view in setOf("results", "network", "scanning")) { job?.cancel(); view = "main" }
@@ -512,32 +512,32 @@ fun SentinelSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
         progress = 100f; delay(500); threats = t; rapid = r; vm.haptic(if (t.isEmpty() && r.isEmpty()) H.SUCCESS else H.ERROR); view = "results"
     }
     fun rapidScan() {
-        reset(); scanType = "Rapid"; current = "Getting app list..."
+        reset(); scanType = "快速"; current = "正在获取应用列表…"
         job = scope.launch {
             try {
                 val apps = withContext(Dispatchers.IO) { tracker.installedPackages() }
                 apps.forEachIndexed { i, (n, _) -> current = n; progress = i * 100f / apps.size; delay(50) }
-                current = "Finalizing..."; finish(emptyList(), apps.filter { it.second.lowercase() in KNOWN_BAD_PACKAGES })
+                current = "正在收尾…"; finish(emptyList(), apps.filter { it.second.lowercase() in KNOWN_BAD_PACKAGES })
             } catch (e: CancellationException) { throw e } catch (_: Exception) { view = "results" }
         }
     }
     fun deepScan() {
-        reset(); scanType = "Deep"; current = "Initializing scanner..."
+        reset(); scanType = "Deep"; current = "正在初始化扫描器…"
         job = scope.launch {
             val ticker = launch { var p = 0; while (p < 95) { delay(400); p++; progress = p.toFloat() } }
             val names = Channel<String>(64, BufferOverflow.DROP_OLDEST)
-            val marquee = launch { current = "Searching for files..."; for (n in names) { current = n; delay(30) } }
+            val marquee = launch { current = "正在搜索文件…"; for (n in names) { current = n; delay(30) } }
             val found = ArrayList<Threat>()
             runCatching { tracker.scanDirectory { batch -> found += db.check(batch); batch.forEach { names.trySend(it.first.substringAfterLast('/')) } } }
-            names.close(); marquee.cancel(); ticker.cancel(); current = "Finalizing results..."
+            names.close(); marquee.cancel(); ticker.cancel(); current = "正在汇总结果…"
             finish(found, emptyList())
         }
     }
 
     val c = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f)) { SheetTitle("Sentinel", Sym.GppGood, "Threat Intelligence") }
-        Tag(if (perm.storage) "Sensors Online" else "Sensors Locked", if (perm.storage) Safe else Red, if (perm.storage) Sym.VerifiedUser else Sym.Lock)
+        Box(Modifier.weight(1f)) { SheetTitle("哨兵", Sym.GppGood, "威胁情报") }
+        Tag(if (perm.storage) "传感器在线" else "传感器锁定", if (perm.storage) Safe else Red, if (perm.storage) Sym.VerifiedUser else Sym.Lock)
         Spacer(Modifier.width(20.dp))
     }
     SheetToastHost(toast)
@@ -547,44 +547,44 @@ fun SentinelSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
             when (v) {
                 "permissions" -> {
                     hero(Sym.Lock, Caution, MaterialShapes.Cookie9Sided)
-                    Text("Access Required", style = MaterialTheme.typography.headlineSmallEmphasized)
-                    Text("Sentinel needs permission to scan your device's storage for threats.", textAlign = TextAlign.Center, color = c.onSurfaceVariant)
+                    Text("需要授权", style = MaterialTheme.typography.headlineSmallEmphasized)
+                    Text("哨兵需要权限来扫描设备存储中的威胁。", textAlign = TextAlign.Center, color = c.onSurfaceVariant)
                     Button({
                         tracker.universalStorageIntent()?.let { runCatching { ctx.startActivity(it) } }
                             ?: legacy.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE))
-                    }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) { Icon(Sym.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Grant Storage Access") }
-                    Text("This is a one-time request.", style = MaterialTheme.typography.labelSmall, color = c.onSurfaceVariant)
+                    }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) { Icon(Sym.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("授予存储权限") }
+                    Text("这是一次性授权。", style = MaterialTheme.typography.labelSmall, color = c.onSurfaceVariant)
                 }
                 "database" -> {
                     LoadingIndicator(Modifier.size(112.dp))
-                    Text("Syncing Threat Intel", style = MaterialTheme.typography.headlineSmallEmphasized)
-                    Text(if (dbStatus == "updating") "Downloading latest threat signatures..." else "Connecting to Sentinel network...", color = c.onSurfaceVariant)
+                    Text("正在同步威胁情报", style = MaterialTheme.typography.headlineSmallEmphasized)
+                    Text(if (dbStatus == "updating") "正在下载最新威胁特征库…" else "正在连接哨兵网络…", color = c.onSurfaceVariant)
                     LinearWavyProgressIndicator({ dbProgress / 100f }, Modifier.fillMaxWidth())
                     if (dbStatus == "updating") Text("${dbProgress.toInt()}%", style = MaterialTheme.typography.labelLarge)
                 }
                 "main" -> {
                     hero(Sym.GppGood, Safe, MaterialShapes.SoftBurst)
-                    Text("System Protected", style = MaterialTheme.typography.headlineSmallEmphasized)
-                    ScanAction(Sym.Bolt, MaterialTheme.colorScheme.primary, "Rapid Scan", "Checks installed apps & APKs", MaterialShapes.Cookie4Sided, ::rapidScan)
-                    ScanAction(Sym.Radar, Purple, "Deep Scan", "Analyzes file storage & downloads", MaterialShapes.Clover4Leaf, ::deepScan)
-                    ScanAction(Sym.Wifi, SkyC, "Network Sentry", "Connection & Security Audit", MaterialShapes.Pill) { view = "network" }
+                    Text("系统受保护", style = MaterialTheme.typography.headlineSmallEmphasized)
+                    ScanAction(Sym.Bolt, MaterialTheme.colorScheme.primary, "快速扫描", "检查已装应用与 APK", MaterialShapes.Cookie4Sided, ::rapidScan)
+                    ScanAction(Sym.Radar, Purple, "深度扫描", "分析文件存储与下载", MaterialShapes.Clover4Leaf, ::deepScan)
+                    ScanAction(Sym.Wifi, SkyC, "网络哨兵", "连接与安全审计", MaterialShapes.Pill) { view = "network" }
                 }
                 "scanning" -> {
                     Box(contentAlignment = Alignment.Center) {
                         CircularWavyProgressIndicator({ progress / 100f }, Modifier.size(180.dp))
                         Text("${progress.toInt()}%", style = MaterialTheme.typography.displaySmallEmphasized)
                     }
-                    Text("$scanType Scan...", style = MaterialTheme.typography.headlineSmallEmphasized)
+                    Text("$scanType 扫描中…", style = MaterialTheme.typography.headlineSmallEmphasized)
                     Text(current, style = MaterialTheme.typography.labelMedium, fontFamily = FontFamily.Monospace, color = c.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                 }
                 "results" -> {
                     if (threats.isEmpty() && rapid.isEmpty()) {
                         hero(Sym.CheckCircle, Safe, MaterialShapes.Sunny)
-                        Text("System Clean", style = MaterialTheme.typography.headlineSmallEmphasized)
-                        Text("No threats detected.", color = c.onSurfaceVariant)
+                        Text("系统干净", style = MaterialTheme.typography.headlineSmallEmphasized)
+                        Text("未检测到威胁。", color = c.onSurfaceVariant)
                     } else {
                         Advisory()
-                        Text("Threat Report", Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleLargeEmphasized)
+                        Text("威胁报告", Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleLargeEmphasized)
                         @Composable fun Item(key: String, title: String, sub: String?, fields: List<Pair<String, String>>, copyLabel: String, copyValue: String?) {
                             val open = expanded == key
                             Card({ expanded = if (open) null else key }, Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(c.errorContainer.copy(.45f))) {
@@ -610,48 +610,48 @@ fun SentinelSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
                             }
                         }
                         if (threats.isNotEmpty()) {
-                            Text("Infected Files (Deep Scan)", Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelLarge, color = c.error)
+                            Text("被感染文件（深度扫描）", Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelLarge, color = c.error)
                             threats.forEachIndexed { i, t ->
-                                Item("file-$i", t.path.substringAfterLast('/'), t.threat, listOf("Full Path" to t.path) + (if (t.hash.isNotEmpty()) listOf("SHA-256 Hash" to t.hash) else emptyList()), "Copy Hash", t.hash.ifEmpty { null })
+                                Item("file-$i", t.path.substringAfterLast('/'), t.threat, listOf("完整路径" to t.path) + (if (t.hash.isNotEmpty()) listOf("SHA-256 哈希" to t.hash) else emptyList()), "复制哈希", t.hash.ifEmpty { null })
                             }
                         }
                         if (rapid.isNotEmpty()) {
-                            Text("Suspicious Apps (Rapid Scan)", Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelLarge, color = c.error)
-                            rapid.forEachIndexed { i, (n, p) -> Item("app-$i", n, null, listOf("Package Name" to p), "Copy Package Name", p) }
+                            Text("可疑应用（快速扫描）", Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelLarge, color = c.error)
+                            rapid.forEachIndexed { i, (n, p) -> Item("app-$i", n, null, listOf("包名" to p), "复制包名", p) }
                         }
                     }
-                    Button({ view = "main" }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) { Text("Return") }
+                    Button({ view = "main" }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) { Text("返回") }
                 }
                 else -> when {
                     netScanning -> {
                         LoadingIndicator(Modifier.size(112.dp))
-                        Text("Auditing Network...", style = MaterialTheme.typography.headlineSmallEmphasized)
-                        Text("Checking connection integrity", color = c.onSurfaceVariant)
+                        Text("正在审计网络…", style = MaterialTheme.typography.headlineSmallEmphasized)
+                        Text("正在检查连接完整性", color = c.onSurfaceVariant)
                     }
                     net == null -> {
                         hero(Sym.WifiOff, Red, MaterialShapes.Cookie9Sided)
                         Text("Scan Failed", style = MaterialTheme.typography.headlineSmallEmphasized)
-                        Text("Could not retrieve network information.", color = c.onSurfaceVariant)
-                        Button({ netScan() }, shapes = ButtonDefaults.shapes()) { Icon(Sym.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Rescan") }
+                        Text("无法获取网络信息。", color = c.onSurfaceVariant)
+                        Button({ netScan() }, shapes = ButtonDefaults.shapes()) { Icon(Sym.Refresh, null); Spacer(Modifier.width(8.dp)); Text("重新扫描") }
                     }
                     else -> {
                         val n = net!!; val enc = encryptionInfo(n.encryptionType); val dns = dnsInfo(n.dnsServers); val adb = n.adbEnabled || n.adbWifiEnabled
                         hero(Sym.Shield, Blue, MaterialShapes.Cookie12Sided)
-                        Text("Connection Security", style = MaterialTheme.typography.headlineSmallEmphasized)
-                        Text("Live analysis of your current network", color = c.onSurfaceVariant)
-                        SecurityCard("Encryption", enc.desc, enc.text, enc.color, enc.icon)
-                        SecurityCard("DNS Integrity", dns.desc, dns.text, dns.color, dns.icon)
-                        SecurityCard("Captive Portal", if (n.isCaptivePortal) "Web login page detected." else "Direct network access.", if (n.isCaptivePortal) "Active" else "None",
+                        Text("连接安全性", style = MaterialTheme.typography.headlineSmallEmphasized)
+                        Text("对当前网络的实时分析", color = c.onSurfaceVariant)
+                        SecurityCard("加密强度", enc.desc, enc.text, enc.color, enc.icon)
+                        SecurityCard("DNS 完整性", dns.desc, dns.text, dns.color, dns.icon)
+                        SecurityCard("强制门户", if (n.isCaptivePortal) "检测到网页登录页。" else "直接访问网络。", if (n.isCaptivePortal) "存在" else "None",
                             if (n.isCaptivePortal) Caution else Safe, if (n.isCaptivePortal) Sym.Login else Sym.Lan)
-                        SecurityCard("ADB Watchdog", "Developer bridge status", if (adb) "Active" else "Inactive", if (adb) Red else Safe, Sym.Terminal)
-                        SecurityCard("Proxy Check", "Detects traffic redirection", if (n.hasProxy) "Active" else "Inactive", if (n.hasProxy) Red else Safe, Sym.AccountTree)
-                        SecurityCard("VPN Status", "Checks for active VPN tunnel", if (n.isVpnActive) "Active" else "Inactive", if (n.isVpnActive) Blue else Safe, Sym.VpnLock)
-                        Button({ view = "main" }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) { Text("Return") }
+                        SecurityCard("ADB 看门狗", "开发者调试桥状态", if (adb) "开启" else "关闭", if (adb) Red else Safe, Sym.Terminal)
+                        SecurityCard("代理检查", "检测流量重定向", if (n.hasProxy) "存在" else "无", if (n.hasProxy) Red else Safe, Sym.AccountTree)
+                        SecurityCard("VPN 状态", "检查活跃的 VPN 隧道", if (n.isVpnActive) "开启" else "关闭", if (n.isVpnActive) Blue else Safe, Sym.VpnLock)
+                        Button({ view = "main" }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) { Text("返回") }
                     }
                 }
             }
         }
     }
-    Text(if (sigs > 0) "%,d Signatures Live".format(sigs) else "...", Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center,
+    Text(if (sigs > 0) "已加载 %,d 条特征".format(sigs) else "…", Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center,
         style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = c.onSurfaceVariant)
 }

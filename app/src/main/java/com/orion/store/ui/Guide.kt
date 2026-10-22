@@ -47,122 +47,122 @@ private fun settings(page: String): MainViewModel.() -> Unit = { openSettings(pa
 
 /** Every feature in the app, chapter by chapter. Anything new that users can see or do gets a line here. */
 private val CHAPTERS = listOf(
-    Chapter("store", "The Store", "Three catalogs, two layouts and a lot of ways to find the right app.", Sym.Apps, Color(0xFF6366F1), MaterialShapes.Cookie9Sided, listOf(
-        Feature(Sym.Android, "Apps, PC and TV", "Separate catalogs for Android apps, PC software and TV apps, each with its own tab, search, sort and filters.", { navTo(Tab.ANDROID) }),
-        Feature(Sym.ViewQuilt, "Modern and Classic layouts", "Modern is a storefront with a hero, lanes and shelves. Classic is a clean grouped list. Switch any time in Settings, Interface.", settings("interface")),
-        Feature(Sym.Star, "Featured hero", "Hand-picked apps glide past at the top of the modern home, wearing their own icon colors with screenshots fanned out."),
-        Feature(Sym.AutoAwesome, "Recommended for you", "A swipeable carousel of daily picks, plus a numbered spotlight chart of curated apps."),
-        Feature(Sym.NewReleases, "New and updated", "The latest additions and refreshed apps in their own lane, with a full list one tap away."),
-        Feature(Sym.Category, "Category shelves", "Expressive category blobs and lanes like Media, Social, Privacy and Utilities, each with an app count."),
-        Feature(Sym.Layers, "App bundles", "Curated folders of apps that belong together. Open one to see every app, add or remove apps and install them one by one."),
-        Feature(Sym.LibraryAdd, "Your own bundles", "Build a bundle in three steps: pick apps, give it a name, color and icon, then keep it local or submit it for everyone.", { open(Overlay.CUSTOM_BUNDLE) }),
-        Feature(Sym.AutoAwesome, "Orion AI", "Tap the star and describe what you need, like a free music app. Use your own Gemini, ChatGPT or Claude key, or a model that runs on the phone. Drag the star anywhere.", { open(Overlay.AI) }),
-        Feature(Sym.Search, "Search", "The search pill at the top finds apps by name, developer, category or description, and forgives accents and typos in spacing."),
-        Feature(Sym.SwapVert, "Sort and filter", "Sort by newest, oldest, name or size, and narrow the list to a single category with the filter buttons."),
-        Feature(Sym.Favorite, "Favorites", "Long-press any card, swipe a classic row, or tap the heart on an app page. The heart filter shows only your favorites."),
-        Feature(Sym.Description, "About this app previews", "Classic rows show the first lines of each description with See more to read the rest in place. Turn it off in Settings, Interface.", settings("interface")),
-        Feature(Sym.Sell, "Category icons", "Every category wears its own icon on classic rows, so a long list scans at a glance."),
-        Feature(Sym.SystemUpdate, "Update deck", "When updates are waiting, a slim strip on the Apps home shows who is waiting with a one-tap Update all."),
-        Feature(Sym.Campaign, "Announcements", "News from the Orion team drops from a megaphone in the search pill. It pulses until you have read it."),
-        Feature(Sym.AutoFixHigh, "Pull to refresh characters", "Pull down to reload the catalog with a pixel cat, dog, owl, ghost and friends, or an expressive shape. Pick yours in Orion Xtra.", settings("installer")),
-        Feature(Sym.KeyboardArrowUp, "Back to top", "A floating arrow appears once you scroll far down. One tap and you are back at the top."),
-        Feature(Sym.AddCircleOutline, "Submit an app", "Suggest an app from GitHub, GitLab or Codeberg. Orion detects its name, package and description, accepts Obtainium exports and opens a ready GitHub issue.", { open(Overlay.SUBMISSION) }),
+    Chapter("store", "商店", "三个目录、两种布局，以及大量找到心仪应用的方式。", Sym.Apps, Color(0xFF6366F1), MaterialShapes.Cookie9Sided, listOf(
+        Feature(Sym.Android, "应用、电脑与电视", "安卓应用、电脑软件和电视应用各自独立成目录，都有专属的标签页、搜索、排序和筛选。", { navTo(Tab.ANDROID) }),
+        Feature(Sym.ViewQuilt, "现代与经典布局", "现代布局是带主视觉、横道和货架的店面；经典布局是干净的分组列表。可在 设置 › 界面 随时切换。", settings("interface")),
+        Feature(Sym.Star, "精选主视觉", "编辑精选的应用在现代化首页顶部缓缓滑过，穿着自己图标的颜色，截图呈扇形展开。"),
+        Feature(Sym.AutoAwesome, "为你推荐", "可左右滑动的每日精选轮播，外加一个编号的精选应用聚光灯榜单。"),
+        Feature(Sym.NewReleases, "最新与更新", "最新上架和刚焕新的应用占据专属横道，一键即可查看完整列表。"),
+        Feature(Sym.Category, "分类货架", "形态各异的分类色块与横道：媒体、社交、隐私、工具等，每个都带应用数量。"),
+        Feature(Sym.Layers, "应用合集", "精心策划的应用文件夹。打开即可看到全部应用，可增删应用并逐个安装。"),
+        Feature(Sym.LibraryAdd, "创建自己的合集", "三步打造合集：挑选应用，起名并配色加图标，然后保存在本地或提交给所有人。", { open(Overlay.CUSTOM_BUNDLE) }),
+        Feature(Sym.AutoAwesome, "Orion AI", "点一下星星，用一句话描述需求，比如“找一个免费的音乐应用”。可用你自己的 Gemini、ChatGPT 或 Claude 密钥，也可用手机本地模型。星星可以随意拖动。", { open(Overlay.AI) }),
+        Feature(Sym.Search, "搜索", "顶部的搜索胶囊按名称、开发者、分类或描述查找应用，还能容忍重音符号和空格拼写差异。"),
+        Feature(Sym.SwapVert, "排序与筛选", "按最新、最早、名称或大小排序，还能用筛选按钮把列表缩小到单一分类。"),
+        Feature(Sym.Favorite, "收藏", "长按任意卡片、左滑经典列表行，或在应用页点爱心。爱心筛选器只显示你的收藏。"),
+        Feature(Sym.Description, "关于此应用预览", "经典列表行显示描述的前几行，点“展开更多”原地阅读全文。可在 设置 › 界面 关闭。", settings("interface")),
+        Feature(Sym.Sell, "分类图标", "经典列表行上每个分类都有自己的图标，长列表也能一眼扫清。"),
+        Feature(Sym.SystemUpdate, "更新卡组", "有更新待处理时，应用首页会出现一条细条展示待更新应用，附一键“全部更新”。"),
+        Feature(Sym.Campaign, "公告", "Orion 团队的消息从搜索胶囊旁的喇叭里送达。未读之前它会一直跳动。"),
+        Feature(Sym.AutoFixHigh, "下拉刷新角色", "下拉刷新目录时，会跑出像素猫、狗、猫头鹰、幽灵等小伙伴，或一个灵动的形状。可在 Orion 特性 里选择。", settings("installer")),
+        Feature(Sym.KeyboardArrowUp, "回到顶部", "滚动很远后会出现一个悬浮箭头，轻点一下就回到顶部。"),
+        Feature(Sym.AddCircleOutline, "提交应用", "推荐 GitHub、GitLab 或 Codeberg 上的应用。Orion 会自动识别名称、包名和描述，支持 Obtainium 导出，并生成一份现成的 GitHub issue。", { open(Overlay.SUBMISSION) }),
     )),
-    Chapter("page", "App Pages", "Everything about one app, and every way to get it.", Sym.Info, Color(0xFF0EA5E9), MaterialShapes.Sunny, listOf(
-        Feature(Sym.Download, "One-tap install", "Download, install, update or open an app from its page. Progress wraps the icon while it downloads."),
-        Feature(Sym.Image, "Screenshots", "Scroll through screenshots at their real shape and tap one to view it full screen."),
-        Feature(Sym.History, "Versions and channels", "Pick Stable, Beta, Alpha or Nightly per app, or choose an exact older version from the version list."),
-        Feature(Sym.Memory, "Right build for your phone", "Orion picks the APK that matches your phone's processor, and lets you choose another architecture yourself."),
-        Feature(Sym.Info, "App info", "Developer, size, package name, source and patches, folded away until you want them."),
-        Feature(Sym.Policy, "VirusTotal scan", "Check a download, an installed APK or the release file against 70+ antivirus engines with your own free key."),
-        Feature(Sym.Code, "Source and safety", "Jump to the source code, the official releases page or the developer's site in one tap."),
-        Feature(Sym.NotificationsOff, "Ignore updates", "Hide an update for a week, until the next version, or for good. Ignored updates wait in My Apps with an Unignore button."),
-        Feature(Sym.SaveAlt, "Export and redownload", "Save the APK to your Downloads folder, fetch it again, or delete a saved copy to free space."),
-        Feature(Sym.Share, "Share links and badges", "Copy a deep link that opens the app straight in Orion, a web link, or a Markdown or HTML badge for your README."),
-        Feature(Sym.EditNote, "Request a change", "Spotted a wrong icon, dead link or old description? Send a correction for exactly that field."),
-        Feature(Sym.Report, "Report an issue", "A download broken? Report it from the app page and the details are filled in for you."),
-        Feature(Sym.Extension, "MicroG helper", "Apps that need MicroG say so, with a link to install it and a guide to learn more."),
-        Feature(Sym.Link, "Deep links", "orionstore:// links and Android's App details in store both open the right page in Orion."),
+    Chapter("page", "应用详情页", "关于一个应用的一切，以及获取它的所有方式。", Sym.Info, Color(0xFF0EA5E9), MaterialShapes.Sunny, listOf(
+        Feature(Sym.Download, "一键安装", "在应用页下载、安装、更新或打开应用。下载时进度条会环绕图标。"),
+        Feature(Sym.Image, "截图", "以真实比例浏览截图，点按即可全屏查看。"),
+        Feature(Sym.History, "版本与渠道", "按应用选择稳定版、测试版、内测版或夜间版，也可以从版本列表中挑选确切的旧版本。"),
+        Feature(Sym.Memory, "适合你手机的构建", "Orion 会挑选与手机处理器匹配的 APK，也允许你自行选择其他架构。"),
+        Feature(Sym.Info, "应用信息", "开发者、大小、包名、来源和补丁信息，折叠收纳，想看时再展开。"),
+        Feature(Sym.Policy, "VirusTotal 扫描", "用你自己的免费密钥，把下载、已安装的 APK 或发布文件送到 70+ 杀毒引擎检查。"),
+        Feature(Sym.Code, "来源与安全性", "一键跳转到源代码、官方发布页或开发者网站。"),
+        Feature(Sym.NotificationsOff, "忽略更新", "把某个更新隐藏一周、隐藏到下个版本，或永久隐藏。被忽略的更新会留在“我的应用”里，带“取消忽略”按钮。"),
+        Feature(Sym.SaveAlt, "导出与重新下载", "把 APK 存到下载文件夹、重新下载，或删除已保存的副本腾出空间。"),
+        Feature(Sym.Share, "分享链接与徽章", "复制能直接在 Orion 打开该应用的深链、网页链接，或 README 用的 Markdown/HTML 徽章。"),
+        Feature(Sym.EditNote, "申请更正", "发现图标错误、链接失效或描述过时？针对那个字段提交更正。"),
+        Feature(Sym.Report, "反馈问题", "下载挂了？在应用页直接反馈，相关信息会自动填好。"),
+        Feature(Sym.Extension, "MicroG 助手", "需要 MicroG 的应用会明确提示，并附安装链接和了解更多指南。"),
+        Feature(Sym.Link, "深链", "orionstore:// 链接和安卓系统的“在商店中查看应用详情”都会在 Orion 中打开正确页面。"),
     )),
-    Chapter("library", "My Apps and Downloads", "Your library, your queue and updates that look after themselves.", Sym.GridView, Color(0xFF22C55E), MaterialShapes.Clover4Leaf, listOf(
-        Feature(Sym.Inventory2, "Library", "Every app you have downloaded or installed through Orion, filtered by All, Installed, Downloaded and Updates, with its own search.", { navTo(Tab.MYAPPS) }),
-        Feature(Sym.Downloading, "Download queue", "Active downloads, ready installs and pending updates in one place, with Update all when installs can run silently.", settings("queue")),
-        Feature(Sym.Notifications, "Background downloads", "Downloads keep going when you leave Orion, with live progress in your notifications and a tap to install when they finish."),
-        Feature(Sym.Autorenew, "Auto-update", "Orion checks for updates every few hours, even when closed and after a reboot, and downloads them for you.", settings("network")),
-        Feature(Sym.SystemUpdate, "Install automatically", "Let Orion install the updates it downloads. Anything that cannot finish is reported the next time you open the app.", settings("network")),
-        Feature(Sym.Verified, "Stable releases only", "Skip Beta, Alpha and Nightly builds whenever a stable release exists.", settings("network")),
-        Feature(Sym.Wifi, "Wi-Fi only", "Keep downloads off mobile data.", settings("network")),
-        Feature(Sym.CleaningServices, "Janitor", "Leftover APKs are cleaned a week after install, or right away with Auto-cleanup on. A pill offers a one-tap clean when files pile up.", settings("storage")),
+    Chapter("library", "我的应用与下载", "你的应用库、下载队列，以及打理自己的更新。", Sym.GridView, Color(0xFF22C55E), MaterialShapes.Clover4Leaf, listOf(
+        Feature(Sym.Inventory2, "应用库", "你通过 Orion 下载或安装过的每个应用，可按全部、已安装、已下载和更新筛选，还有专属搜索。", { navTo(Tab.MYAPPS) }),
+        Feature(Sym.Downloading, "下载队列", "进行中的下载、就绪的安装和待处理的更新齐聚一处；在可以静默安装时还有“全部更新”。", settings("queue")),
+        Feature(Sym.Notifications, "后台下载", "离开 Orion 下载仍会继续，通知栏实时显示进度，完成后轻点即可安装。"),
+        Feature(Sym.Autorenew, "自动更新", "Orion 每隔几小时检查一次更新，即使应用已关闭或设备重启过，并替你下载。", settings("network")),
+        Feature(Sym.SystemUpdate, "自动安装", "让 Orion 自动安装它下载的更新。未能完成的项目会在你下次打开应用时报告。", settings("network")),
+        Feature(Sym.Verified, "仅稳定版", "只要存在稳定版，就跳过测试版、内测版和夜间版构建。", settings("network")),
+        Feature(Sym.Wifi, "仅限 Wi-Fi", "不让下载消耗移动数据。", settings("network")),
+        Feature(Sym.CleaningServices, "清理工", "残留 APK 会在安装一周后清理；开启“自动清理”则立即清理。文件堆积时还会出现一键清理的胶囊按钮。", settings("storage")),
     )),
-    Chapter("install", "Installing, Your Way", "From one-tap installs to fully silent updates.", Sym.InstallMobile, Color(0xFFF97316), MaterialShapes.Gem, listOf(
-        Feature(Sym.Android, "Choose your installer", "Use the system installer, pick one every time, or always hand APKs to a specific installer app.", settings("installer")),
-        Feature(Sym.Speed, "Skip the 24-hour wait", "Built-in wireless debugging installs apps instantly as the shell user, set up once with a few guided steps.", settings("installer")),
-        Feature(Sym.Bolt, "Silent installs with Shizuku", "With Shizuku running, installs and updates go through without a prompt each time.", settings("installer")),
-        Feature(Sym.Terminal, "Root mode", "Silent installs, updates and every Guardian tool through root, with no Shizuku or wireless debugging needed.", settings("installer")),
-        Feature(Sym.Sync, "Adopt installed apps", "With root, Orion takes over updates for catalog apps you got elsewhere. Their data stays exactly as it was.", settings("installer")),
-        Feature(Sym.Lock, "Update lock", "On Android 14 and newer with root, other stores must ask you before updating apps Orion installed.", settings("installer")),
-        Feature(Sym.DeleteSweep, "Clear every app's cache", "With root, free space across all your apps in a single tap.", settings("installer")),
-        Feature(Sym.Refresh, "Force rescan", "Reload the list of installed apps whenever something looks out of date.", settings("installer")),
+    Chapter("install", "按你的方式安装", "从一键安装到完全静默的更新。", Sym.InstallMobile, Color(0xFFF97316), MaterialShapes.Gem, listOf(
+        Feature(Sym.Android, "选择你的安装器", "使用系统安装器、每次询问，或始终把 APK 交给指定的安装器应用。", settings("installer")),
+        Feature(Sym.Speed, "跳过 24 小时等待", "内置无线调试以 shell 用户身份极速安装应用，跟随引导设置一次即可。", settings("installer")),
+        Feature(Sym.Bolt, "用 Shizuku 静默安装", "只要 Shizuku 在运行，安装和更新都无需每次确认。", settings("installer")),
+        Feature(Sym.Terminal, "Root 模式", "通过 root 进行静默安装、更新和所有守护者工具，无需 Shizuku 或无线调试。", settings("installer")),
+        Feature(Sym.Sync, "接管已安装应用", "在 root 下，Orion 接管你从别处安装的目录应用的更新。应用数据原封不动。", settings("installer")),
+        Feature(Sym.Lock, "更新锁", "在 Android 14 及以上并拥有 root 时，其他商店更新 Orion 安装的应用前必须先征得同意。", settings("installer")),
+        Feature(Sym.DeleteSweep, "清理所有应用缓存", "在 root 下，一键释放所有应用的缓存空间。", settings("installer")),
+        Feature(Sym.Refresh, "强制重新扫描", "当应用列表看起来过期时，随时重新加载。", settings("installer")),
     )),
-    Chapter("xtra", "Guardian and Sentinel", "Security and control tools built right in.", Sym.Shield, Color(0xFFEF4444), MaterialShapes.Cookie6Sided, listOf(
-        Feature(Sym.Shield, "Guardian: permissions", "Spot apps holding risky permissions like location, microphone, contacts and storage, and revoke them.", settings("installer")),
-        Feature(Sym.Unarchive, "Guardian: extract APK", "Pull the APK out of any installed app and save it.", settings("installer")),
-        Feature(Sym.DeleteForever, "Guardian: debloat", "Remove preinstalled system apps reversibly, guided by a community list that marks what is safe to cut.", settings("installer")),
-        Feature(Sym.MonitorHeart, "Sentinel: rapid and deep scans", "Check installed apps against a threat signature database, and sweep your storage for infected files.", settings("installer")),
-        Feature(Sym.Lan, "Sentinel: network sentry", "A live audit of your connection: VPN, DNS, proxies, captive portals and Wi-Fi encryption.", settings("installer")),
-        Feature(Sym.DeveloperMode, "ADB watchdog", "See at a glance whether the developer bridge on your phone is open."),
+    Chapter("xtra", "守护者与哨兵", "内建的安全与掌控工具。", Sym.Shield, Color(0xFFEF4444), MaterialShapes.Cookie6Sided, listOf(
+        Feature(Sym.Shield, "守护者：权限", "找出持有定位、麦克风、通讯录、存储等高危权限的应用，并撤销这些权限。", settings("installer")),
+        Feature(Sym.Unarchive, "守护者：提取 APK", "从任意已安装应用中提取 APK 并保存。", settings("installer")),
+        Feature(Sym.DeleteForever, "守护者：精简系统", "可逆地移除预装系统应用，社区清单会标注哪些可以安全移除。", settings("installer")),
+        Feature(Sym.MonitorHeart, "哨兵：快速与深度扫描", "用威胁特征库检查已安装应用，并全盘扫查被感染的文件。", settings("installer")),
+        Feature(Sym.Lan, "哨兵：网络哨兵", "实时审查你的网络连接：VPN、DNS、代理、强制门户与 Wi-Fi 加密。", settings("installer")),
+        Feature(Sym.DeveloperMode, "ADB 看门狗", "一眼看清手机上的调试桥是否处于开启状态。"),
     )),
-    Chapter("look", "Look and Feel", "Make Orion look and move the way you like.", Sym.Palette, Color(0xFFA855F7), MaterialShapes.Flower, listOf(
-        Feature(Sym.LightMode, "Light, Dusk, Dark and OLED", "Four themes. The button in the search pill cycles them from anywhere with a circular reveal.", settings("visuals")),
-        Feature(Sym.Palette, "Color palettes", "Fourteen palettes from Orion to Cocoa, each tuned for every theme.", settings("visuals")),
-        Feature(Sym.FormatColorFill, "Make your own palette", "Tap Make in the palette row, pick a primary color plus optional secondary and tertiary ones, choose Soft, Balanced or Vivid and preview it in every theme. Long-press your palette to edit it.", settings("visuals")),
-        Feature(Sym.AutoAwesome, "Material You", "Take your colors from your wallpaper on Android 12 and newer.", settings("visuals")),
-        Feature(Sym.FontDownload, "Fonts", "Eleven built-in fonts, or import your own TTF, OTF or WOFF2 file.", settings("visuals")),
-        Feature(Sym.Compress, "Compact mode", "Smaller tiles, slimmer rows and an extra column, so more fits on every screen.", settings("visuals")),
-        Feature(Sym.BlurOn, "Glass dock", "A floating, slightly translucent navigation dock that slides away while you scroll down.", settings("visuals")),
-        Feature(Sym.OpenInFull, "Dock size", "Scale the dock between compact and large with a live preview. It starts compact.", settings("visuals")),
-        Feature(Sym.TouchApp, "Haptic feedback", "Tactile ticks on taps, toggles and successes.", settings("visuals")),
-        Feature(Sym.Speed, "Smooth motion", "Prefer the highest refresh rate your screen offers.", settings("visuals")),
-        Feature(Sym.MotionPhotosOff, "Disable animations", "Every transition snaps instantly.", settings("visuals")),
-        Feature(Sym.ViewAgenda, "Hide tabs", "Hide the Apps, PC, TV or My Apps tab. The Dev tab always stays.", settings("interface")),
-        Feature(Sym.Tv, "Android TV (Beta)", "Orion runs on Android TV: it opens on the TV catalog, installs TV apps right on the TV, and every card lights up as your remote moves. Tap the TV Beta pill to report a bug."),
-        Feature(Sym.DesktopWindows, "Tablets and landscape", "Orion rotates freely on tablets and foldables, with a side rail and a centered, readable column."),
+    Chapter("look", "外观与手感", "让 Orion 的外观与动效合你心意。", Sym.Palette, Color(0xFFA855F7), MaterialShapes.Flower, listOf(
+        Feature(Sym.LightMode, "浅色、黄昏、深色与 OLED", "四套主题。搜索胶囊里的按钮可在任何页面循环切换，并伴随圆形揭示动效。", settings("visuals")),
+        Feature(Sym.Palette, "配色方案", "从 Orion 到 Cocoa 共十四套配色，每一套都为全部主题调校过。", settings("visuals")),
+        Feature(Sym.FormatColorFill, "制作专属调色板", "在调色板行点“制作”，选一个主色加可选的辅色和第三色，选择柔和、均衡或鲜艳，并在所有主题中预览。长按自建调色板即可编辑。", settings("visuals")),
+        Feature(Sym.AutoAwesome, "Material You", "在 Android 12 及以上，从壁纸中提取配色。", settings("visuals")),
+        Feature(Sym.FontDownload, "字体", "内置 11 款字体，也可以导入你自己的 TTF、OTF 或 WOFF2 文件。", settings("visuals")),
+        Feature(Sym.Compress, "紧凑模式", "更小的卡片、更窄的行和额外一列，每屏都能装下更多。", settings("visuals")),
+        Feature(Sym.BlurOn, "毛玻璃底栏", "悬浮、微透明的导航栏，向下滚动时自动滑走。", settings("visuals")),
+        Feature(Sym.OpenInFull, "底栏大小", "在紧凑与大号之间缩放底栏，带实时预览。默认从紧凑开始。", settings("visuals")),
+        Feature(Sym.TouchApp, "触感反馈", "点按、切换和成功操作都有触觉反馈。", settings("visuals")),
+        Feature(Sym.Speed, "流畅动效", "优先使用屏幕支持的最高刷新率。", settings("visuals")),
+        Feature(Sym.MotionPhotosOff, "关闭动画", "所有切换瞬间完成。", settings("visuals")),
+        Feature(Sym.ViewAgenda, "隐藏标签页", "可以隐藏应用、电脑、电视或我的应用标签页。开发者标签页始终保留。", settings("interface")),
+        Feature(Sym.Tv, "安卓电视（Beta）", "Orion 可以在 Android TV 上运行：打开即电视目录，直接在电视上安装电视应用，遥控器移动时卡片逐个点亮。点电视 Beta 胶囊即可反馈问题。"),
+        Feature(Sym.DesktopWindows, "平板与横屏", "在平板和折叠屏上自由旋转，配侧边栏和居中易读的版面。"),
     )),
-    Chapter("settings", "Settings and Backup", "Settings arranged your way, and progress that never gets lost.", Sym.Settings, Color(0xFFEC4899), MaterialShapes.Pentagon, listOf(
-        Feature(Sym.ToggleOn, "Quick toggles", "Pin the switches you flip most to the top of Settings, and drag them into your own order.", { openSettings() }),
-        Feature(Sym.DragHandle, "Arrange the Settings hub", "Long-press a settings card and drag it to a new spot. Reset brings the original order back.", { openSettings() }),
-        Feature(Sym.Backup, "Identity backup", "Save your profile, XP, badges, favorites and settings to a signed .osf file, and restore it on any phone.", settings("identity")),
-        Feature(Sym.Cloud, "Automatic cloud backup", "Connect Google Drive, OneDrive, Proton Drive or any storage app, and Orion keeps your backup fresh daily, weekly or monthly.", settings("identity")),
-        Feature(Sym.CloudOff, "Serverless by design", "No Orion account and no Orion server. Your data stays on your phone and in the cloud you choose."),
-        Feature(Sym.VerifiedUser, "Integrity checks", "Backups with impossible progress are refused, so every level and badge was earned for real."),
+    Chapter("settings", "设置与备份", "按你的方式整理设置，进度永不丢失。", Sym.Settings, Color(0xFFEC4899), MaterialShapes.Pentagon, listOf(
+        Feature(Sym.ToggleOn, "快捷开关", "把最常用的开关固定到设置页顶部，并拖成你自己的顺序。", { openSettings() }),
+        Feature(Sym.DragHandle, "整理设置中心", "长按设置卡片拖到新位置。“重置”可恢复原始顺序。", { openSettings() }),
+        Feature(Sym.Backup, "资料备份", "把个人资料、经验值、徽章、收藏和设置保存为签名的 .osf 文件，在任意手机上恢复。", settings("identity")),
+        Feature(Sym.Cloud, "自动云备份", "连接 Google Drive、OneDrive、Proton Drive 或任意存储应用，Orion 按每天、每周或每月保持备份新鲜。", settings("identity")),
+        Feature(Sym.CloudOff, "无服务器设计", "没有 Orion 账号，也没有 Orion 服务器。数据只留在你的手机和你选择的网盘里。"),
+        Feature(Sym.VerifiedUser, "完整性校验", "进度不合理的备份会被拒绝，确保每个等级和徽章都名副其实。"),
     )),
-    Chapter("profile", "Profile, XP and Badges", "Every app, ad and run moves you up the ranks.", Sym.EmojiEvents, Color(0xFFEAB308), MaterialShapes.Cookie12Sided, listOf(
-        Feature(Sym.Badge, "Pilot card", "A holographic ID that tilts with your phone and under your finger. Tap it to flip it over.", { openProfileStats() }),
-        Feature(Sym.Draw, "Signature", "Sign the back of your pilot card in six inks, with undo and redo for every stroke."),
-        Feature(Sym.Person, "Alias and avatar", "Pick an alien alias and an avatar. Tap the avatar on your card to change it any time.", { openProfileStats() }),
-        Feature(Sym.Bolt, "XP", "Earn 10 XP for each app in your library, 100 for each app you submit, 40 for each Fuel the Code mission, plus mini game XP."),
-        Feature(Sym.TrendingUp, "Levels and ranks", "Each level takes a little more XP than the last. Climb from Cadet to Bronze at 10, Silver at 30 and Gold at 50."),
-        Feature(Sym.Diamond, "Metal card skins", "Bronze, Silver and Gold pilots get a card in that metal, with their rank on the front."),
-        Feature(Sym.MilitaryTech, "Badge archive", "Every badge you can earn, how to earn it and how close you are. Showcase three of them on your profile and the Dev tab.", { profileClick("badges", 0) }),
-        Feature(Sym.QueryStats, "Stats", "Favorites, downloads, XP and rank, counting up every time you open your profile.", { openProfileStats() }),
+    Chapter("profile", "资料、经验与徽章", "每个应用、每次看广告和每场跑酷都助你晋级。", Sym.EmojiEvents, Color(0xFFEAB308), MaterialShapes.Cookie12Sided, listOf(
+        Feature(Sym.Badge, "飞行员卡", "一张全息证件，随手机倾斜、随指尖而动。点按即可翻面。", { openProfileStats() }),
+        Feature(Sym.Draw, "签名", "用六种墨水在飞行员卡背面签名，每一笔都可撤销和重做。"),
+        Feature(Sym.Person, "代号与头像", "选择一个外星代号和头像。点卡片上的头像即可随时更换。", { openProfileStats() }),
+        Feature(Sym.Bolt, "经验值", "应用库里每个应用 10 XP，提交应用每个 100 XP，《为代码加油》任务每个 40 XP，还有小游戏经验。"),
+        Feature(Sym.TrendingUp, "等级与军衔", "每一级所需经验都比上一级略多。从见习学员起步：10 级青铜、30 级白银、50 级黄金。"),
+        Feature(Sym.Diamond, "金属卡面", "青铜、白银、黄金飞行员会获得对应金属质感的卡面，正面显示军衔。"),
+        Feature(Sym.MilitaryTech, "徽章档案", "所有可获得的徽章、获取方式与你的进度。可在资料页和开发者标签页展示其中三枚。", { profileClick("badges", 0) }),
+        Feature(Sym.QueryStats, "统计", "收藏、下载、经验值与军衔，每次打开资料页都在增长。", { openProfileStats() }),
     )),
-    Chapter("play", "Play and Compete", "Missions, a mini game and a global Hall of Fame.", Sym.SportsEsports, Color(0xFF14B8A6), MaterialShapes.SoftBurst, listOf(
-        Feature(Sym.Swords, "Fuel the Code", "An optional quest across two chapters. Each fully watched ad supports Orion, earns XP and moves you toward the next boss and its badge.", { open(Overlay.AD_DONATION) }),
-        Feature(Sym.Castle, "Bosses and badges", "Defeat the Code Golem, the Bug Swarm Queen, the Merge Conflict Hydra and more, each dropping a badge of its own."),
-        Feature(Sym.Egg, "Orion Run", "A Dino runner that keeps you company while the store is under maintenance, worth up to 300 XP a day and three Dino badges."),
-        Feature(Sym.EmojiEvents, "Hall of Fame", "Tap the developer coin on the Dev tab, then tap it again to open the global leaderboard. Claim your own rank once you have five contributions.", { navTo(Tab.ABOUT) }),
-        Feature(Sym.Gavel, "Fair play", "Daily limits on missions and the mini game, and integrity checks on every leaderboard claim, keep the climb honest."),
+    Chapter("play", "游戏与竞技", "任务、小游戏和全球名人堂。", Sym.SportsEsports, Color(0xFF14B8A6), MaterialShapes.SoftBurst, listOf(
+        Feature(Sym.Swords, "为代码加油", "贯穿两章的自愿任务。每看完一条广告都是对 Orion 的支持，赚取经验值，并推进到下一个 Boss 和它的徽章。", { open(Overlay.AD_DONATION) }),
+        Feature(Sym.Castle, "Boss 与徽章", "击败代码魔像、虫群女王、合并冲突九头蛇等，每个 Boss 都会掉落专属徽章。"),
+        Feature(Sym.Egg, "Orion 跑酷", "商店维护时陪你解闷的恐龙跑酷，每天最多 300 XP，还有三枚恐龙徽章。"),
+        Feature(Sym.EmojiEvents, "名人堂", "在开发者标签页点开发者金币，再点一次即可打开全球排行榜。攒满五次贡献就能认领你的排名。", { navTo(Tab.ABOUT) }),
+        Feature(Sym.Gavel, "公平竞技", "任务和小游戏有每日上限，排行榜认领都有完整性校验，晋级之路堂堂正正。"),
     )),
-    Chapter("dev", "The Dev Tab and Beyond", "Help, support and a few things hidden on purpose.", Sym.Code, Color(0xFF64748B), MaterialShapes.Pill, listOf(
-        Feature(Sym.MenuBook, "Know Orion", "This page. Every feature in one place, from the book button at the top of the Dev tab."),
-        Feature(Sym.HelpOutline, "FAQs", "Answers on safety, ReVanced builds, failed installs, trackers and more.", { open(Overlay.FAQ) }),
-        Feature(Sym.NewReleases, "What's new", "Release notes straight from Orion's GitHub releases, with the full notes one tap away.", { open(Overlay.RELEASE_NOTES) }),
-        Feature(Sym.Forum, "Connect", "GitHub, X, Discord and the Orion website, right on the Dev tab.", { navTo(Tab.ABOUT) }),
-        Feature(Sym.Coffee, "Support Orion", "Buy the developer a coffee through Ko-fi, UPI or PayPal.", { navTo(Tab.ABOUT) }),
-        Feature(Sym.Public, "Mirrors and offline", "The catalog loads from GitHub, GitLab, Codeberg or JSDelivr, whichever answers, and stays cached for offline use."),
-        Feature(Sym.Construction, "Maintenance and store updates", "Orion tells you when the store is being worked on, and checks, scans and installs its own updates."),
-        Feature(Sym.Terminal, "Developer options", "Tap the Orion logo seven times to unlock tools for testing catalogs, configs and mirrors."),
-        Feature(Sym.QuestionMark, "Secrets", "A few easter eggs and secret badges are hidden around the app. The FAQ has a riddle to get you started."),
+    Chapter("dev", "开发者标签页与更多", "帮助、支持，以及一些故意藏起来的东西。", Sym.Code, Color(0xFF64748B), MaterialShapes.Pill, listOf(
+        Feature(Sym.MenuBook, "了解 Orion", "就是本页。所有功能汇聚一处，入口在开发者标签页顶部的书本按钮。"),
+        Feature(Sym.HelpOutline, "常见问题", "关于安全性、ReVanced 构建、安装失败、跟踪器等问题的解答。", { open(Overlay.FAQ) }),
+        Feature(Sym.NewReleases, "更新日志", "来自 Orion GitHub 发布页的更新说明，一键查看完整日志。", { open(Overlay.RELEASE_NOTES) }),
+        Feature(Sym.Forum, "联系与社区", "GitHub、X、Discord 和 Orion 官网，就在开发者标签页。", { navTo(Tab.ABOUT) }),
+        Feature(Sym.Coffee, "支持 Orion", "通过 Ko-fi、UPI 或 PayPal 请开发者喝杯咖啡。", { navTo(Tab.ABOUT) }),
+        Feature(Sym.Public, "镜像与离线", "目录从 GitHub、GitLab、Codeberg 或 JSDelivr 加载（谁快用谁），并缓存供离线使用。"),
+        Feature(Sym.Construction, "维护与商店更新", "商店维护时 Orion 会告诉你；它还会自行检查、扫描并安装自己的更新。"),
+        Feature(Sym.Terminal, "开发者选项", "连点 Orion Logo 七次，解锁用于测试目录、配置和镜像的工具。"),
+        Feature(Sym.QuestionMark, "小秘密", "应用里藏着一些彩蛋和秘密徽章。FAQ 里有一条谜语可以带你入门。"),
     )),
 )
 
@@ -201,7 +201,7 @@ fun KnowOrionScreen(vm: MainViewModel, onClose: () -> Unit) {
         item("hero") { GuideHero(total) }
         item("search") { GuideSearch(query) { query = it } }
         item("chips") { ChapterChips(shown, -1, rememberLazyListState(), ::jump) }
-        if (shown.isEmpty()) item("empty") { EmptyState(Sym.SearchOff, "Nothing matches “$query”", "Try a shorter word, like backup or theme.") }
+        if (shown.isEmpty()) item("empty") { EmptyState(Sym.SearchOff, "没有与“$query”匹配的内容", "试试更短的词，比如备份、主题。") }
         shown.forEach { c ->
             item("h-${c.id}", contentType = "header") { ChapterHeader(c, CHAPTERS.indexOfFirst { it.id == c.id }) }
             itemsIndexed(c.features, key = { _, f -> "${c.id}-${f.title}" }, contentType = { _, _ -> "feature" }) { i, f -> FeatureRow(c, f, i, c.features.size) { go(f) } }
@@ -211,8 +211,8 @@ fun KnowOrionScreen(vm: MainViewModel, onClose: () -> Unit) {
                 Box(Modifier.size(56.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(cs.primaryContainer), contentAlignment = Alignment.Center) {
                     Icon(painterResource(com.orion.store.R.drawable.ic_splash_logo), null, Modifier.size(40.dp), tint = cs.onPrimaryContainer)
                 }
-                Text("That's all of Orion", Modifier.padding(top = 14.dp), style = MaterialTheme.typography.titleLargeEmphasized)
-                Text("$total features in ${CHAPTERS.size} chapters, and more on the way.", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodyMedium,
+                Text("Orion 的全部就在这里", Modifier.padding(top = 14.dp), style = MaterialTheme.typography.titleLargeEmphasized)
+                Text("共 ${CHAPTERS.size} 个章节、$total 项功能，还会持续增加。", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodyMedium,
                     color = cs.onSurfaceVariant, textAlign = TextAlign.Center)
                 Surface(Modifier.padding(top = 14.dp), shape = Pill, color = cs.surfaceContainerHigh) {
                     Text("v$STORE_VERSION", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge)
@@ -253,9 +253,9 @@ private fun GuideHero(total: Int) {
             MorphBlob(HERO_SHAPES, shape, 104.dp, cs.primary, Modifier.padding(top = 12.dp)) {
                 Icon(painterResource(com.orion.store.R.drawable.ic_splash_logo), null, Modifier.size(72.dp), tint = cs.onPrimary)
             }
-            Text("FIELD GUIDE", Modifier.padding(top = 20.dp), style = MaterialTheme.typography.labelLargeEmphasized, color = cs.primary)
-            Text("Know Orion", style = MaterialTheme.typography.displayMediumEmphasized)
-            Text("Every one of Orion's $total features, from backups and compact mode to badges, the Hall of Fame and the Dino run. Tap a feature with an arrow to go straight to it.",
+            Text("使用指南", Modifier.padding(top = 20.dp), style = MaterialTheme.typography.labelLargeEmphasized, color = cs.primary)
+            Text("了解 Orion", style = MaterialTheme.typography.displayMediumEmphasized)
+            Text("Orion 的全部 $total 项功能都在这里：从备份、紧凑模式，到徽章、名人堂和恐龙跑酷。点带箭头的功能项可直接跳转。",
                 Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant)
         }
     }
@@ -269,8 +269,8 @@ private fun GuideSearch(query: String, onChange: (String) -> Unit) {
         Icon(Sym.Search, null, tint = cs.onSurfaceVariant)
         BasicTextField(query, onChange, Modifier.weight(1f).padding(horizontal = 12.dp), singleLine = true,
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface), cursorBrush = SolidColor(cs.primary),
-            decorationBox = { field -> Box { if (query.isEmpty()) Text("Search features", style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant); field() } })
-        if (query.isNotEmpty()) IconButton({ onChange("") }) { Icon(Sym.Close, "Clear search") }
+            decorationBox = { field -> Box { if (query.isEmpty()) Text("搜索功能", style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant); field() } })
+        if (query.isNotEmpty()) IconButton({ onChange("") }) { Icon(Sym.Close, "清除搜索") }
     }
 }
 
@@ -285,7 +285,7 @@ private fun ChapterHeader(c: Chapter, index: Int) {
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            Text("CHAPTER ${index + 1}", style = MaterialTheme.typography.labelMedium, color = fg.copy(.75f))
+            Text("第 ${index + 1} 章", style = MaterialTheme.typography.labelMedium, color = fg.copy(.75f))
             Text(c.title, style = MaterialTheme.typography.headlineSmallEmphasized, color = fg)
             Text(c.blurb, style = MaterialTheme.typography.bodyMedium, color = fg.copy(.85f))
         }
@@ -308,7 +308,7 @@ private fun FeatureRow(c: Chapter, f: Feature, i: Int, n: Int, onGo: () -> Unit)
             Text(f.title, style = MaterialTheme.typography.titleMedium)
             Text(f.body, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
         }
-        if (f.go != null) { Spacer(Modifier.width(12.dp)); Icon(Sym.ArrowForward, "Open ${f.title}", tint = fg) }
+        if (f.go != null) { Spacer(Modifier.width(12.dp)); Icon(Sym.ArrowForward, "打开 ${f.title}", tint = fg) }
     }
 }
 

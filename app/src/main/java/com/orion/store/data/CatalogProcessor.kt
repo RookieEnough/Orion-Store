@@ -189,12 +189,12 @@ object CatalogProcessor {
     private fun defaultModules(apps: List<AppItem>, seed: Int): List<ModuleConfig> {
         val s = shuffle(apps, seed + 17).map { it.id }
         return listOf(
-            ModuleConfig("default_category_cards", "category_cards", "Browse by Category", "Swipe the cards, then tap one to show only matching apps", insertAfterCategory = 0.0, animation = "confetti"),
-            ModuleConfig("default_curved_showcase", "curved_apps", "Curated Spotlight", "A quick 6-app mix you should not miss", insertAfterCategory = 2.0, animation = "snowfall", appIds = s.take(6)),
-            ModuleConfig("default_recommended_bundles", "recommendation_bundles", "Recommended App Bundles", "Install in packs for faster setup", insertAfterCategory = 4.0, animation = "spark", bundles = listOf(
-                ModuleBundleConfig("default_bundle_daily", "Daily Driver Kit", "Core apps for your everyday workflow", s.subList(0, minOf(3, s.size)), badge = "Starter", icon = "fa-bolt"),
-                ModuleBundleConfig("default_bundle_media", "Media Escape", "Watch, listen, and unwind quickly", s.slice(minOf(3, s.size) until minOf(6, s.size)), badge = "Popular", icon = "fa-photo-film"),
-                ModuleBundleConfig("default_bundle_power", "Power User Stack", "Advanced tools for people who build and tweak", s.slice(minOf(6, s.size) until minOf(9, s.size)), badge = "Pro", icon = "fa-terminal"),
+            ModuleConfig("default_category_cards", "category_cards", "按分类浏览", "滑动卡片，点一个即可只看匹配的应用", insertAfterCategory = 0.0, animation = "confetti"),
+            ModuleConfig("default_curved_showcase", "curved_apps", "精选聚光", "一份不容错过的 6 应用速览", insertAfterCategory = 2.0, animation = "snowfall", appIds = s.take(6)),
+            ModuleConfig("default_recommended_bundles", "recommendation_bundles", "推荐应用合集", "打包安装，一步到位", insertAfterCategory = 4.0, animation = "spark", bundles = listOf(
+                ModuleBundleConfig("default_bundle_daily", "日常主力套件", "日常工作流的核心应用", s.subList(0, minOf(3, s.size)), badge = "入门", icon = "fa-bolt"),
+                ModuleBundleConfig("default_bundle_media", "媒体休闲包", "快速观影、听歌、放松一下", s.slice(minOf(3, s.size) until minOf(6, s.size)), badge = "热门", icon = "fa-photo-film"),
+                ModuleBundleConfig("default_bundle_power", "高级玩家工具箱", "为爱折腾的进阶用户准备的高级工具", s.slice(minOf(6, s.size) until minOf(9, s.size)), badge = "专业", icon = "fa-terminal"),
             )),
         )
     }
@@ -218,7 +218,7 @@ object CatalogProcessor {
                     val src = resolve(m.appIds, map).ifEmpty { shuffle(apps, seed + index + 67).take(9) }
                     (0..2).mapNotNull { i ->
                         val ch = src.drop(i * 3).take(3).takeIf { it.size >= 2 } ?: return@mapNotNull null
-                        BundleItem("${m.id}-bundle-$i", "Recommended Pack ${i + 1}", "Hand-picked apps that work great together", ch.map { it.id }, ch, null,
+                        BundleItem("${m.id}-bundle-$i", "推荐套装 ${i + 1}", "精心挑选、彼此合拍的应用", ch.map { it.id }, ch, null,
                             listOf("Hot", "Fresh", "Classic")[i], listOf("fa-wand-magic-sparkles", "fa-headphones", "fa-rocket")[i], monogram("Recommended Pack ${i + 1}"))
                     }
                 }
@@ -239,7 +239,7 @@ object CatalogProcessor {
             StoreCollection("recommended_daily", "Recommended For You", CollectionType.SWIMLANE, apps = shuffle(apps, seed + 1).take(10)),
             StoreCollection("new_updated", "New & Updated", CollectionType.SWIMLANE, apps = apps.reversed().take(12), totalAppCount = minOf(apps.size, 18)),
         )
-        val rows = byCat.filter { it.value.size >= 3 }.map { (c, l) -> StoreCollection("cat_${c.lowercase()}", "Top in $c", CollectionType.SWIMLANE, filter = c, apps = l.take(12)) }
+        val rows = byCat.filter { it.value.size >= 3 }.map { (c, l) -> StoreCollection("cat_${c.lowercase()}", "「$c」精选", CollectionType.SWIMLANE, filter = c, apps = l.take(12)) }
         var active = modules.filter { forPlatform(it, platform) && it.type != "update_pills" }.ifEmpty { defaultModules(apps, seed) }
         if (active.none { it.type == "category_cards" }) active = listOf(ModuleConfig("default_category_cards_${platform.lowercase()}", "category_cards", "Browse by Category",
             "Swipe the cards, then tap one to show only matching apps", insertAfterCategory = 0.0, animation = "confetti")) + active

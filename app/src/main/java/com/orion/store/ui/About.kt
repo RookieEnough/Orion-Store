@@ -82,11 +82,11 @@ val BADGES: Map<String, Pair<ImageVector, Color>> = mapOf(
     "Legend" to (Sym.WorkspacePremium to Color(0xFFEAB308)), "Guardian" to (Sym.Shield to Color(0xFFEF4444)),
     "Void Walker" to (Sym.DarkMode to Color(0xFFA855F7)), "Supernova" to (Sym.AutoAwesome to Color(0xFFEC4899)),
     "Backer" to (Sym.Diamond to Color(0xFF06B6D4)), "Dev Mode" to (Sym.Terminal to Color(0xFFD946EF)),
-    "Dino Rookie" to (Sym.Egg to Color(0xFF10B981)), "Dino Master" to (Sym.Bolt to Color(0xFF3B82F6)),
-    "Dino Legend" to (Sym.LocalFireDepartment to Color(0xFFF97316)),
+    "恐龙新兵" to (Sym.Egg to Color(0xFF10B981)), "恐龙大师" to (Sym.Bolt to Color(0xFF3B82F6)),
+    "恐龙传说" to (Sym.LocalFireDepartment to Color(0xFFF97316)),
     "Merge Tamer" to (Sym.CallMerge to Color(0xFF14B8A6)), "Spaghetti Slayer" to (Sym.RamenDining to Color(0xFFF59E0B)),
     "Sudo Sovereign" to (Sym.Crown to Color(0xFFE11D48)),
-    "Bronze Wings" to (Sym.MilitaryTech to Color(0xFFC07A3E)), "Silver Wings" to (Sym.MilitaryTech to Color(0xFF8F979F)), "Gold Wings" to (Sym.MilitaryTech to Color(0xFFE0A526)),
+    "青铜之翼" to (Sym.MilitaryTech to Color(0xFFC07A3E)), "白银之翼" to (Sym.MilitaryTech to Color(0xFF8F979F)), "黄金之翼" to (Sym.MilitaryTech to Color(0xFFE0A526)),
 )
 
 @Composable
@@ -128,7 +128,7 @@ private fun DevCoin(vm: MainViewModel, profile: DevProfile, slots: List<String>,
                     onError = { if (++stage == 2) deadImages += img })
             } else Column(Modifier.fillMaxSize().background(cs.tertiaryContainer), Arrangement.Center, Alignment.CenterHorizontally) {
                 Icon(Sym.EmojiEventsFilled, null, Modifier.size(40.dp), tint = cs.onTertiaryContainer)
-                Text("Hall of\nFame", textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLargeEmphasized, color = cs.onTertiaryContainer)
+                Text("名人\n堂", textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLargeEmphasized, color = cs.onTertiaryContainer)
             }
         }
     }
@@ -144,7 +144,7 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
     LaunchedEffect(flipped) { if (flipped) { delay(6000); flipped = false } }
     LaunchedEffect(Unit) { if (s.coinFlipHintCount < 3) { delay(1600); flipped = true; vm.set { it.incrementCoinFlipHint() } } }
     val ads = s.adWatchCount
-    val (rankLabel, rankIcon) = QUEST_BOSSES.lastOrNull { ads >= it.lvl }?.let { "Rank: ${it.rank}" to (BADGES[it.badge]?.first ?: Sym.Shield) } ?: ("Start your journey" to Sym.RocketLaunch)
+    val (rankLabel, rankIcon) = QUEST_BOSSES.lastOrNull { ads >= it.lvl }?.let { "军衔：${it.rank}" to (BADGES[it.badge]?.first ?: Sym.Shield) } ?: ("开始你的旅程" to Sym.RocketLaunch)
     val slots = s.showcasedBadges.take(3)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
         item("header") { Header(vm) }
@@ -152,7 +152,7 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
             Column(Modifier.fillMaxWidth().padding(top = 8.dp).reveal(0), horizontalAlignment = Alignment.CenterHorizontally) {
                 DevCoin(vm, profile, slots, flipped) { if (flipped) { leaderboard = true; vm.haptic(H.MEDIUM) } else { flipped = true; vm.haptic(H.SELECTION) } }
                 Text(profile.name, style = MaterialTheme.typography.displaySmallEmphasized)
-                Text(if (flipped) "Tap again for the Hall of Fame" else "Tap the coin to flip it", style = MaterialTheme.typography.labelMedium, color = cs.primary)
+                Text(if (flipped) "再点一次进入名人堂" else "点按金币将其翻转", style = MaterialTheme.typography.labelMedium, color = cs.primary)
                 Text(profile.bio, Modifier.padding(horizontal = 36.dp, vertical = 10.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant)
             }
         }
@@ -160,13 +160,13 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
             FlowRow(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 8.dp).reveal(1), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                 slots.forEachIndexed { i, id -> BadgeChip(id) { if (slots.size == 3) vm.profileClick("badges", i) } }
-                if (slots.size < 3) AssistChip({ vm.profileClick("badges", slots.size) }, { Text("Add badge") }, leadingIcon = { Icon(Sym.Add, null, Modifier.size(AssistChipDefaults.IconSize)) }, shape = Pill)
+                if (slots.size < 3) AssistChip({ vm.profileClick("badges", slots.size) }, { Text("添加徽章") }, leadingIcon = { Icon(Sym.Add, null, Modifier.size(AssistChipDefaults.IconSize)) }, shape = Pill)
             }
         }
-        item("connect") { Group("Connect", Modifier.reveal(2)) {
+        item("connect") { Group("联系与社区", Modifier.reveal(2)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 listOf(Triple(Sym.BrandGitHub, "GitHub", Gray) to socials.github, Triple(Sym.BrandX, "X", Color(0xFF64748B)) to socials.x, Triple(Sym.BrandDiscord, "Discord", Color(0xFF5865F2)) to socials.discord,
-                    Triple(Sym.Public, "Website", Color(0xFF6366F1)) to ORION_SITE)
+                    Triple(Sym.Public, "官网", Color(0xFF6366F1)) to ORION_SITE)
                     .forEachIndexed { i, (spec, url) ->
                         val (bg, fg) = tonal(spec.third)
                         val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -180,7 +180,7 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                     }
             }
         } }
-        item("support") { Group("Support Orion", Modifier.reveal(3)) {
+        item("support") { Group("支持 Orion", Modifier.reveal(3)) {
             val next = QUEST_BOSSES.firstOrNull { ads < it.lvl }?.let { it.lvl to it.rank }
             val (bg, fg) = tonal(Fuchsia)
             var shown by remember { mutableStateOf(false) }; LaunchedEffect(Unit) { shown = true }
@@ -190,28 +190,28 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                     Box(Modifier.size(52.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(fg.copy(.14f)), contentAlignment = Alignment.Center) { Icon(rankIcon, null, tint = fg) }
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Fuel the Code", style = MaterialTheme.typography.titleLargeEmphasized, color = fg)
+                        Text("为代码加油", style = MaterialTheme.typography.titleLargeEmphasized, color = fg)
                         Text(rankLabel, style = MaterialTheme.typography.bodyMedium, color = fg.copy(.85f))
                     }
                     Icon(Sym.PlayArrow, null, tint = fg)
                 }
                 LinearWavyProgressIndicator({ prog }, Modifier.fillMaxWidth().padding(top = 16.dp), color = fg, trackColor = fg.copy(.2f))
-                Text(next?.let { "$ads watched · ${it.first - ads} more to ${it.second}" } ?: "$ads watched · every rank unlocked", Modifier.padding(top = 8.dp),
+                Text(next?.let { "已看 $ads 条 · 距「${it.second}」还差 ${it.first - ads} 条" } ?: "已看 $ads 条 · 所有军衔已解锁", Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.labelMedium, color = fg.copy(.85f))
             }
             if (donation.kofiUrl != null || donation.upiId != null || donation.paypalUrl != null) Row(Modifier.fillMaxWidth().padding(top = 8.dp)
                 .springClick(RoundedCornerShape(28.dp)) { vm.donateOpen = true; vm.haptic(H.SELECTION) }.background(cs.surfaceContainerHigh).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 TonalIcon(Sym.Coffee, Caution); Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Buy me a coffee", style = MaterialTheme.typography.titleMedium)
-                    Text("Ko-fi, UPI or PayPal", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                    Text("请我喝杯咖啡", style = MaterialTheme.typography.titleMedium)
+                    Text("Ko-fi、UPI 或 PayPal", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 }
                 Icon(Sym.ChevronRight, null)
             }
         } }
-        item("help") { Group("Help", Modifier.reveal(4)) {
+        item("help") { Group("帮助", Modifier.reveal(4)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(Triple(Sym.HelpOutline, "FAQs", "Secrets & safety") to { vm.open(Overlay.FAQ) }, Triple(Sym.NewReleases, "What's new", "Release notes") to { vm.open(Overlay.RELEASE_NOTES) })
+                listOf(Triple(Sym.HelpOutline, "常见问题", "小秘密与安全性") to { vm.open(Overlay.FAQ) }, Triple(Sym.NewReleases, "更新日志", "版本发布说明") to { vm.open(Overlay.RELEASE_NOTES) })
                     .forEach { (spec, go) ->
                         Column(Modifier.weight(1f).springClick(RoundedCornerShape(28.dp)) { vm.haptic(H.LIGHT); go() }.background(cs.surfaceContainerHigh).padding(18.dp)) {
                             TonalIcon(spec.first, cs.primary)
@@ -226,13 +226,13 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Surface(shape = Pill, color = cs.surfaceContainerHigh) { Text("v$STORE_VERSION", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge) }
                     // The quiet RE mark: this build is the native rewrite of the web app
-                    Surface(shape = Pill, color = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text("RE · Native", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLargeEmphasized) }
+                    Surface(shape = Pill, color = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text("RE · 原生版", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLargeEmphasized) }
                     val c = if (s.useRemoteJson) Safe else Caution
                     Surface(shape = Pill, color = tonal(c).first, contentColor = tonal(c).second) {
-                        Text("Source: ${if (s.useRemoteJson) "Remote" else "Local"}", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge)
+                        Text("数据源：${if (s.useRemoteJson) "远程" else "本地"}", Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge)
                     }
                 }
-                Text("Made with 💜 for Geeks", Modifier.padding(top = 12.dp).clip(Pill).clickable { vm.profileClick() }.padding(horizontal = 16.dp, vertical = 8.dp),
+                Text("用 💜 为极客打造", Modifier.padding(top = 12.dp).clip(Pill).clickable { vm.profileClick() }.padding(horizontal = 16.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
             }
         }
@@ -267,53 +267,53 @@ fun DevTools(vm: MainViewModel) {
     }
     fun save(t: String) { vm.set { it.copy(githubToken = t) }; editing = false; scope.launch { delay(500); vm.reload() } }
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Developer tools", Modifier.padding(start = 8.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMediumEmphasized)
+        Text("开发者工具", Modifier.padding(start = 8.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMediumEmphasized)
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surfaceContainerHigh)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("GitHub Access", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text("Unlock 5000 requests/hr (Authenticated)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("GitHub 访问令牌", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("解锁每小时 5000 次请求（认证后）", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    TextButton({ editing = !editing; draft = s.githubToken }) { Text(if (editing) "Cancel" else "Edit Token") }
+                    TextButton({ editing = !editing; draft = s.githubToken }) { Text(if (editing) "取消" else "编辑令牌") }
                 }
                 if (editing) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(draft, { draft = it }, Modifier.weight(1f), placeholder = { Text("ghp_...") }, singleLine = true, shape = RoundedCornerShape(16.dp),
                         visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { save(draft) }),
-                        trailingIcon = { IconButton({ show = !show }) { Icon(if (show) Sym.VisibilityOff else Sym.Visibility, if (show) "Hide token" else "Show token") } })
-                    Button({ save(draft) }, shapes = ButtonDefaults.shapes()) { Text("Save") }
+                        trailingIcon = { IconButton({ show = !show }) { Icon(if (show) Sym.VisibilityOff else Sym.Visibility, if (show) "隐藏令牌" else "显示令牌") } })
+                    Button({ save(draft) }, shapes = ButtonDefaults.shapes()) { Text("保存") }
                 } else Row(Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(if (s.githubToken.isNotEmpty()) Safe else MaterialTheme.colorScheme.error))
-                    Text(if (s.githubToken.isEmpty()) "No Token Set (Rate Limited)" else if (show) s.githubToken else "••••••••••••${s.githubToken.takeLast(4)}",
+                    Text(if (s.githubToken.isEmpty()) "未设置令牌（受速率限制）" else if (show) s.githubToken else "••••••••••••${s.githubToken.takeLast(4)}",
                         Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 14.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (s.githubToken.isNotEmpty()) {
-                        IconButton({ show = !show }) { Icon(if (show) Sym.VisibilityOff else Sym.Visibility, if (show) "Hide token" else "Reveal token") }
-                        IconButton({ clip.setText(AnnotatedString(s.githubToken)) }) { Icon(Sym.ContentCopy, "Copy token") }
-                        IconButton({ save("") }) { Icon(Sym.DeleteOutline, "Remove token") }
+                        IconButton({ show = !show }) { Icon(if (show) Sym.VisibilityOff else Sym.Visibility, if (show) "隐藏令牌" else "显示令牌") }
+                        IconButton({ clip.setText(AnnotatedString(s.githubToken)) }) { Icon(Sym.ContentCopy, "复制令牌") }
+                        IconButton({ save("") }) { Icon(Sym.DeleteOutline, "移除令牌") }
                     }
                 }
             }
         }
-        Text("UI Debugger (Alignment Check)", Modifier.padding(start = 8.dp, top = 6.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        Text("UI 调试器（对齐检查）", Modifier.padding(start = 8.dp, top = 6.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton({ vm.allApps().firstOrNull()?.let { vm.installToast(it, "test.apk") } }) { Text("Toast: Install") }
-            OutlinedButton({ vm.error("This is a test error message for alignment checking.") }) { Text("Toast: Error") }
-            OutlinedButton({ val t = System.currentTimeMillis(); vm.upd { it.copy(pendingCleanup = mapOf("test-1" to CleanupEntry("a", t), "test-2" to CleanupEntry("b", t), "test-3" to CleanupEntry("c", t))) } }) { Text("Deck: Clean") }
-            OutlinedButton({ vm.set { it.copy(hasSeenModernUITutorial = false) }; vm.tour = false; vm.open(Overlay.TUTORIAL) }) { Text("Trigger: Try New UI") }
-            Button({ vm.forcedTest = "checking" }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error)) { Text("TEST FORCED UPDATE") }
+            OutlinedButton({ vm.allApps().firstOrNull()?.let { vm.installToast(it, "test.apk") } }) { Text("提示：安装") }
+            OutlinedButton({ vm.error("这是一条用于对齐检查的测试错误消息。") }) { Text("提示：错误") }
+            OutlinedButton({ val t = System.currentTimeMillis(); vm.upd { it.copy(pendingCleanup = mapOf("test-1" to CleanupEntry("a", t), "test-2" to CleanupEntry("b", t), "test-3" to CleanupEntry("c", t))) } }) { Text("卡组：干净") }
+            OutlinedButton({ vm.set { it.copy(hasSeenModernUITutorial = false) }; vm.tour = false; vm.open(Overlay.TUTORIAL) }) { Text("触发：试试新版界面") }
+            Button({ vm.forcedTest = "checking" }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error)) { Text("测试强制更新") }
         }
         rate?.let { (limit, rem, reset) ->
             Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surfaceContainer)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row { Text("GitHub API Quota", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); Text("$rem/$limit", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) }
+                    Row { Text("GitHub API 配额", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); Text("$rem/$limit", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) }
                     LinearProgressIndicator({ if (limit > 0) rem / limit.toFloat() else 0f }, Modifier.fillMaxWidth(), color = if (rem < limit * .2f) MaterialTheme.colorScheme.error else Safe)
-                    Row { Text(if (s.githubToken.isNotEmpty()) "Authenticated" else "Public IP", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+                    Row { Text(if (s.githubToken.isNotEmpty()) "已认证" else "公共 IP", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
                         Text("Resets: ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(reset * 1000))}", style = MaterialTheme.typography.labelSmall) }
                 }
             }
         }
-        Text("Package Detective", Modifier.padding(start = 8.dp, top = 6.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        Text("应用包侦探", Modifier.padding(start = 8.dp, top = 6.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(pkg, { pkg = it }, Modifier.weight(1f), placeholder = { Text("com.example.app") }, singleLine = true, shape = RoundedCornerShape(16.dp))
             FilledIconButton({
@@ -323,9 +323,9 @@ fun DevTools(vm: MainViewModel) {
             }, shapes = IconButtonDefaults.shapes()) { Icon(Sym.Search, "Check package") }
         }
         if (pkgResult.isNotEmpty()) Code(pkgResult)
-        OutlinedButton({ showJson = !showJson }, Modifier.fillMaxWidth()) { Text("Raw Metadata Explorer", Modifier.weight(1f)); Icon(if (showJson) Sym.ExpandLess else Sym.ExpandMore, null) }
+        OutlinedButton({ showJson = !showJson }, Modifier.fillMaxWidth()) { Text("原始元数据浏览器", Modifier.weight(1f)); Icon(if (showJson) Sym.ExpandLess else Sym.ExpandMore, null) }
         if (showJson) {
-            val raw = remember(d.apps) { if (d.apps.isEmpty()) "Cache Empty" else runCatching { Json(json) { prettyPrint = true }.encodeToString(ListSerializer(AppItem.serializer()), d.apps) }.getOrDefault("Error parsing cache") }
+            val raw = remember(d.apps) { if (d.apps.isEmpty()) "缓存为空" else runCatching { Json(json) { prettyPrint = true }.encodeToString(ListSerializer(AppItem.serializer()), d.apps) }.getOrDefault("缓存解析失败") }
             Code(raw, Modifier.heightIn(max = 320.dp))
         }
         Row(Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -340,13 +340,13 @@ fun DevTools(vm: MainViewModel) {
             Icon(Sym.DeleteForever, null); Spacer(Modifier.width(8.dp)); Text("NUCLEAR RESET (Wipe & Restart)", fontWeight = FontWeight.Black)
         }
     }
-    if (nuke) AlertDialog({ nuke = false }, icon = { Icon(Sym.DeleteForever, null) }, title = { Text("Nuclear reset?") },
-        text = { Text("Clears every setting, cache and library record, then restarts Orion. Downloaded APK files stay on disk.") },
+    if (nuke) AlertDialog({ nuke = false }, icon = { Icon(Sym.DeleteForever, null) }, title = { Text("恢复出厂设置？") },
+        text = { Text("清除全部设置、缓存和应用库记录，然后重启 Orion。已下载的 APK 文件会保留在磁盘上。") },
         confirmButton = { Button({
             nuke = false; vm.set { Settings() }; vm.upd { DataState() }
             scope.launch { delay(700); ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.let { ctx.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) }; exitProcess(0) }
         }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error)) { Text("Wipe & Restart") } },
-        dismissButton = { TextButton({ nuke = false }) { Text("Cancel") } })
+        dismissButton = { TextButton({ nuke = false }) { Text("取消") } })
 }
 
 @Composable
@@ -403,19 +403,19 @@ fun LeaderboardSheet(vm: MainViewModel, onDismiss: () -> Unit, onSubmit: () -> U
     }
     val cooldown = s.lastSubmissionTime > 0 && System.currentTimeMillis() - s.lastSubmissionTime < 3_600_000
     OrionSheet(onDismiss) {
-        SheetTitle("Hall of Fame", Sym.EmojiEvents, "Global Top Contributors")
+        SheetTitle("名人堂", Sym.EmojiEvents, "全球顶尖贡献者")
         Box(Modifier.fillMaxWidth().heightIn(min = 240.dp, max = 560.dp), contentAlignment = Alignment.Center) {
             val list = entries
             when {
                 error -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Sym.WifiOff, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.error)
                     Text("Signal Lost", Modifier.padding(8.dp), style = MaterialTheme.typography.titleMedium)
-                    FilledTonalButton({ nonce++ }) { Text("Reconnect") }
+                    FilledTonalButton({ nonce++ }) { Text("重新连接") }
                 }
                 list == null -> ContainedLoadingIndicator()
                 list.isEmpty() -> Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("It's quiet... too quiet.", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("The Hall of Fame is empty.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("名人堂还是空的。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Be the first legend to rise!", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
                 else -> LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -515,7 +515,7 @@ fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
             put("signature", leaderboardSignature(payload))
         }.toString()
         runCatching { Net.postJson(WORKER_URL, body) }.onFailure { status = "error"; err = it.message ?: "Unknown Error" }.onSuccess { (code, res) ->
-            if (code !in 200..299) { status = "error"; err = if (code == 429) "Whoa! You can only join once every 24 hours." else runCatching { json.parseToJsonElement(res).jsonObject["error"]!!.jsonPrimitive.content }.getOrDefault("Portal connection failed."); return }
+            if (code !in 200..299) { status = "error"; err = if (code == 429) "哇！每 24 小时只能提交一次。" else runCatching { json.parseToJsonElement(res).jsonObject["error"]!!.jsonPrimitive.content }.getOrDefault("连接名人堂服务器失败。"); return }
             status = "success"
             vm.set { it.registerSubmission(now).copy(lastLeaderboardSubmissionTime = now).withProfile(UserProfile(name.trim(), char.id, char.url), now) }
         }
@@ -523,15 +523,15 @@ fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
     fun submit(sim: Boolean) {
         err = ""; val n = name.trim()
         err = when {
-            n.isEmpty() -> "Please enter a cool name!"; n.length > 15 -> "Name too long (Max 15 chars)"; n.length < 3 -> "Name too short (Min 3 chars)"
-            isProfane(n, blocklist) -> "Let's keep it family friendly!"; !canSubmit && !sim -> "You need 5 contributions to join the Hall of Fame!"
-            !sim && !Xp.plausible(s, System.currentTimeMillis()) -> "Your progress failed the integrity check, so it can't join the leaderboard."; else -> ""
+            n.isEmpty() -> "起一个酷一点的名字吧！"; n.length > 15 -> "名字太长（最多 15 个字符）"; n.length < 3 -> "名字太短（至少 3 个字符）"
+            isProfane(n, blocklist) -> "起个老少皆宜的名字吧！"; !canSubmit && !sim -> "需要 5 次贡献才能进入名人堂！"
+            !sim && !Xp.plausible(s, System.currentTimeMillis()) -> "你的进度未通过完整性校验，暂时无法进入排行榜。"; else -> ""
         }
         if (err.isNotEmpty()) return
         status = "processing"; scope.launch { delay(2500); if (sim) status = "success" else network() }
     }
     OrionSheet(onDismiss) {
-        SheetTitle("Fame Gate", Sym.MilitaryTech, "Join the Legends")
+        SheetTitle("名人堂之门", Sym.MilitaryTech, "加入传奇行列")
         AnimatedContent(status, Modifier.fillMaxWidth(), label = "gate") { st ->
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (st) {
@@ -550,7 +550,7 @@ fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Row(verticalAlignment = Alignment.CenterVertically) { Icon(Sym.Lock, null, Modifier.size(12.dp)); Text(" Alias Secured", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) }
-                                Text("Forever locked to this device", fontSize = 9.sp)
+                                Text("永久绑定此设备", fontSize = 9.sp)
                             }
                         } else {
                             Text("Choose Your Avatar", Modifier.fillMaxWidth(), style = MaterialTheme.typography.labelLarge)
@@ -581,15 +581,15 @@ fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                     "success" -> {
                         Icon(Sym.Verified, null, Modifier.size(72.dp), tint = Safe)
                         Text("You're In!", style = MaterialTheme.typography.headlineMediumEmphasized)
-                        Text("${name.trim()} has been immortalized in the Hall of Fame.", textAlign = TextAlign.Center)
+                        Text("${name.trim()} 已在名人堂中留名。", textAlign = TextAlign.Center)
                         Text("The leaderboard refreshes every 60 minutes. Check back soon!", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shapes = ButtonDefaults.shapes()) { Text("Return to Base") }
+                        Button(onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shapes = ButtonDefaults.shapes()) { Text("返回基地") }
                     }
                     else -> {
                         Icon(Sym.WifiOff, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error)
                         Text("Signal Lost", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
                         Text(err, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FilledTonalButton({ status = "idle" }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("Try Again") }
+                        FilledTonalButton({ status = "idle" }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("再试一次") }
                     }
                 }
                 Spacer(Modifier.height(8.dp))

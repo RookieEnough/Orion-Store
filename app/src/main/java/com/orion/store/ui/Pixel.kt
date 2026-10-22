@@ -37,20 +37,20 @@ class PtrCharacter(val id: String, val name: String, val caption: String, val fr
 }
 
 val PTR = listOf(
-    PtrCharacter("morph", "Morph", "M3 shapes morphing", emptyList(), emptyMap(), 0L to 0L, loader = true),
-    PtrCharacter("sunny", "Sunny", "Spins up to refresh", emptyList(), emptyMap(), 0L to 0L, shape = MaterialShapes.Sunny),
-    PtrCharacter("cookie", "Cookie", "Rolls into place", emptyList(), emptyMap(), 0L to 0L, shape = MaterialShapes.Cookie9Sided),
-    PtrCharacter("flower", "Flower", "Blooms on pull", emptyList(), emptyMap(), 0L to 0L, shape = MaterialShapes.Flower),
-    PtrCharacter("cat", "Pixel Cat", "Classic Orion blink", listOf("CAT"), mapOf('a' to 0xFFC2410C, 'b' to 0xFFFB923C, 'c' to 0xFFF8FAFC, 'd' to 0xFF1F2937, 'e' to 0xFFF9A8D4), 0x3DFB923CL to 0x24EC4899L, closed = 5 to ".bbbbddbbddbbb."),
-    PtrCharacter("dog", "Pixel Dog", "Happy helper", listOf("DOG"), mapOf('a' to 0xFF7C2D12, 'b' to 0xFFD97706, 'c' to 0xFFFEF3C7, 'd' to 0xFF111827, 'e' to 0xFFEF4444), 0x3DF59E0BL to 0x2122C55EL, closed = 4 to ".abbbbbbbba."),
-    PtrCharacter("pokeball", "Poke Ball", "Ready to catch refresh", listOf("POKEBALL_REST", "POKEBALL_SPARK"), mapOf('a' to 0xFF111827, 'b' to 0xFFB91C1C, 'c' to 0xFFEF4444, 'd' to 0xFF111827, 'e' to 0xFFF8FAFC, 'f' to 0xFFE5E7EB, 'g' to 0xFFFDE68A, 'h' to 0xFFFFFFFF), 0x3DF87171L to 0x29FFFFFFL),
-    PtrCharacter("shield", "Cap Shield", "Throw to refresh", listOf("SHIELD", "SHIELD_REST"), mapOf('b' to 0xFFDC2626, 'c' to 0xFFF1F5F9, 'd' to 0xFF1D4ED8, 'e' to 0xFFFFFFFF, 'x' to 0xFF94A3B8), 0x3DDC2626L to 0x2E1D4ED8L),
-    PtrCharacter("batman", "Batman", "Face alert refresh", listOf("BATMAN_FACE_OPEN", "BATMAN_FACE_CLOSED"), mapOf('b' to 0xFF05070B, 'c' to 0xFFF8FAFC, 'd' to 0xFFF1E4C9, 'e' to 0xFF111827), 0x3DFACC15L to 0x42111827L),
-    PtrCharacter("owl", "Pixel Owl", "Night refresh", listOf("OWL"), mapOf('b' to 0xFF0EA5E9, 'c' to 0xFFFEF3C7, 'd' to 0xFF111827, 'e' to 0xFFF59E0B), 0x3D0EA5E9L to 0x24A855F7L, closed = 4 to ".bcccbbcccb."),
-    PtrCharacter("robot", "Pixel Bot", "Mecha refresh", listOf("ROBOT"), mapOf('a' to 0xFF334155, 'b' to 0xFF94A3B8, 'c' to 0xFF22D3EE, 'e' to 0xFFF59E0B), 0x3B06B6D4L to 0x296366F1L, closed = 4 to ".abbbbbbbba."),
-    PtrCharacter("ghost", "Pixel Ghost", "Boo but useful", listOf("GHOST"), mapOf('b' to 0xFFF8FAFC, 'c' to 0xFF111827, 'e' to 0xFFF472B6), 0x388B5CF6L to 0x24F472B6L, closed = 3 to ".bbbbbbbbbb."),
-    PtrCharacter("kitty", "Pixel Kitty", "Bow and whiskers", listOf("KITTY"), mapOf('a' to 0xFF111827, 'b' to 0xFFF8FAFC, 'c' to 0xFFEF4444, 'd' to 0xFFFACC15), 0x38F43F5EL to 0x2EFBCFE8L, closed = 5 to "abbbbbbbbbba"),
-    PtrCharacter("bunny", "Pixel Bunny", "Hop to refresh", listOf("BUNNY"), mapOf('a' to 0xFF111827, 'b' to 0xFFF8FAFC, 'c' to 0xFFF9A8D4, 'd' to 0xFFEC4899, 'e' to 0xFFFDA4AF), 0x33EC4899L to 0x24A78BFAL, closed = 6 to ".bbbbbbbbbb."),
+    PtrCharacter("morph", "变形", "M3 形状变形", emptyList(), emptyMap(), 0L to 0L, loader = true),
+    PtrCharacter("sunny", "阳光", "旋转着刷新", emptyList(), emptyMap(), 0L to 0L, shape = MaterialShapes.Sunny),
+    PtrCharacter("cookie", "曲奇", "滚到位", emptyList(), emptyMap(), 0L to 0L, shape = MaterialShapes.Cookie9Sided),
+    PtrCharacter("flower", "花朵", "下拉即绽放", emptyList(), emptyMap(), 0L to 0L, shape = MaterialShapes.Flower),
+    PtrCharacter("cat", "像素猫", "经典 Orion 眨眼", listOf("CAT"), mapOf('a' to 0xFFC2410C, 'b' to 0xFFFB923C, 'c' to 0xFFF8FAFC, 'd' to 0xFF1F2937, 'e' to 0xFFF9A8D4), 0x3DFB923CL to 0x24EC4899L, closed = 5 to ".bbbbddbbddbbb."),
+    PtrCharacter("dog", "像素狗", "快乐小帮手", listOf("DOG"), mapOf('a' to 0xFF7C2D12, 'b' to 0xFFD97706, 'c' to 0xFFFEF3C7, 'd' to 0xFF111827, 'e' to 0xFFEF4444), 0x3DF59E0BL to 0x2122C55EL, closed = 4 to ".abbbbbbbba."),
+    PtrCharacter("pokeball", "精灵球", "准备捕捉的刷新", listOf("POKEBALL_REST", "POKEBALL_SPARK"), mapOf('a' to 0xFF111827, 'b' to 0xFFB91C1C, 'c' to 0xFFEF4444, 'd' to 0xFF111827, 'e' to 0xFFF8FAFC, 'f' to 0xFFE5E7EB, 'g' to 0xFFFDE68A, 'h' to 0xFFFFFFFF), 0x3DF87171L to 0x29FFFFFFL),
+    PtrCharacter("shield", "队长盾牌", "掷出即刷新", listOf("SHIELD", "SHIELD_REST"), mapOf('b' to 0xFFDC2626, 'c' to 0xFFF1F5F9, 'd' to 0xFF1D4ED8, 'e' to 0xFFFFFFFF, 'x' to 0xFF94A3B8), 0x3DDC2626L to 0x2E1D4ED8L),
+    PtrCharacter("batman", "蝙蝠侠", "面罩警报刷新", listOf("BATMAN_FACE_OPEN", "BATMAN_FACE_CLOSED"), mapOf('b' to 0xFF05070B, 'c' to 0xFFF8FAFC, 'd' to 0xFFF1E4C9, 'e' to 0xFF111827), 0x3DFACC15L to 0x42111827L),
+    PtrCharacter("owl", "像素猫头鹰", "夜间刷新", listOf("OWL"), mapOf('b' to 0xFF0EA5E9, 'c' to 0xFFFEF3C7, 'd' to 0xFF111827, 'e' to 0xFFF59E0B), 0x3D0EA5E9L to 0x24A855F7L, closed = 4 to ".bcccbbcccb."),
+    PtrCharacter("robot", "像素机器人", "机甲刷新", listOf("ROBOT"), mapOf('a' to 0xFF334155, 'b' to 0xFF94A3B8, 'c' to 0xFF22D3EE, 'e' to 0xFFF59E0B), 0x3B06B6D4L to 0x296366F1L, closed = 4 to ".abbbbbbbba."),
+    PtrCharacter("ghost", "像素幽灵", "吓你一下但很实用", listOf("GHOST"), mapOf('b' to 0xFFF8FAFC, 'c' to 0xFF111827, 'e' to 0xFFF472B6), 0x388B5CF6L to 0x24F472B6L, closed = 3 to ".bbbbbbbbbb."),
+    PtrCharacter("kitty", "像素小猫", "蝴蝶结与胡须", listOf("KITTY"), mapOf('a' to 0xFF111827, 'b' to 0xFFF8FAFC, 'c' to 0xFFEF4444, 'd' to 0xFFFACC15), 0x38F43F5EL to 0x2EFBCFE8L, closed = 5 to "abbbbbbbbbba"),
+    PtrCharacter("bunny", "像素兔", "蹦蹦跳跳地刷新", listOf("BUNNY"), mapOf('a' to 0xFF111827, 'b' to 0xFFF8FAFC, 'c' to 0xFFF9A8D4, 'd' to 0xFFEC4899, 'e' to 0xFFFDA4AF), 0x33EC4899L to 0x24A78BFAL, closed = 6 to ".bbbbbbbbbb."),
 )
 fun ptr(id: String) = PTR.firstOrNull { it.id == id } ?: PTR[0]
 fun PtrCharacter.brush() = Brush.linearGradient(listOf(Color(tint.first), Color(tint.second)))
@@ -143,7 +143,7 @@ fun PtrIndicator(state: PullToRefreshState, refreshing: Boolean, characterId: St
 @Composable
 fun PtrPickerSheet(selected: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
     val cs = MaterialTheme.colorScheme; val active = ptr(selected)
-    SheetTitle("Pull to refresh", Sym.Refresh, "Pick what greets your pull")
+    SheetTitle("下拉刷新", Sym.Refresh, "选一个下拉时迎接你的角色")
     Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(148.dp).clip(RoundedCornerShape(32.dp))
         .background(Brush.verticalGradient(listOf(cs.primaryContainer, cs.surfaceContainerLow))), contentAlignment = Alignment.Center) {
         Box(Modifier.align(Alignment.TopEnd).offset(40.dp, (-36).dp).size(150.dp).clip(MaterialShapes.Cookie12Sided.toShape()).background(cs.onPrimaryContainer.copy(.06f)))
@@ -155,7 +155,7 @@ fun PtrPickerSheet(selected: String, onSelect: (String) -> Unit, onDismiss: () -
         }
     }
     LazyVerticalGrid(GridCells.Fixed(3), Modifier.heightIn(max = 560.dp), contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("Expressive shapes" to PTR.filter { !it.pixel }, "Pixel characters" to PTR.filter { it.pixel }).forEach { (title, list) ->
+        listOf("灵动形状" to PTR.filter { !it.pixel }, "像素角色" to PTR.filter { it.pixel }).forEach { (title, list) ->
             item(title, span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                 Text(title, Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmallEmphasized, color = cs.primary)
             }

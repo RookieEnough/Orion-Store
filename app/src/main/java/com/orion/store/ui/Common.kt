@@ -271,7 +271,7 @@ fun statusText(app: AppItem): Pair<String, Color>? {
     val local = LocalS.current.installedVersions[app.id]
     return when (st) {
         CardState.DOWNLOADING -> (if (p > 0f) "Downloading ${p.toInt()}%" else "Starting download") to cs.primary
-        CardState.READY -> "Ready to install" to cs.primary
+        CardState.READY -> "已就绪，可安装" to cs.primary
         CardState.UPDATE -> "Update · v${preferredVersion(app, LocalS.current.streamOf(app.id)).removePrefix("v")}" to cs.tertiary
         CardState.INSTALLED -> "Installed · v${local.orEmpty().removePrefix("v")}" to cs.onSurfaceVariant
         CardState.NONE -> null

@@ -129,11 +129,11 @@ object WirelessAdb {
             if (mg.isConnected) return@withContext
             val last = prefs(ctx).getInt("port", 0)
             if (last <= 0 || !tryConnect(mg, last)) {
-                if (!onWifi(ctx)) throw NativeError("Connect to Wi-Fi to install without the wait.")
+                if (!onWifi(ctx)) throw NativeError("请连接 Wi-Fi 后再免等待安装。")
                 if (canToggle(ctx) && !wirelessOn(ctx)) runCatching { Settings.Global.putInt(ctx.contentResolver, ADB_WIFI, 1) }
                 val port = discover(ctx, AdbMdns.SERVICE_TYPE_TLS_CONNECT, 15_000)
                     ?: throw NativeError("Wireless debugging is off. Turn it on or run the setup again.")
-                if (!tryConnect(mg, port)) throw NativeError("Wireless debugging refused Orion. Run the setup again to re-pair.")
+                if (!tryConnect(mg, port)) throw NativeError("无线调试拒绝了 Orion 的连接。请重新运行 setup again to re-pair.")
                 prefs(ctx).edit { putInt("port", port) }
             }
             if (!canToggle(ctx)) runCatching { exec(mg, "pm grant ${ctx.packageName} ${Manifest.permission.WRITE_SECURE_SETTINGS}") }
@@ -180,12 +180,12 @@ object WirelessAdb {
     private fun advance(ctx: Context, open: Boolean) {
         if (_status.value.phase == Phase.PAIRING || _status.value.phase == Phase.READY) return
         val step = when {
-            !devOptions(ctx) -> Step(aboutPhoneIntent(), "Step 1 of 3 · Unlock Developer options",
-                "Tap Build number 7 times (on some phones it sits under Software information). Orion moves on by itself.", false)
-            !wirelessOn(ctx) -> Step(wirelessDebuggingIntent(), "Step 2 of 3 · Turn on Wireless debugging",
-                "Tap here, open Wireless debugging, switch it on and tap Allow.", false)
-            else -> Step(wirelessDebuggingIntent(), "Step 3 of 3 · Pair Orion",
-                "In Wireless debugging tap Pair device with pairing code, then type the 6-digit code here.", true)
+            !devOptions(ctx) -> Step(aboutPhoneIntent(), "第 1 步，共 3 步 · 解锁开发者选项",
+                "连点“版本号”7 次（部分手机在“软件信息”里）。Orion 会自动进入下一步。", false)
+            !wirelessOn(ctx) -> Step(wirelessDebuggingIntent(), "第 2 步，共 3 步 · 打开无线调试",
+                "点这里，打开“无线调试”开关并点“允许”。", false)
+            else -> Step(wirelessDebuggingIntent(), "第 3 步，共 3 步 · 配对 Orion",
+                "在“无线调试”里点“使用配对码配对设备”，然后在这里输入 6 位配对码。", true)
         }
         _status.value = Status(Phase.WAITING, step.title)
         notify(ctx, step.title, step.text, code = step.code, open = step.open)
@@ -193,20 +193,20 @@ object WirelessAdb {
     }
 
     suspend fun pair(ctx: Context, code: String) = withContext(Dispatchers.IO) {
-        _status.value = Status(Phase.PAIRING, "Pairing...")
-        notify(ctx, "Pairing...", "Keep the pairing code dialog open.", quiet = true)
+        _status.value = Status(Phase.PAIRING, "配对中…")
+        notify(ctx, "配对中…", "请保持配对码弹窗打开。", quiet = true)
         try {
             val port = discover(ctx, AdbMdns.SERVICE_TYPE_TLS_PAIRING, 10_000)
-                ?: throw NativeError("Pairing dialog not found. Open it again and use the new code.")
-            try { mgr(ctx).pair(HOST, port, code) } catch (_: Exception) { throw NativeError("Wrong or expired code. Try again with a new one.") }
+                ?: throw NativeError("未找到配对弹窗。请重新打开并使用新的配对码。")
+            try { mgr(ctx).pair(HOST, port, code) } catch (_: Exception) { throw NativeError("配对码错误或已过期，请换新的再试。") }
             connect(ctx)
             stopSetup(ctx)
-            _status.value = Status(Phase.READY, "Paired. Installs now skip the wait.")
-            notify(ctx, "Orion is paired", "Apps now install instantly, no 24-hour wait.", done = true)
+            _status.value = Status(Phase.READY, "配对成功。安装从此免等待。")
+            notify(ctx, "Orion 已完成配对", "应用现在即点即装，无需 24 小时等待。", done = true)
         } catch (e: Exception) {
-            val msg = (e as? NativeError)?.message ?: "Pairing failed. Try again."
+            val msg = (e as? NativeError)?.message ?: "配对失败，请重试。"
             _status.value = Status(Phase.FAILED, msg)
-            notify(ctx, "Pairing failed", msg, code = true, open = wirelessDebuggingIntent())
+            notify(ctx, "配对失败", msg, code = true, open = wirelessDebuggingIntent())
         }
     }
 
@@ -215,7 +215,7 @@ object WirelessAdb {
     @SuppressLint("MissingPermission")
     private fun notify(ctx: Context, title: String, text: String, code: Boolean = false, done: Boolean = false, open: Intent? = null, quiet: Boolean = false) {
         val nm = NotificationManagerCompat.from(ctx)
-        nm.createNotificationChannel(NotificationChannelCompat.Builder(CHANNEL, NotificationManagerCompat.IMPORTANCE_HIGH).setName("Wireless install setup").build())
+        nm.createNotificationChannel(NotificationChannelCompat.Builder(CHANNEL, NotificationManagerCompat.IMPORTANCE_HIGH).setName("无线安装设置").build())
         if (!nm.areNotificationsEnabled()) return
         val n = NotificationCompat.Builder(ctx, CHANNEL).setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setContentTitle(title).setContentText(text).setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -223,8 +223,8 @@ object WirelessAdb {
         open?.let { n.setContentIntent(PendingIntent.getActivity(ctx, 1, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)) }
         if (code) {
             val pi = PendingIntent.getBroadcast(ctx, 0, Intent(ctx, AdbPairReceiver::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
-            n.addAction(NotificationCompat.Action.Builder(0, "Enter code", pi)
-                .addRemoteInput(RemoteInput.Builder(KEY_CODE).setLabel("6-digit pairing code").build()).build())
+            n.addAction(NotificationCompat.Action.Builder(0, "输入配对码", pi)
+                .addRemoteInput(RemoteInput.Builder(KEY_CODE).setLabel("6 位配对码").build()).build())
         }
         nm.notify(NOTIF, n.build())
     }

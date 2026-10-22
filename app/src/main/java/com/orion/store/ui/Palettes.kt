@@ -38,7 +38,7 @@ private val OrionDark = darkColorScheme(
      secondaryFixed = Color(0xFFE1E0FF), secondaryFixedDim = Color(0xFFD3D1F2), onSecondaryFixed = Color(0xFF3D3D57), onSecondaryFixedVariant = Color(0xFF595974),
      tertiaryFixed = Color(0xFFCCFE82), tertiaryFixedDim = Color(0xFFBFEF76), onTertiaryFixed = Color(0xFF324E00), onTertiaryFixedVariant = Color(0xFF486D00),
 )
-private val Orion = Palette("orion", "Orion", OrionLight, OrionDark,
+private val Orion = Palette("orion", "猎户", OrionLight, OrionDark,
     OrionDark.copy(background = Color(0xFF1E1E2E), surface = Color(0xFF1E1E2E), surfaceDim = Color(0xFF1E1E2E), surfaceBright = Color(0xFF4A4A5B), surfaceContainerLowest = Color(0xFF161625), surfaceContainerLow = Color(0xFF242434),
         surfaceContainer = Color(0xFF2A2B3B), surfaceContainerHigh = Color(0xFF333344), surfaceContainerHighest = Color(0xFF3C3C4D), surfaceVariant = Color(0xFF3C3C4D), onSurfaceVariant = Color(0xFFBAB9D5), outlineVariant = Color(0xFF4E4E66)),
     OrionDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF0E0E12),
@@ -73,7 +73,7 @@ private val OceanDark = darkColorScheme(
      secondaryFixed = Color(0xFFCDE6FB), secondaryFixedDim = Color(0xFFBFD8EC), onSecondaryFixed = Color(0xFF2A4253), onSecondaryFixedVariant = Color(0xFF475E70),
      tertiaryFixed = Color(0xFFFD8D9A), tertiaryFixedDim = Color(0xFFED808D), onTertiaryFixed = Color(0xFF33000B), onTertiaryFixedVariant = Color(0xFF691929),
 )
-private val Ocean = Palette("ocean", "Ocean", OceanLight, OceanDark,
+private val Ocean = Palette("ocean", "海洋", OceanLight, OceanDark,
     OceanDark.copy(background = Color(0xFF13212B), surface = Color(0xFF13212B), surfaceDim = Color(0xFF13212B), surfaceBright = Color(0xFF3F4D58), surfaceContainerLowest = Color(0xFF0B1923), surfaceContainerLow = Color(0xFF192731),
         surfaceContainer = Color(0xFF202E38), surfaceContainerHigh = Color(0xFF293641), surfaceContainerHighest = Color(0xFF313F4A), surfaceVariant = Color(0xFF313F4A), onSurfaceVariant = Color(0xFFA9BED0), outlineVariant = Color(0xFF3E5262)),
     OceanDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF0B0F11),
@@ -108,7 +108,7 @@ private val ForestDark = darkColorScheme(
      secondaryFixed = Color(0xFFCEEACD), secondaryFixedDim = Color(0xFFC0DCBF), onSecondaryFixed = Color(0xFF2E4530), onSecondaryFixedVariant = Color(0xFF49614A),
      tertiaryFixed = Color(0xFFFFAD3B), tertiaryFixedDim = Color(0xFFEFA02E), onTertiaryFixed = Color(0xFF382000), onTertiaryFixedVariant = Color(0xFF613B00),
 )
-private val Forest = Palette("forest", "Forest", ForestLight, ForestDark,
+private val Forest = Palette("forest", "森林", ForestLight, ForestDark,
     ForestDark.copy(background = Color(0xFF152316), surface = Color(0xFF152316), surfaceDim = Color(0xFF152316), surfaceBright = Color(0xFF404F40), surfaceContainerLowest = Color(0xFF0D1B0F), surfaceContainerLow = Color(0xFF1B291C),
         surfaceContainer = Color(0xFF212F22), surfaceContainerHigh = Color(0xFF2A382A), surfaceContainerHighest = Color(0xFF334133), surfaceVariant = Color(0xFF334133), onSurfaceVariant = Color(0xFFAAC2A9), outlineVariant = Color(0xFF415541)),
     ForestDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF0C0F0B),
@@ -143,7 +143,7 @@ private val SunsetDark = darkColorScheme(
      secondaryFixed = Color(0xFFFFDBCA), secondaryFixedDim = Color(0xFFFCCAB1), onSecondaryFixed = Color(0xFF583726), onSecondaryFixedVariant = Color(0xFF785340),
      tertiaryFixed = Color(0xFFBA9FFA), tertiaryFixedDim = Color(0xFFAC92EC), onTertiaryFixed = Color(0xFF1B004A), onTertiaryFixedVariant = Color(0xFF402679),
 )
-private val Sunset = Palette("sunset", "Sunset", SunsetLight, SunsetDark,
+private val Sunset = Palette("sunset", "日落", SunsetLight, SunsetDark,
     SunsetDark.copy(background = Color(0xFF2E1B10), surface = Color(0xFF2E1B10), surfaceDim = Color(0xFF2E1B10), surfaceBright = Color(0xFF5F4639), surfaceContainerLowest = Color(0xFF251309), surfaceContainerLow = Color(0xFF352116),
         surfaceContainer = Color(0xFF3C271C), surfaceContainerHigh = Color(0xFF463024), surfaceContainerHighest = Color(0xFF50382C), surfaceVariant = Color(0xFF50382C), onSurfaceVariant = Color(0xFFDEB29D), outlineVariant = Color(0xFF694938)),
     SunsetDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF130D0A),
@@ -178,7 +178,7 @@ private val RoseDark = darkColorScheme(
      secondaryFixed = Color(0xFFFFD9E4), secondaryFixedDim = Color(0xFFF6C8D7), onSecondaryFixed = Color(0xFF563642), onSecondaryFixedVariant = Color(0xFF75525E),
      tertiaryFixed = Color(0xFF8DFFEC), tertiaryFixedDim = Color(0xFF7EF0DE), onTertiaryFixed = Color(0xFF004E45), onTertiaryFixedVariant = Color(0xFF006D62),
 )
-private val Rose = Palette("rose", "Rose", RoseLight, RoseDark,
+private val Rose = Palette("rose", "玫瑰", RoseLight, RoseDark,
     RoseDark.copy(background = Color(0xFF2D1A21), surface = Color(0xFF2D1A21), surfaceDim = Color(0xFF2D1A21), surfaceBright = Color(0xFF5C454D), surfaceContainerLowest = Color(0xFF241219), surfaceContainerLow = Color(0xFF342027),
         surfaceContainer = Color(0xFF3B262E), surfaceContainerHigh = Color(0xFF442F36), surfaceContainerHighest = Color(0xFF4E373F), surfaceVariant = Color(0xFF4E373F), onSurfaceVariant = Color(0xFFD9B1BE), outlineVariant = Color(0xFF664753)),
     RoseDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF130D0F),
@@ -213,7 +213,7 @@ private val MonoDark = darkColorScheme(
      secondaryFixed = Color(0xFFE1E2E8), secondaryFixedDim = Color(0xFFD3D4DA), onSecondaryFixed = Color(0xFF3D3F44), onSecondaryFixedVariant = Color(0xFF595B61),
      tertiaryFixed = Color(0xFFF2F3FA), tertiaryFixedDim = Color(0xFFE4E5EB), onTertiaryFixed = Color(0xFF474A4F), onTertiaryFixedVariant = Color(0xFF64666C),
 )
-private val Mono = Palette("mono", "Mono", MonoLight, MonoDark,
+private val Mono = Palette("mono", "墨色", MonoLight, MonoDark,
     MonoDark.copy(background = Color(0xFF1D2024), surface = Color(0xFF1D2024), surfaceDim = Color(0xFF1D2024), surfaceBright = Color(0xFF494B51), surfaceContainerLowest = Color(0xFF15181C), surfaceContainerLow = Color(0xFF23262B),
         surfaceContainer = Color(0xFF292C31), surfaceContainerHigh = Color(0xFF32353A), surfaceContainerHighest = Color(0xFF3B3E43), surfaceVariant = Color(0xFF3B3E43), onSurfaceVariant = Color(0xFFBABBC1), outlineVariant = Color(0xFF4E5055)),
     MonoDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF0C0E12),
@@ -248,7 +248,7 @@ private val GrapeDark = darkColorScheme(
      secondaryFixed = Color(0xFFE9DDFF), secondaryFixedDim = Color(0xFFDBCFF0), onSecondaryFixed = Color(0xFF433B55), onSecondaryFixedVariant = Color(0xFF605773),
      tertiaryFixed = Color(0xFFFF99CA), tertiaryFixedDim = Color(0xFFEF8CBC), onTertiaryFixed = Color(0xFF46002C), onTertiaryFixedVariant = Color(0xFF6F224D),
 )
-private val Grape = Palette("grape", "Grape", GrapeLight, GrapeDark,
+private val Grape = Palette("grape", "葡萄", GrapeLight, GrapeDark,
     GrapeDark.copy(background = Color(0xFF221D2D), surface = Color(0xFF221D2D), surfaceDim = Color(0xFF221D2D), surfaceBright = Color(0xFF4E495A), surfaceContainerLowest = Color(0xFF1A1524), surfaceContainerLow = Color(0xFF282333),
         surfaceContainer = Color(0xFF2E2A3A), surfaceContainerHigh = Color(0xFF373243), surfaceContainerHighest = Color(0xFF403B4C), surfaceVariant = Color(0xFF403B4C), onSurfaceVariant = Color(0xFFC1B7D3), outlineVariant = Color(0xFF544C64)),
     GrapeDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF0F0D12),
@@ -283,7 +283,7 @@ private val MintDark = darkColorScheme(
      secondaryFixed = Color(0xFFC9EAD6), secondaryFixedDim = Color(0xFFBBDCC8), onSecondaryFixed = Color(0xFF284537), onSecondaryFixedVariant = Color(0xFF446252),
      tertiaryFixed = Color(0xFFAAACFD), tertiaryFixedDim = Color(0xFF9D9FEE), onTertiaryFixed = Color(0xFF0D0C5A), onTertiaryFixedVariant = Color(0xFF31337B),
 )
-private val Mint = Palette("mint", "Mint", MintLight, MintDark,
+private val Mint = Palette("mint", "薄荷", MintLight, MintDark,
     MintDark.copy(background = Color(0xFF12231A), surface = Color(0xFF12231A), surfaceDim = Color(0xFF12231A), surfaceBright = Color(0xFF3D4F45), surfaceContainerLowest = Color(0xFF091B13), surfaceContainerLow = Color(0xFF182920),
         surfaceContainer = Color(0xFF1E3026), surfaceContainerHigh = Color(0xFF27392F), surfaceContainerHighest = Color(0xFF304238), surfaceVariant = Color(0xFF304238), onSurfaceVariant = Color(0xFFA6C2B1), outlineVariant = Color(0xFF3C5648)),
     MintDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF0B0F0D),
@@ -318,7 +318,7 @@ private val EmberDark = darkColorScheme(
      secondaryFixed = Color(0xFFFFDAD7), secondaryFixedDim = Color(0xFFFDC8C3), onSecondaryFixed = Color(0xFF593633), onSecondaryFixedVariant = Color(0xFF79514E),
      tertiaryFixed = Color(0xFFFFAD3B), tertiaryFixedDim = Color(0xFFEFA02E), onTertiaryFixed = Color(0xFF382000), onTertiaryFixedVariant = Color(0xFF613B00),
 )
-private val Ember = Palette("ember", "Ember", EmberLight, EmberDark,
+private val Ember = Palette("ember", "余烬", EmberLight, EmberDark,
     EmberDark.copy(background = Color(0xFF2F1A18), surface = Color(0xFF2F1A18), surfaceDim = Color(0xFF2F1A18), surfaceBright = Color(0xFF604543), surfaceContainerLowest = Color(0xFF261211), surfaceContainerLow = Color(0xFF36201E),
         surfaceContainer = Color(0xFF3D2624), surfaceContainerHigh = Color(0xFF472F2D), surfaceContainerHighest = Color(0xFF513735), surfaceVariant = Color(0xFF513735), onSurfaceVariant = Color(0xFFDFB1AD), outlineVariant = Color(0xFF6A4744)),
     EmberDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF130C0C),
@@ -353,7 +353,7 @@ private val AmberDark = darkColorScheme(
      secondaryFixed = Color(0xFFFFDDB8), secondaryFixedDim = Color(0xFFF3CEA5), onSecondaryFixed = Color(0xFF523B1D), onSecondaryFixedVariant = Color(0xFF715736),
      tertiaryFixed = Color(0xFF72C1F6), tertiaryFixedDim = Color(0xFF64B3E7), onTertiaryFixed = Color(0xFF002336), onTertiaryFixedVariant = Color(0xFF004463),
 )
-private val Amber = Palette("amber", "Amber", AmberLight, AmberDark,
+private val Amber = Palette("amber", "琥珀", AmberLight, AmberDark,
     AmberDark.copy(background = Color(0xFF2B1D0B), surface = Color(0xFF2B1D0B), surfaceDim = Color(0xFF2B1D0B), surfaceBright = Color(0xFF5A4833), surfaceContainerLowest = Color(0xFF221505), surfaceContainerLow = Color(0xFF322311),
         surfaceContainer = Color(0xFF392916), surfaceContainerHigh = Color(0xFF42321E), surfaceContainerHighest = Color(0xFF4C3B26), surfaceVariant = Color(0xFF4C3B26), onSurfaceVariant = Color(0xFFD6B693), outlineVariant = Color(0xFF634C30)),
     AmberDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF120D08),
@@ -388,7 +388,7 @@ private val CyberDark = darkColorScheme(
      secondaryFixed = Color(0xFFC6E8F3), secondaryFixedDim = Color(0xFFB8DAE4), onSecondaryFixed = Color(0xFF24444C), onSecondaryFixedVariant = Color(0xFF416069),
      tertiaryFixed = Color(0xFFF199F7), tertiaryFixedDim = Color(0xFFE28CE9), onTertiaryFixed = Color(0xFF3E0048), onTertiaryFixedVariant = Color(0xFF681C73),
 )
-private val Cyber = Palette("cyber", "Cyber", CyberLight, CyberDark,
+private val Cyber = Palette("cyber", "赛博", CyberLight, CyberDark,
     CyberDark.copy(background = Color(0xFF0F2227), surface = Color(0xFF0F2227), surfaceDim = Color(0xFF0F2227), surfaceBright = Color(0xFF3B4E54), surfaceContainerLowest = Color(0xFF061A1F), surfaceContainerLow = Color(0xFF15282E),
         surfaceContainer = Color(0xFF1C2F34), surfaceContainerHigh = Color(0xFF25383D), surfaceContainerHighest = Color(0xFF2E4146), surfaceVariant = Color(0xFF2E4146), onSurfaceVariant = Color(0xFFA3C0C9), outlineVariant = Color(0xFF39545C)),
     CyberDark.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = Color(0xFF0A0F10),

@@ -29,10 +29,10 @@ object LocalLlm {
     }
 
     val MODELS = listOf(
-        Model("smollm2-360m", "SmolLM2 360M", "litert-community/SmolLM2-360M-Instruct", "SmolLM2_360M_instruct.litertlm", 374, 3, "The lightest. Quick on any phone, fine for simple asks."),
-        Model("qwen3-0.6b", "Qwen3 0.6B", "litert-community/Qwen3-0.6B", "Qwen3-0.6B.litertlm", 614, 4, "Fast and capable. The best pick for most phones."),
-        Model("qwen2.5-1.5b", "Qwen2.5 1.5B", "litert-community/Qwen2.5-1.5B-Instruct", "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm", 1598, 6, "Smarter answers for recent phones."),
-        Model("phi4-mini", "Phi-4 mini", "litert-community/Phi-4-mini-instruct", "Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm", 3910, 12, "The most capable. Flagship phones only."),
+        Model("smollm2-360m", "SmolLM2 360M", "litert-community/SmolLM2-360M-Instruct", "SmolLM2_360M_instruct.litertlm", 374, 3, "最轻量。任何手机都很快，适合简单提问。"),
+        Model("qwen3-0.6b", "Qwen3 0.6B", "litert-community/Qwen3-0.6B", "Qwen3-0.6B.litertlm", 614, 4, "又快又能干，大多数手机的最佳选择。"),
+        Model("qwen2.5-1.5b", "Qwen2.5 1.5B", "litert-community/Qwen2.5-1.5B-Instruct", "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm", 1598, 6, "为较新手机提供更聪明的回答。"),
+        Model("phi4-mini", "Phi-4 mini", "litert-community/Phi-4-mini-instruct", "Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm", 3910, 12, "能力最强，仅限旗舰机。"),
     )
 
     /** The engine's native library, fetched from Google's Maven on first use and checked against this hash before it is ever loaded. */
@@ -81,18 +81,18 @@ object LocalLlm {
 
     /** One reply from the on-device model, streamed into [onText] as it grows. The engine stays loaded between messages. */
     suspend fun chat(ctx: Context, m: Model, system: String, turns: List<OrionAi.Turn>, onText: (String) -> Unit): String = withContext(Dispatchers.Default) {
-        if (!supported) throw AiError("On-device AI needs a 64-bit ARM phone.")
+        if (!supported) throw AiError("本地 AI 需要 64 位 ARM 手机。")
         lock.withLock {
-            val f = file(m)?.takeIf { ready(m) } ?: throw AiError("Download ${m.name} in AI settings first.")
+            val f = file(m)?.takeIf { ready(m) } ?: throw AiError("请先在 AI 设置中下载 ${m.name}。")
             if (!libLoaded) {
-                if (!engineReady(ctx)) { downloadEngine(); throw AiError("The on-device engine is still downloading. Try again in a moment.") }
+                if (!engineReady(ctx)) { downloadEngine(); throw AiError("本地引擎还在下载中，请稍后再试。") }
                 runCatching { System.load(engineLib(ctx).path) }.getOrElse { engineLib(ctx).let { f2 -> f2.setWritable(true); f2.delete() }; throw AiError("The on-device engine could not start on this phone.") }
                 libLoaded = true
             }
             val e = engine?.takeIf { loaded == m.id } ?: run {
                 close()
                 runCatching { Engine(EngineConfig(modelPath = f.path, backend = Backend.CPU(), maxNumTokens = 2048, cacheDir = ctx.cacheDir.path)).apply { initialize() } }
-                    .getOrElse { throw AiError("This phone could not load ${m.name}. Try a smaller model.") }
+                    .getOrElse { throw AiError("这台手机无法加载 ${m.name}，试试更小的模型。") }
                     .also { engine = it; loaded = m.id }
             }
             val history = turns.dropLast(1).map { if (it.user) Message.user(it.text) else Message.model(it.text) }
