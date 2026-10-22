@@ -67,7 +67,7 @@ private fun streamColor(t: String) = when (t) {
 }
 
 @Composable
-private fun StreamBadge(t: String) = Tag(t.uppercase(), streamColor(t))
+private fun StreamBadge(t: String) = Tag(streamLabel(t), streamColor(t))
 
 @Composable
 fun DetailScreen(vm: MainViewModel, base: AppItem) {
@@ -87,7 +87,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     val unavailable = ready == null && cleanup == null && !installed && !hasTarget && app.latestVersion == "Latest" && app.size == "Varies"
     val lower = app.downloadUrl.lowercase()
     val external = (lower.startsWith("http://") || lower.startsWith("https://")) && listOf(".apk", ".exe", ".zip", ".dmg").none(lower::endsWith) && "github.com" !in lower
-    val domain = if (external) runCatching { app.downloadUrl.toUri().host!!.replace("www.", "") }.getOrDefault("Source") else "External Source"
+    val domain = if (external) runCatching { app.downloadUrl.toUri().host!!.replace("www.", "") }.getOrDefault("源站点") else "外部来源"
     val fav = app.id in d.favorites
 
     var target by remember(app.id) { mutableStateOf<VersionOption?>(null) }
@@ -119,7 +119,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     }
     fun launch() {
         val p = app.packageName ?: return
-        vm.haptic(H.HEAVY); runCatching { vm.tracker.launch(p) }.onFailure { vm.error("Could not launch app. It may be restricted.") }
+        vm.haptic(H.HEAVY); runCatching { vm.tracker.launch(p) }.onFailure { vm.error("无法启动应用，可能已受限制。") }
     }
     fun ignore(type: String, v: String? = null) {
         vm.set { it.ignoreUpdate(app.id, type, v, System.currentTimeMillis()) }; ignoreMenu = false; vm.selectedApp = null; vm.haptic(H.SUCCESS)
@@ -134,7 +134,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             cleanupPrompt = false; cleaning = false
         }
     }
-    fun report() = vm.tracker.open("mailto:${vm.config?.supportEmail ?: Defaults.SUPPORT_EMAIL}?subject=${Uri.encode("Report Issue: ${app.name}")}")
+    fun report() = vm.tracker.open("mailto:${vm.config?.supportEmail ?: Defaults.SUPPORT_EMAIL}?subject=${Uri.encode("问题反馈：${app.name}")}")
 
     val from = remember(app.id) { vm.openFrom }
     val list = rememberLazyListState()
@@ -146,15 +146,15 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                 title = { AnimatedVisibility(scrolled) { Text(app.name, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                 actions = {
                     IconToggleButton(fav, { vm.haptic(H.HEAVY); vm.upd { it.toggleFavorite(app.id) } }) {
-                        Icon(if (fav) Sym.Favorite else Sym.FavoriteBorder, "Favorite", tint = if (fav) cs.primary else LocalContentColor.current)
+                        Icon(if (fav) Sym.Favorite else Sym.FavoriteBorder, "收藏", tint = if (fav) cs.primary else LocalContentColor.current)
                     }
-                    IconButton({ vm.haptic(H.SELECTION); vm.tracker.share(app.name, "Check out ${app.name} on Orion Store!", Share.webLink(app.id, app.icon)) }) { Icon(Sym.Share, "Share") }
+                    IconButton({ vm.haptic(H.SELECTION); vm.tracker.share(app.name, "快来看看 Orion Store 上的 ${app.name}！", Share.webLink(app.id, app.icon)) }) { Icon(Sym.Share, "分享") }
                     Box {
-                        IconButton({ more = true }) { Icon(Sym.MoreVert, "More options") }
+                        IconButton({ more = true }) { Icon(Sym.MoreVert, "更多选项") }
                         DropdownMenu(more, { more = false }, shape = RoundedCornerShape(20.dp)) {
-                            DropdownMenuItem({ Text("Request app change") }, { more = false; vm.haptic(H.LIGHT); vm.changeRequest = true }, leadingIcon = { Icon(Sym.EditNote, null) })
-                            DropdownMenuItem({ Text("Report an issue") }, { more = false; vm.haptic(H.LIGHT); report() }, leadingIcon = { Icon(Sym.Flag, null) })
-                            if (s.isDevUnlocked) DropdownMenuItem({ Text("Developer deep links") }, { more = false; vm.haptic(H.SELECTION); shareSheet = true }, leadingIcon = { Icon(Sym.Link, null) })
+                            DropdownMenuItem({ Text("申请变更应用") }, { more = false; vm.haptic(H.LIGHT); vm.changeRequest = true }, leadingIcon = { Icon(Sym.EditNote, null) })
+                            DropdownMenuItem({ Text("反馈问题") }, { more = false; vm.haptic(H.LIGHT); report() }, leadingIcon = { Icon(Sym.Flag, null) })
+                            if (s.isDevUnlocked) DropdownMenuItem({ Text("开发者深度链接") }, { more = false; vm.haptic(H.SELECTION); shareSheet = true }, leadingIcon = { Icon(Sym.Link, null) })
                         }
                     }
                 },
@@ -176,7 +176,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     @Composable fun Side(icon: ImageVector, label: String, enabled: Boolean = true, onClick: () -> Unit) =
                         FilledTonalIconButton(onClick, modifier = side, enabled = enabled, shapes = IconButtonDefaults.shapes()) { Icon(icon, label) }
                     when {
-                        scanning -> Main(null, "Scanning...", enabled = false, busy = true) {}
+                        scanning -> Main(null, "扫描中…", enabled = false, busy = true) {}
                         activeId != null || status == "RUNNING" || status == "PENDING" -> {
                             val p by animateFloatAsState(progress / 100f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "dl")
                             Surface(h.weight(1f), shape = Pill, color = cs.primaryContainer, contentColor = cs.onPrimaryContainer) {
@@ -186,36 +186,36 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                                     Text("${progress.toInt()}%", style = MaterialTheme.typography.titleMediumEmphasized)
                                 }
                             }
-                            Side(Sym.Close, "Cancel download") { vm.cancelDownload(app.id) }
+                            Side(Sym.Close, "取消下载") { vm.cancelDownload(app.id) }
                         }
                         ready != null -> {
-                            Main(Sym.InstallMobile, if (installing) "Installing..." else "Install now", enabled = !installing, busy = installing) { action() }
-                            Side(Sym.Refresh, "Redownload", enabled = !installing) { vm.haptic(H.MEDIUM); vm.deleteReadyFile(app, ready) }
+                            Main(Sym.InstallMobile, if (installing) "安装中…" else "立即安装", enabled = !installing, busy = installing) { action() }
+                            Side(Sym.Refresh, "重新下载", enabled = !installing) { vm.haptic(H.MEDIUM); vm.deleteReadyFile(app, ready) }
                         }
                         cleanup != null && android -> {
-                            Main(Sym.OpenInNew, "Open", onClick = ::launch)
-                            Side(Sym.SaveAlt, "Export APK to Downloads") { vm.exportApk(app, cleanup) }
+                            Main(Sym.OpenInNew, "打开", onClick = ::launch)
+                            Side(Sym.SaveAlt, "导出 APK 到下载目录") { vm.exportApk(app, cleanup) }
                         }
-                        upToDate && android -> Main(Sym.OpenInNew, "Open", onClick = ::launch)
+                        upToDate && android -> Main(Sym.OpenInNew, "打开", onClick = ::launch)
                         else -> {
                             val (icon, label) = when {
-                                unavailable -> Sym.Block to "Currently unavailable"
-                                fallback -> Sym.Code to "View on GitHub"
-                                external -> Sym.OpenInNew to "Get from source"
-                                needsUpdate -> Sym.SystemUpdate to "Update now"
-                                app.platform == Platform.PC -> Sym.DesktopWindows to "Get on PC"
-                                else -> Sym.Download to "Download"
+                                unavailable -> Sym.Block to "暂不可用"
+                                fallback -> Sym.Code to "在 GitHub 上查看"
+                                external -> Sym.OpenInNew to "从源码获取"
+                                needsUpdate -> Sym.SystemUpdate to "立即更新"
+                                app.platform == Platform.PC -> Sym.DesktopWindows to "在 PC 上获取"
+                                else -> Sym.Download to "下载"
                             }
-                            Main(icon, if (installing) "Installing..." else label, enabled = !installing && !fallback && !unavailable, busy = installing) { action() }
+                            Main(icon, if (installing) "安装中…" else label, enabled = !installing && !fallback && !unavailable, busy = installing) { action() }
                             if (needsUpdate && !installing && !fallback && !unavailable && isUpdateIgnored(app, s, System.currentTimeMillis()))
-                                Side(Sym.Notifications, "Stop ignoring this update") { vm.set { it.copy(ignoredUpdates = it.ignoredUpdates - app.id) }; vm.haptic(H.SUCCESS); vm.toast("Updates for ${app.name} will show again") }
+                                Side(Sym.Notifications, "停止忽略此更新") { vm.set { it.copy(ignoredUpdates = it.ignoredUpdates - app.id) }; vm.haptic(H.SUCCESS); vm.toast("${app.name} 的更新将重新显示") }
                             else if (needsUpdate && !installing && !fallback && !unavailable) Box {
-                                Side(Sym.NotificationsOff, "Ignore Update Options") { ignoreMenu = !ignoreMenu; if (ignoreMenu) vm.haptic(H.LIGHT) }
+                                Side(Sym.NotificationsOff, "忽略更新选项") { ignoreMenu = !ignoreMenu; if (ignoreMenu) vm.haptic(H.LIGHT) }
                                 DropdownMenu(ignoreMenu, { ignoreMenu = false }, shape = RoundedCornerShape(20.dp)) {
-                                    Text("Ignore update", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-                                    DropdownMenuItem({ Text("Ignore for 1 week") }, { ignore("week") }, leadingIcon = { Icon(Sym.Schedule, null) })
-                                    DropdownMenuItem({ Text("Until next version") }, { ignore("version", app.latestVersion) }, leadingIcon = { Icon(Sym.SkipNext, null) })
-                                    DropdownMenuItem({ Text("Never show again") }, { ignore("never") }, leadingIcon = { Icon(Sym.Block, null) })
+                                    Text("忽略更新", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                                    DropdownMenuItem({ Text("忽略 1 周") }, { ignore("week") }, leadingIcon = { Icon(Sym.Schedule, null) })
+                                    DropdownMenuItem({ Text("直到下个版本") }, { ignore("version", app.latestVersion) }, leadingIcon = { Icon(Sym.SkipNext, null) })
+                                    DropdownMenuItem({ Text("不再显示") }, { ignore("never") }, leadingIcon = { Icon(Sym.Block, null) })
                                 }
                             }
                         }
@@ -236,11 +236,11 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                         Text(app.name, style = MaterialTheme.typography.headlineSmallEmphasized, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(app.author, style = MaterialTheme.typography.titleSmall, color = cs.primary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, false))
-                            Spacer(Modifier.width(4.dp)); Icon(Sym.VerifiedFilled, "Verified", Modifier.size(16.dp), tint = cs.primary)
+                            Spacer(Modifier.width(4.dp)); Icon(Sym.VerifiedFilled, "已验证", Modifier.size(16.dp), tint = cs.primary)
                         }
                         statusText(app)?.let { (t, c) -> Text(t, style = MaterialTheme.typography.labelLarge, color = c, modifier = Modifier.padding(top = 2.dp)) }
-                        if (cleanup != null) Box(Modifier.padding(top = 6.dp)) { Tag("Pending cleanup", Caution, Sym.CleaningServices) }
-                        else if (external) Box(Modifier.padding(top = 6.dp)) { Tag("Hosted on $domain", Caution, Sym.OpenInNew) }
+                        if (cleanup != null) Box(Modifier.padding(top = 6.dp)) { Tag("待清理", Caution, Sym.CleaningServices) }
+                        else if (external) Box(Modifier.padding(top = 6.dp)) { Tag("托管于 $domain", Caution, Sym.OpenInNew) }
                     }
                 }
             }
@@ -251,9 +251,9 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                         Text(label, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, maxLines = 1)
                     }
                     val divider = @Composable { VerticalDivider(Modifier.padding(vertical = 8.dp), color = cs.outlineVariant) }
-                    Cell({ Text(app.latestVersion.removePrefix("v"), style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis) }, "Version")
+                    Cell({ Text(app.latestVersion.removePrefix("v"), style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis) }, "版本")
                     divider()
-                    Cell({ Text(app.size, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1) }, "Size")
+                    Cell({ Text(app.size, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1) }, "大小")
                     divider()
                     Cell({ Icon(when (app.platform) { Platform.ANDROID -> Sym.Android; Platform.TV -> Sym.Tv; else -> Sym.DesktopWindows }, null, Modifier.size(24.dp)) }, app.platform)
                 }
@@ -266,15 +266,15 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             }
             item("about") { Column(Modifier.reveal(2)) {
                 var open by remember { mutableStateOf(false) }
-                SectionTitle("About this app", Modifier.padding(top = 20.dp))
+                SectionTitle("关于此应用", Modifier.padding(top = 20.dp))
                 Text(app.description, Modifier.padding(horizontal = 20.dp).animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()).clickable { open = !open },
                     style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant, maxLines = if (open) Int.MAX_VALUE else 4, overflow = TextOverflow.Ellipsis)
-                if (app.description.length > 180) TextButton({ open = !open }, Modifier.padding(start = 8.dp)) { Text(if (open) "Show less" else "Read more") }
+                if (app.description.length > 180) TextButton({ open = !open }, Modifier.padding(start = 8.dp)) { Text(if (open) "收起" else "展开") }
             } }
             if (app.patches.isNotEmpty()) item("patches") { Column(Modifier.reveal(3).animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec())) {
                 var all by remember { mutableStateOf(false) }
                 val list = app.patches.sortedBy { it.length }
-                SectionTitle("Patches", Modifier.padding(top = 12.dp), "${app.patches.size} modifications applied")
+                SectionTitle("补丁", Modifier.padding(top = 12.dp), "已应用 ${app.patches.size} 项修改")
                 FlowRow(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     (if (all) list else list.take(6)).forEach { p ->
                         Surface(shape = RoundedCornerShape(12.dp), color = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) {
@@ -282,12 +282,12 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                         }
                     }
                     if (list.size > 6) Surface({ all = !all }, shape = RoundedCornerShape(12.dp), color = cs.surfaceContainerHigh) {
-                        Text(if (all) "Show less" else "+${list.size - 6} more", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge)
+                        Text(if (all) "收起" else "还有 ${list.size - 6} 项", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge)
                     }
                 }
             } }
             item("source") { Column(Modifier.reveal(4)) {
-                SectionTitle("Source & safety", Modifier.padding(top = 20.dp))
+                SectionTitle("来源与安全性", Modifier.padding(top = 20.dp))
                 val repo = app.repoUrl?.takeIf { it.isNotBlank() && it != "#" }
                 val n = if (repo != null) 2 else 1
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
@@ -295,28 +295,28 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                         val (mark, name, tint) = repoBrand(r)
                         SegmentedListItem({ vm.haptic(H.SELECTION); vm.tracker.open(r) }, ListItemDefaults.segmentedShapes(0, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
                             leadingContent = { Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { Icon(mark, null, Modifier.size(30.dp), tint = tint) } },
-                            trailingContent = { Icon(Sym.OpenInNew, "Open $name") },
+                            trailingContent = { Icon(Sym.OpenInNew, "打开 $name") },
                             supportingContent = { Text(r.substringAfter("://").substringAfter('/').trimEnd('/'), maxLines = 1, overflow = TextOverflow.Ellipsis) }) { Text(name, style = MaterialTheme.typography.titleMedium) }
                     }
                     SegmentedListItem({ vm.haptic(H.SELECTION); vm.vtTarget = app }, ListItemDefaults.segmentedShapes(n - 1, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
                         leadingContent = { IconBox(Sym.Shield) }, trailingContent = { Icon(Sym.ChevronRight, null) },
-                        supportingContent = { Text("Check the download against 70+ antivirus engines", maxLines = 1, overflow = TextOverflow.Ellipsis) }) { Text("Scan with VirusTotal", style = MaterialTheme.typography.titleMedium) }
+                        supportingContent = { Text("通过 70+ 个杀毒引擎检测下载文件", maxLines = 1, overflow = TextOverflow.Ellipsis) }) { Text("使用 VirusTotal 扫描", style = MaterialTheme.typography.titleMedium) }
                 }
             } }
             item("info") { Column(Modifier.reveal(5)) {
                 var open by rememberSaveable { mutableStateOf(false) }
                 val rows = listOfNotNull(
-                    local?.takeIf { installed }?.let { Triple(Sym.CheckCircle, "Installed", it) }, Triple(Sym.Person, "Developer", app.author), Triple(Sym.Storage, "Size", app.size),
+                    local?.takeIf { installed }?.let { Triple(Sym.CheckCircle, "已安装", it) }, Triple(Sym.Person, "开发者", app.author), Triple(Sym.Storage, "大小", app.size),
                     app.githubRepo?.takeIf { it.isNotBlank() }?.let { Triple(Sym.BrandGitHub, "GitHub", it) }, app.gitlabRepo?.takeIf { it.isNotBlank() }?.let { Triple(Sym.BrandGitLab, "GitLab", it) },
                     app.codebergRepo?.takeIf { it.isNotBlank() }?.let { Triple(Sym.BrandCodeberg, "Codeberg", it) },
-                    app.packageName?.takeIf { it.isNotBlank() }?.let { Triple(Sym.Package2, "Package", it) },
+                    app.packageName?.takeIf { it.isNotBlank() }?.let { Triple(Sym.Package2, "包名", it) },
                 )
                 val turn by animateFloatAsState(if (open) 180f else 0f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "chev")
                 Column(Modifier.padding(horizontal = 16.dp).padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                     SegmentedListItem({ open = !open; vm.haptic(H.SELECTION) }, ListItemDefaults.segmentedShapes(0, if (open) rows.size + 1 else 1),
                         colors = ListItemDefaults.segmentedColors(containerColor = if (open) cs.secondaryContainer else cs.surfaceContainer),
-                        leadingContent = { IconBox(Sym.Info) }, trailingContent = { Icon(Sym.ExpandMore, if (open) "Hide app info" else "Show app info", Modifier.graphicsLayer { rotationZ = turn }) },
-                        supportingContent = { Text(if (open) "Tap to hide" else "Developer, size, package and source", maxLines = 1) }) { Text("App info", style = MaterialTheme.typography.titleMedium) }
+                        leadingContent = { IconBox(Sym.Info) }, trailingContent = { Icon(Sym.ExpandMore, if (open) "隐藏应用信息" else "显示应用信息", Modifier.graphicsLayer { rotationZ = turn }) },
+                        supportingContent = { Text(if (open) "点按以收起" else "开发者、大小、包名和来源", maxLines = 1) }) { Text("应用信息", style = MaterialTheme.typography.titleMedium) }
                     AnimatedVisibility(open, enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) + fadeIn(), exit = shrinkVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) + fadeOut()) {
                         Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                             rows.forEachIndexed { i, (ic, k, v) ->
@@ -333,7 +333,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     }
 
     if (versions) OrionSheet({ versions = false }) {
-        SheetTitle("Select version", Sym.History, "Choose your release channel")
+        SheetTitle("选择版本", Sym.History, "选择发布频道")
         Column(Modifier.navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
             app.availableVersions.forEachIndexed { i, v ->
                 SegmentedListItem({ versions = false; target = v; proceed(v) }, ListItemDefaults.segmentedShapes(i, app.availableVersions.size), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh),
@@ -353,10 +353,10 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
         }
         Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Select architecture", style = MaterialTheme.typography.headlineSmallEmphasized)
+                Text("选择架构", style = MaterialTheme.typography.headlineSmallEmphasized)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Target:", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant); Spacer(Modifier.width(6.dp))
-                    Text(target?.version ?: app.latestVersion, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.width(6.dp))
+                    Text("目标：", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant); Spacer(Modifier.width(6.dp))
+                    Text(target?.version ?: versionLabel(app.latestVersion), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.width(6.dp))
                     StreamBadge(target?.type ?: "Stable")
                 }
             }
@@ -365,10 +365,10 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Sym.Memory, null); Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Device architecture", style = MaterialTheme.typography.labelMedium)
+                    Text("设备架构", style = MaterialTheme.typography.labelMedium)
                     Text(friendlyArch(raw), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
-                if (normalizeArch(raw) != Arch.Unknown) Tag("Your phone", cs.primary)
+                if (normalizeArch(raw) != Arch.Unknown) Tag("本机", cs.primary)
             }
         }
         Column(Modifier.navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
@@ -382,10 +382,10 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                         }
                     },
                     trailingContent = { Icon(Sym.Download, null) },
-                    supportingContent = { Text(if (rec) "Best match for your phone" else "APK") }) {
+                    supportingContent = { Text(if (rec) "与你的手机最匹配" else "APK") }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(v.arch, fontWeight = FontWeight.Bold); Spacer(Modifier.width(8.dp))
-                        if (rec) Tag("Recommended", cs.primary) else if (compat && v.arch.equals("universal", true)) Tag("Universal", Safe)
+                        if (rec) Tag("推荐", cs.primary) else if (compat && v.arch.equals("universal", true)) Tag("通用", Safe)
                     }
                 }
             }
@@ -393,19 +393,19 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     }
 
     if (microG) AlertDialog({ microG = false },
-        confirmButton = { Button({ microG = false; vm.navigateToApp("microG-re") }, shapes = ButtonDefaults.shapes()) { Text("Install MicroG") } },
-        dismissButton = { TextButton({ microG = false; vm.tracker.open(Defaults.MICROG_INFO_URL) }) { Text("Learn about MicroG") } },
-        icon = { Icon(Sym.GppMaybe, null, tint = Caution) }, title = { Text("MicroG required") },
-        text = { Text("This app requires MicroG to sign in to your Google Account. Make sure you have it installed first.") })
+        confirmButton = { Button({ microG = false; vm.navigateToApp("microG-re") }, shapes = ButtonDefaults.shapes()) { Text("安装 MicroG") } },
+        dismissButton = { TextButton({ microG = false; vm.tracker.open(Defaults.MICROG_INFO_URL) }) { Text("了解 MicroG") } },
+        icon = { Icon(Sym.GppMaybe, null, tint = Caution) }, title = { Text("需要 MicroG") },
+        text = { Text("此应用需要 MicroG 才能登录你的 Google 账号。请先确保已安装 MicroG。") })
 
     if (cleanupPrompt && cleanup != null) AlertDialog({ if (!cleaning) keep() },
-        confirmButton = { AnimatedVisibility(!cleaning) { Button({ cleanupDelete() }, shapes = ButtonDefaults.shapes()) { Icon(Sym.Delete, null); Spacer(Modifier.width(6.dp)); Text("Delete APK") } } },
-        dismissButton = { AnimatedVisibility(!cleaning) { TextButton({ keep() }) { Text("Keep for now") } } },
+        confirmButton = { AnimatedVisibility(!cleaning) { Button({ cleanupDelete() }, shapes = ButtonDefaults.shapes()) { Icon(Sym.Delete, null); Spacer(Modifier.width(6.dp)); Text("删除 APK") } } },
+        dismissButton = { AnimatedVisibility(!cleaning) { TextButton({ keep() }) { Text("暂时保留") } } },
         icon = { if (cleaning) LoadingIndicator(Modifier.size(48.dp)) else Icon(Sym.CleaningServices, null) },
-        title = { Text(if (cleaning) "Scrubbing bits..." else "Cleanup time!") },
+        title = { Text(if (cleaning) "正在清理…" else "清理时间！") },
         text = {
-            Text(if (cleaning) AnnotatedString("Reclaiming space for you") else buildAnnotatedString {
-                append("The APK for "); withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(app.name) }; append(" is no longer needed.")
+            Text(if (cleaning) AnnotatedString("正在为你腾出空间") else buildAnnotatedString {
+                append("已不再需要 "); withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(app.name) }; append(" 的 APK。")
             })
         })
 
@@ -419,7 +419,7 @@ private fun repoBrand(url: String): Triple<ImageVector, String, Color> = when {
     "gitlab" in url -> Triple(Sym.BrandGitLab, "GitLab", Color(0xFFFC6D26))
     "codeberg" in url -> Triple(Sym.BrandCodeberg, "Codeberg", Color(0xFF2185D0))
     "github" in url -> Triple(Sym.BrandGitHub, "GitHub", MaterialTheme.colorScheme.onSurface)
-    else -> Triple(Sym.Code, "Source code", MaterialTheme.colorScheme.primary)
+    else -> Triple(Sym.Code, "源代码", MaterialTheme.colorScheme.primary)
 }
 
 @Composable
@@ -447,14 +447,14 @@ fun Lightbox(shots: List<String>, start: Int, onClose: () -> Unit) = Dialog(onCl
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = zoom == 1f, beyondViewportPageCount = 1) { i ->
             val cur = i == pager.currentPage
-            AsyncImage(optimizedImageUrl(shots[i], null, 1600), "Screenshot ${i + 1}", Modifier.fillMaxSize()
+            AsyncImage(optimizedImageUrl(shots[i], null, 1600), "截图 ${i + 1}", Modifier.fillMaxSize()
                 .then(if (cur) Modifier.pointerInput(Unit) { detectTapGestures(onDoubleTap = { if (zoom > 1f) { zoom = 1f; pan = Offset.Zero } else zoom = 2.5f }) }.transformable(tf, canPan = { zoom > 1f }) else Modifier)
                 .graphicsLayer { if (cur) { scaleX = zoom; scaleY = zoom; translationX = pan.x; translationY = pan.y } }, contentScale = ContentScale.Fit)
         }
         val chrome = IconButtonDefaults.filledTonalIconButtonColors(Color.White.copy(.14f), Color.White)
         if (n > 1 && zoom == 1f) {
-            FilledTonalIconButton({ scope.launch { pager.animateScrollToPage((pager.currentPage - 1 + n) % n) } }, Modifier.align(Alignment.CenterStart).padding(12.dp), colors = chrome) { Icon(Sym.ChevronLeft, "Previous") }
-            FilledTonalIconButton({ scope.launch { pager.animateScrollToPage((pager.currentPage + 1) % n) } }, Modifier.align(Alignment.CenterEnd).padding(12.dp), colors = chrome) { Icon(Sym.ChevronRight, "Next") }
+            FilledTonalIconButton({ scope.launch { pager.animateScrollToPage((pager.currentPage - 1 + n) % n) } }, Modifier.align(Alignment.CenterStart).padding(12.dp), colors = chrome) { Icon(Sym.ChevronLeft, "上一张") }
+            FilledTonalIconButton({ scope.launch { pager.animateScrollToPage((pager.currentPage + 1) % n) } }, Modifier.align(Alignment.CenterEnd).padding(12.dp), colors = chrome) { Icon(Sym.ChevronRight, "下一张") }
             Text("${pager.currentPage + 1} / $n", Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(20.dp).clip(Pill).background(Color.White.copy(.14f)).padding(horizontal = 14.dp, vertical = 6.dp),
                 color = Color.White, style = MaterialTheme.typography.labelLarge)
         }
@@ -469,13 +469,13 @@ private fun ShareLinksSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Un
     val web = Share.webLink(app.id, app.icon)
     data class Row5(val key: String, val label: String, val helper: String, val value: String, val action: String, val multi: Boolean)
     val rows = listOf(
-        Row5("deep", "Deep Link", "Launches Orion Store directly to this app", Share.deepLink(app.id), "Copy", false),
-        Row5("web", "Web Link", "Uses the fallback redirect page before opening the app", web, "Copy", false),
-        Row5("md", "Markdown Badge", "Badge snippet for markdown readmes and posts", Share.markdown(web), "Copy Markdown", true),
-        Row5("html", "HTML Badge", "Badge snippet for websites and embedded pages", Share.html(web), "Copy HTML", true),
+        Row5("deep", "深链", "直接在 Orion Store 中打开此应用", Share.deepLink(app.id), "复制", false),
+        Row5("web", "网页链接", "打开应用前先经过备用跳转页面", web, "复制", false),
+        Row5("md", "Markdown 徽章", "用于 Markdown 自述文件与帖子的徽章代码", Share.markdown(web), "复制 Markdown", true),
+        Row5("html", "HTML 徽章", "用于网站与内嵌页面的徽章代码", Share.html(web), "复制 HTML", true),
     )
-    SheetTitle("Developer deep links", Sym.Link)
-    Text(buildAnnotatedString { append("Open one item at a time to copy links and badge snippets for "); withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(app.name) }; append(".") },
+    SheetTitle("开发者深度链接", Sym.Link)
+    Text(buildAnnotatedString { append("请逐项打开，复制 "); withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(app.name) }; append(" 的链接与徽章代码。") },
         Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
     Column(Modifier.navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
         rows.forEachIndexed { i, r ->
@@ -493,7 +493,7 @@ private fun ShareLinksSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Un
                             }
                             FilledTonalButton({ clip.setText(AnnotatedString(r.value)); copied = r.key; vm.haptic(H.SUCCESS) }, modifier = Modifier.padding(top = 10.dp), shapes = ButtonDefaults.shapes()) {
                                 Icon(if (copied == r.key) Sym.Check else Sym.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
-                                Text(if (copied == r.key) "Copied" else r.action)
+                                Text(if (copied == r.key) "已复制" else r.action)
                             }
                         }
                     }

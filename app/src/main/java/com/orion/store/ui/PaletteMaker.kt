@@ -151,46 +151,46 @@ private const val MAX_CHROMA = .3
 @Composable
 fun PaletteMakerSheet(vm: MainViewModel, editing: CustomPalette?, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
     val s = LocalS.current; val close = LocalSheetClose.current
-    var name by rememberSaveable { mutableStateOf(editing?.name ?: "My palette") }
+    var name by rememberSaveable { mutableStateOf(editing?.name ?: "我的调色板") }
     var seeds by remember { mutableStateOf(listOf(editing?.primary ?: SEEDS.random(), editing?.secondary, editing?.tertiary)) }
     var slot by rememberSaveable { mutableIntStateOf(0) }
     var style by rememberSaveable { mutableStateOf(editing?.style ?: "balanced") }
     var theme by rememberSaveable { mutableStateOf(if (s.isOled) "oled" else s.theme) }
-    val draft = CustomPalette(editing?.id ?: "draft", name.trim().ifEmpty { "My palette" }, seeds[0]!!, seeds[1], seeds[2], style)
+    val draft = CustomPalette(editing?.id ?: "draft", name.trim().ifEmpty { "我的调色板" }, seeds[0]!!, seeds[1], seeds[2], style)
     val pal = remember(draft) { build(draft) }
     fun setSeed(i: Int, c: Int?) { seeds = seeds.toMutableList().also { it[i] = c } }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SheetTitle(if (editing == null) "Make a palette" else "Edit palette", Sym.Palette, "Pick a color and Orion builds every tone from it")
+        SheetTitle(if (editing == null) "创建调色板" else "编辑调色板", Sym.Palette, "选一种颜色，Orion 会据此生成全部色调")
         MaterialTheme(colorScheme = pal.scheme(theme)) { PalettePreview(draft.name) }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("light" to "Light", "dusk" to "Dusk", "dark" to "Dark", "oled" to "OLED").forEach { (t, l) -> Choice(theme == t, l) { theme = t } }
+            listOf("light" to "浅色", "dusk" to "黄昏", "dark" to "深色", "oled" to "OLED").forEach { (t, l) -> Choice(theme == t, l) { theme = t } }
         }
         // The three seeds: primary always set, secondary and tertiary follow the primary until given their own color
         val shown = listOf(pal.light.primary, pal.light.secondary, pal.light.tertiary)
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            listOf("Primary", "Secondary", "Tertiary").forEachIndexed { i, label ->
+            listOf("主色", "次色", "第三色").forEachIndexed { i, label ->
                 SeedSlot(label, if (i == 0) Color(seeds[0]!!) else seeds[i]?.let(::Color) ?: shown[i], i > 0 && seeds[i] == null, slot == i, Modifier.weight(1f)) { slot = i }
             }
         }
         Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (slot > 0) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Choice(seeds[slot] == null, "Match primary", Sym.AutoAwesome) { setSeed(slot, null) }
-                Choice(seeds[slot] != null, "Own color", Sym.FormatColorFill) { if (seeds[slot] == null) setSeed(slot, shown[slot].toArgb()) }
+                Choice(seeds[slot] == null, "跟随主色", Sym.AutoAwesome) { setSeed(slot, null) }
+                Choice(seeds[slot] != null, "自定义颜色", Sym.FormatColorFill) { if (seeds[slot] == null) setSeed(slot, shown[slot].toArgb()) }
             }
             val seed = seeds[slot]
             AnimatedVisibility(seed != null) { if (seed != null) SeedEditor(slot, seed) { setSeed(slot, it) } }
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Style", style = MaterialTheme.typography.titleSmallEmphasized)
+            Text("风格", style = MaterialTheme.typography.titleSmallEmphasized)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("soft" to "Soft", "balanced" to "Balanced", "vivid" to "Vivid").forEach { (id, l) -> Choice(style == id, l) { style = id } }
+                listOf("soft" to "柔和", "balanced" to "均衡", "vivid" to "鲜艳").forEach { (id, l) -> Choice(style == id, l) { style = id } }
             }
         }
-        OutlinedTextField(name, { name = it.take(24) }, Modifier.padding(horizontal = 16.dp).fillMaxWidth(), label = { Text("Name") }, singleLine = true,
+        OutlinedTextField(name, { name = it.take(24) }, Modifier.padding(horizontal = 16.dp).fillMaxWidth(), label = { Text("名称") }, singleLine = true,
             shape = RoundedCornerShape(20.dp), keyboardOptions = KeyboardOptions(KeyboardCapitalization.Words))
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            CtaButton(if (editing == null) "Save and apply" else "Save changes", {
+            CtaButton(if (editing == null) "保存并应用" else "保存更改", {
                 val id = editing?.id ?: "custom-${System.currentTimeMillis().toString(36)}"; val cp = draft.copy(id = id)
                 vm.set { st ->
                     val list = if (st.customPalettes.any { it.id == id }) st.customPalettes.map { if (it.id == id) cp else it } else st.customPalettes + cp
@@ -202,7 +202,7 @@ fun PaletteMakerSheet(vm: MainViewModel, editing: CustomPalette?, onDismiss: () 
                 vm.set { st -> st.copy(customPalettes = st.customPalettes.filterNot { it.id == editing.id }, palette = if (st.palette == editing.id) "orion" else st.palette) }
                 vm.haptic(H.WARNING); close()
             }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes(), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                Icon(Sym.Delete, null); Spacer(Modifier.width(8.dp)); Text("Delete palette")
+                Icon(Sym.Delete, null); Spacer(Modifier.width(8.dp)); Text("删除调色板")
             }
         }
     }
@@ -216,18 +216,18 @@ private fun PalettePreview(name: String) {
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().height(44.dp).clip(Pill).background(c.surfaceContainerHigh).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(32.dp).background(c.primary, MaterialShapes.Cookie9Sided.toShape()), contentAlignment = Alignment.Center) { Icon(Sym.Search, null, Modifier.size(18.dp), tint = c.onPrimary) }
-            Text("Search apps", Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant)
+            Text("搜索应用", Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant)
             Icon(Sym.DarkMode, null, Modifier.padding(end = 8.dp).size(20.dp), tint = c.onSurfaceVariant)
         }
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(c.primaryContainer).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("FEATURED", style = MaterialTheme.typography.labelMedium, color = c.onPrimaryContainer.copy(.75f))
+                Text("精选", style = MaterialTheme.typography.labelMedium, color = c.onPrimaryContainer.copy(.75f))
                 Text(name, style = MaterialTheme.typography.titleLargeEmphasized, color = c.onPrimaryContainer, maxLines = 1)
             }
             Box(Modifier.size(48.dp).background(c.tertiary, MaterialShapes.Sunny.toShape()), contentAlignment = Alignment.Center) { Icon(Sym.Palette, null, tint = c.onTertiary) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("All", "Media", "Tools").forEachIndexed { i, l ->
+            listOf("全部", "媒体", "工具").forEachIndexed { i, l ->
                 Text(l, Modifier.clip(Pill).background(if (i == 0) c.secondaryContainer else c.surfaceContainerHigh).padding(horizontal = 14.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelLarge, color = if (i == 0) c.onSecondaryContainer else c.onSurfaceVariant)
             }
@@ -235,15 +235,15 @@ private fun PalettePreview(name: String) {
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.surfaceContainer).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(c.tertiaryContainer), contentAlignment = Alignment.Center) { Icon(Sym.MusicNote, null, tint = c.onTertiaryContainer) }
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                Text("Music player", style = MaterialTheme.typography.titleSmall, color = c.onSurface)
-                Text("Media · 12 MB", style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+                Text("音乐播放器", style = MaterialTheme.typography.titleSmall, color = c.onSurface)
+                Text("媒体 · 12 MB", style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
             }
-            Button({}, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("Get") }
+            Button({}, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("获取") }
         }
         Row(Modifier.align(Alignment.CenterHorizontally).clip(Pill).background(c.surfaceContainerHigh).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.height(36.dp).clip(Pill).background(c.secondaryContainer).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Sym.AndroidFilled, null, Modifier.size(18.dp), tint = c.onSecondaryContainer)
-                Text("Apps", Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelLarge, color = c.onSecondaryContainer)
+                Text("应用", Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelLarge, color = c.onSecondaryContainer)
             }
             listOf(Sym.DesktopWindows, Sym.GridView, Sym.Code).forEach { Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) { Icon(it, null, Modifier.size(18.dp), tint = c.onSurfaceVariant) } }
         }
@@ -257,7 +257,7 @@ private fun SeedSlot(label: String, color: Color, auto: Boolean, on: Boolean, mo
     Column(modifier.springClick(RoundedCornerShape(24.dp), onClick = onClick).background(if (on) cs.secondaryContainer else cs.surfaceContainer).padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(48.dp).border(ring, cs.primary, CircleShape).padding(ring + 2.dp).background(color, if (on) MaterialShapes.Cookie9Sided.toShape() else CircleShape),
-            contentAlignment = Alignment.Center) { if (auto) Icon(Sym.AutoAwesome, "Matches primary", Modifier.size(18.dp), tint = Color.White.copy(.9f)) }
+            contentAlignment = Alignment.Center) { if (auto) Icon(Sym.AutoAwesome, "跟随主色", Modifier.size(18.dp), tint = Color.White.copy(.9f)) }
         Text(label, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.labelLarge, color = if (on) cs.onSecondaryContainer else cs.onSurfaceVariant)
     }
 }
@@ -273,9 +273,9 @@ private fun SeedEditor(slot: Int, seed: Int, onSeed: (Int) -> Unit) {
     val hueTrack = remember { Brush.horizontalGradient((0..12).map { Color(Tone.at(it * 30.0, .16, 65.0)) }) }
     val chromaTrack = remember(hue) { Brush.horizontalGradient(listOf(Color(Tone.at(hue.toDouble(), 0.0, SEED_TONE)), Color(Tone.at(hue.toDouble(), MAX_CHROMA, SEED_TONE)))) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Hue", style = MaterialTheme.typography.labelLarge)
+        Text("色相", style = MaterialTheme.typography.labelLarge)
         TrackSlider(hue / 360f, hueTrack) { hue = it * 360f; slide() }
-        Text("Intensity", style = MaterialTheme.typography.labelLarge)
+        Text("饱和度", style = MaterialTheme.typography.labelLarge)
         TrackSlider(chroma, chromaTrack) { chroma = it; slide() }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SEEDS.forEach { c ->
@@ -286,7 +286,7 @@ private fun SeedEditor(slot: Int, seed: Int, onSeed: (Int) -> Unit) {
         OutlinedTextField(hex, { v ->
             hex = v.filter { it.isLetterOrDigit() }.take(6).uppercase()
             if (hex.length == 6) hex.toIntOrNull(16)?.let { pick(it or (0xFF shl 24)) }
-        }, Modifier.fillMaxWidth(), label = { Text("Hex") }, prefix = { Text("#") }, singleLine = true, shape = RoundedCornerShape(20.dp),
+        }, Modifier.fillMaxWidth(), label = { Text("十六进制") }, prefix = { Text("#") }, singleLine = true, shape = RoundedCornerShape(20.dp),
             leadingIcon = { Box(Modifier.size(24.dp).clip(CircleShape).background(Color(seed))) },
             keyboardOptions = KeyboardOptions(KeyboardCapitalization.Characters, keyboardType = KeyboardType.Ascii))
     }

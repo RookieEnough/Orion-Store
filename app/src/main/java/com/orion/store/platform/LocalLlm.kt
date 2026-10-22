@@ -29,10 +29,10 @@ object LocalLlm {
     }
 
     val MODELS = listOf(
-        Model("smollm2-360m", "SmolLM2 360M", "litert-community/SmolLM2-360M-Instruct", "SmolLM2_360M_instruct.litertlm", 374, 3, "The lightest. Quick on any phone, fine for simple asks."),
-        Model("qwen3-0.6b", "Qwen3 0.6B", "litert-community/Qwen3-0.6B", "Qwen3-0.6B.litertlm", 614, 4, "Fast and capable. The best pick for most phones."),
-        Model("qwen2.5-1.5b", "Qwen2.5 1.5B", "litert-community/Qwen2.5-1.5B-Instruct", "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm", 1598, 6, "Smarter answers for recent phones."),
-        Model("phi4-mini", "Phi-4 mini", "litert-community/Phi-4-mini-instruct", "Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm", 3910, 12, "The most capable. Flagship phones only."),
+        Model("smollm2-360m", "SmolLM2 360M", "litert-community/SmolLM2-360M-Instruct", "SmolLM2_360M_instruct.litertlm", 374, 3, "最轻量。任何手机都能快速运行，适合简单问答。"),
+        Model("qwen3-0.6b", "Qwen3 0.6B", "litert-community/Qwen3-0.6B", "Qwen3-0.6B.litertlm", 614, 4, "快速且强大，大多数手机的最佳选择。"),
+        Model("qwen2.5-1.5b", "Qwen2.5 1.5B", "litert-community/Qwen2.5-1.5B-Instruct", "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm", 1598, 6, "较新的手机可获得更聪明的回答。"),
+        Model("phi4-mini", "Phi-4 mini", "litert-community/Phi-4-mini-instruct", "Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm", 3910, 12, "能力最强，仅适合旗舰手机。"),
     )
 
     /** The engine's native library, fetched from Google's Maven on first use and checked against this hash before it is ever loaded. */
