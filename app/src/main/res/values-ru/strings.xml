@@ -1261,7 +1261,7 @@
     <string name="xtra_reticulating_splines">Ретикулируем сплины...</string>
     <string name="xtra_revoke_app_might_crash">Отозвать %1$s? Приложение может вылететь.</string>
     <string name="xtra_revoke_failed">Не удалось отозвать</string>
-    <string name="xtra_safe_to_cut">Safe to cut</string>
+    <string name="xtra_safe_to_cut">Можно вырезать</string>
     <string name="xtra_scan">%1$s Сканирование...</string>
     <string name="xtra_scan_failed">Сканирование провалилось</string>
     <string name="xtra_scan_failed_2">Сканирование провалилось</string>
