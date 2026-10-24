@@ -1055,12 +1055,12 @@
     <string name="sheets_springy_motion_shape_morphs_and_material">Springy motion, shape morphs and Material You</string>
     <string name="sheets_start_virustotal_scan">Запустить сканирование по VirusTotal</string>
     <string name="sheets_straight_from_orion_s_releases">Прямо из релизов Orion</string>
-    <string name="sheets_tap_the_dev_tab_to_see">Tap the Dev tab to see what\'s new under the hood.</string>
-    <string name="sheets_tap_the_gear_icon_in_the">Tap the gear icon in the top right corner</string>
+    <string name="sheets_tap_the_dev_tab_to_see">Нажмите на вкладку разработчика, чтобы увидеть что там запрятано.</string>
+    <string name="sheets_tap_the_gear_icon_in_the">Нажмите на значок шестнрни в правом верхнем углу</string>
     <string name="sheets_thank_you">Спасибо вам!</string>
-    <string name="sheets_the_issue_contains_the_exact_json">The issue contains the exact JSON that the App Update workflow merges into apps.json after review.</string>
-    <string name="sheets_the_web_app_you_knew_has">The web app you knew has been rebuilt from the ground up as a real Android app. Same Orion, brand new engine.</string>
-    <string name="sheets_tip_one_scan_may_need_report">Tip: one scan may need report, upload, and polling calls. Save your free quota for apps you actually plan to install.</string>
+    <string name="sheets_the_issue_contains_the_exact_json">Проблема содержит точную версию JSON, которую рабочий процесс App Update объединяет в apps.json после проверки.</string>
+    <string name="sheets_the_web_app_you_knew_has">Веб-приложение, которое вы знали, было перестроено с нуля как реальное приложение для Android. Тот же Orion, но с абсолютно новым движком.</string>
+    <string name="sheets_tip_one_scan_may_need_report">Совет: для сканирования могут потребоваться запросы, выгрузки и опросы. Сохраните свою бесплатную квоту для приложений, которые вы действительно планируете установить.</string>
     <string name="sheets_tip_scan_only_apps_you_plan">Совет: сканируйте только те приложения, которые вы планируете установить.</string>
     <string name="sheets_toggle_on_modern_ui_to_unlock">Переключить \"Modern UI\" для разблокировки нового макета</string>
     <string name="sheets_try_new_ui">Попробовать новый интерфейс</string>
@@ -1081,7 +1081,7 @@
     <string name="store_apps_2">%1$s приложений</string>
     <string name="store_apps_3">%1$s приложений</string>
     <string name="store_create_bundle">Создать набор</string>
-    <string name="store_long_press_any_app_card_or">Long-press any app card or tap the heart in details to add it here.</string>
+    <string name="store_long_press_any_app_card_or">Удерживайте любую карту приложения или коснитесь сердца в описании, чтобы добавить её здесь.</string>
     <string name="store_new_updated">Новое &amp; обновлено</string>
     <string name="store_no_apps_found">Приложения %1$s не найдено</string>
     <string name="store_no_favorites_found">Избранного не найдено</string>
