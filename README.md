@@ -393,3 +393,5 @@ The project lives across a few public surfaces:
 <p align="center">
   Made with 💜 by <strong>RookieZ</strong>
 </p>
+
+<!-- Orion Store community contributor note -->
