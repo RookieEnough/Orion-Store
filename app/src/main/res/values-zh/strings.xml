@@ -3,7 +3,7 @@
     <string name="app_name">奥里昂商店</string>
     <string name="about_active_mirror">当前镜像</string>
     <string name="about_add_badge">添加徽章</string>
-    <string name="about_alias_secured">"别名已保护"</string>
+    <string name="about_alias_secured">" 别名已保护"</string>
     <string name="about_be_the_first_legend_to_rise">还没有人上榜，等你来当第一位传奇！</string>
     <string name="about_beam_me_up">传送我！</string>
     <string name="about_buy_me_a_coffee">请开发者喝咖啡</string>
