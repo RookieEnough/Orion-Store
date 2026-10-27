@@ -19,7 +19,7 @@
     <string name="about_copy_the_upi_id_to_pay">Скопируйте UPI ID для оплаты из вашего приложения</string>
     <string name="about_copy_token">Скопировать токен</string>
     <string name="about_copy_upi">Скопировать UPI</string>
-    <string name="about_deck_clean">Deck: Clean</string>
+    <string name="about_deck_clean">Панель: Чисто</string>
     <string name="about_developer_tools">Инструменты разработчика</string>
     <string name="about_edit_token">Редактировать токен</string>
     <string name="about_error">Ошибка: %1$s</string>
@@ -62,7 +62,7 @@
     <string name="about_release_notes">Изменения в версии</string>
     <string name="about_remote_mode">Удаленный режим</string>
     <string name="about_remove_token">Удалить токен</string>
-    <string name="about_resets">Resets: %1$s</string>
+    <string name="about_resets">Сбросов: %1$s</string>
     <string name="about_return_to_base">Вернуться на базу</string>
     <string name="about_reveal_token">Показать токен</string>
     <string name="about_secrets_safety">Секреты и безопасность</string>
@@ -115,7 +115,7 @@
     <string name="apptracker_shizuku_not_running">Shizuku не запущен</string>
     <string name="apptracker_shizuku_permission_missing">Отсутствует разрешение Shizuku</string>
     <string name="apptracker_stream_error">Ошибка потока</string>
-    <string name="apptracker_trim_failed">Trim failed: %1$s</string>
+    <string name="apptracker_trim_failed">Очистка кэша не удалась: %1$s</string>
     <string name="apptracker_upload_failed">Загрузка провалилась</string>
     <string name="apptracker_user_denied_shizuku_permission">Пользователь отказал Shizuku в разрешении.</string>
     <string name="apptracker_verification_failed">Верификация не удалась</string>
@@ -215,7 +215,7 @@
     <string name="community_dino_run">Dino Run</string>
     <string name="community_direct_download_link">Прямая ссылка на загрузку *</string>
     <string name="community_direct_download_link_is_required">Требуется прямая ссылка на загрузку.</string>
-    <string name="community_drops_the_badge">Drops the %1$s badge</string>
+    <string name="community_drops_the_badge">Уронил значок %1$s</string>
     <string name="community_dungeon_run">Прохождение подземелий</string>
     <string name="community_e_g_app_release">напр. app-release</string>
     <string name="community_e_g_privacy_essentials">напр. Privacy Essentials</string>
@@ -254,7 +254,7 @@
     <string name="community_icon_preview">Предпросмотр значков</string>
     <string name="community_icon_url">URL значка *</string>
     <string name="community_icon_url_is_required">Требуется URL значка.</string>
-    <string name="community_ink">Ink %1$s</string>
+    <string name="community_ink">Чернила %1$s</string>
     <string name="community_keep_local">Оставить локально</string>
     <string name="community_kernel_panic_plains">Равнины паник ядра</string>
     <string name="community_level_up">Новый Уровень</string>
@@ -761,7 +761,7 @@
     <string name="pixel_rolls_into_place">Вращается на месте</string>
     <string name="pixel_spins_up_to_refresh">Вращается до обновления</string>
     <string name="pixel_throw_to_refresh">Бросьте для обновления</string>
-    <string name="repository_dev_apps_request_failed_with">Dev apps request failed with %1$s</string>
+    <string name="repository_dev_apps_request_failed_with">Ошибка запроса приложения для разработчиков: %1$s</string>
     <string name="repository_dev_config_is_missing_appsjsonurl">В конфигурации разработчика отсутствует appsJsonUrl.</string>
     <string name="repository_dev_config_request_failed_with">Запрос конфигурации разработчика не удался с %1$s</string>
     <string name="repository_enter_a_developer_config_url_before">Введите URL конфигурации разработчика перед перезагрузкой.</string>
@@ -870,7 +870,7 @@
     <string name="settings_look_feel">Внешний вид</string>
     <string name="settings_make_orion_the_updater_of_catalog">Сделать Orion обновляющим приложения которые в каталоге, но скачены из любого другого места. Сохраняет их данные.</string>
     <string name="settings_malware_scan_for_installed_apps">Сканирование установленных приложений на вирусы</string>
-    <string name="settings_mission_scanner_admin">Mission Scanner (Admin)</string>
+    <string name="settings_mission_scanner_admin">Сканер миссий (Администратор)</string>
     <string name="settings_motion_feel">Внешний вид</string>
     <string name="settings_navigation_tabs">Навигационные панели</string>
     <string name="settings_never_backed_up">Копия не создавалась</string>
@@ -1033,8 +1033,8 @@
     <string name="sheets_paste_your_virustotal_api_key">Введите ваш VirusTotal API ключ</string>
     <string name="sheets_paste_your_virustotal_api_key_first">Сначала вставьте ваш VirusTotal API ключ.</string>
     <string name="sheets_patched_apps_need_context">Исправленные приложения требуют контекста</string>
-    <string name="sheets_prepare_app_update_issue">Prepare App Update Issue</string>
-    <string name="sheets_pro_move_open_the_full_virustotal">Pro move: Open the full VirusTotal report and read engine names.</string>
+    <string name="sheets_prepare_app_update_issue">Подготовить заявку на обновление приложения</string>
+    <string name="sheets_pro_move_open_the_full_virustotal">Продвинутые действия: откройте полный отчет VirusTotal и поочередно просмотрите названия сканирующих движков.</string>
     <string name="sheets_quick_help_for_finding_your_virustotal">Быстрая помощь в поиске ключа VirusTot.</string>
     <string name="sheets_quota_tip">Consejo sobre la cuota</string>
     <string name="sheets_recommended_bundle">Рекомендованный набор</string>
@@ -1100,8 +1100,8 @@
     <string name="store_updates_ready">%1$s обновления готовы</string>
     <string name="store_view_more_apps">Показать больше приложений</string>
     <string name="vm_add_your_virustotal_api_key_below">Добавьте ваш VirusTotal API ключ ниже, затем отсканируйте обновление.</string>
-    <string name="vm_adopted_failed_signature_or_split_mismatch">Adopted %1$s, %2$s failed (signature or split mismatch)</string>
-    <string name="vm_adopting_apps">Adopting %1$s apps...</string>
+    <string name="vm_adopted_failed_signature_or_split_mismatch">Принято %1$s, %2$s не удалось (подпись или несоответствие разделено)</string>
+    <string name="vm_adopting_apps">Происходит перенос %1$s приложений…</string>
     <string name="vm_all_apps_from_are_already_installed">Все приложения из %1$s уже установлены.</string>
     <string name="vm_all_updates_completed">Все обновления завершены.</string>
     <string name="vm_already_a_developer">Вы уже разработчик.</string>
@@ -1373,7 +1373,7 @@
     <string name="new_catch_your_breath_the_next_mission_opens">Переведите дыхание. Следующая миссия начинается через несколько секунд.</string>
     <string name="new_developer_config">Конфигурация разработчиков</string>
     <string name="new_developer_config_failed">Сбой конфигурации разработчика</string>
-    <string name="new_developer_config_failed_local_fallback">Developer Config Failed (Local Fallback)</string>
+    <string name="new_developer_config_failed_local_fallback">Ошибка в настройках разработчика (локальный вариант)</string>
     <string name="new_developer_page">Страница разработчика</string>
     <string name="new_disabled_blocked_local">Отключено &amp; заблокировано локально</string>
     <string name="new_don_t_manage_an_app">Не управлять приложением</string>
