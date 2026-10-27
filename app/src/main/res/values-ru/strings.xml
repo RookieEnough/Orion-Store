@@ -352,7 +352,7 @@
     <string name="community_swap_badge">Поменять значок</string>
     <string name="community_swarm_cleared">Гнездо очищено!</string>
     <string name="community_tap_any_unlocked_badge_and_it">Коснитесь любого разблокированного значка и он будет мгновенно добавлен в вашу вкладку \"О программе\".</string>
-    <string name="community_tap_any_unlocked_badge_to_replace">Tap any unlocked badge to replace the selected About badge instantly.</string>
+    <string name="community_tap_any_unlocked_badge_to_replace">Нажмите на любой разблокированный значок, чтобы немедленно заменить выбранный значок \"О программе\".</string>
     <string name="community_tap_to_flip">Нажмите чтобы перевернуть</string>
     <string name="community_test_garden">Тестовый Сад</string>
     <string name="community_the_ad_was_skipped_watch_it">Реклама пропущена. Смотрите её до конца, чтобы заправить код.</string>
@@ -376,7 +376,7 @@
     <string name="community_to_go">Осталось %1$s</string>
     <string name="community_to_protect_the_economy_from_farming">Для защиты экономики от фарминга, VPN и блокировщики рекламы для этого задания запрещены. Пожалуйста, отключите их и повторите попытку.</string>
     <string name="community_todo_fix_later_2009_you_fixed">// СДЕЛАТЬ: исправить позже (2009). Вы исправили это. Где-то, призрак наконец упокоен.</string>
-    <string name="community_training_arc">Training Arc</string>
+    <string name="community_training_arc">Обучающий цикл</string>
     <string name="community_troll_banished">Тролль изгнан</string>
     <string name="community_try_again_later">Попробуйте снова позже.</string>
     <string name="community_understand_return">Понять и вернуться</string>
@@ -740,7 +740,7 @@
     <string name="pixel_cap_shield">Капитан щит</string>
     <string name="pixel_classic_orion_blink">Классическое мигание Orion</string>
     <string name="pixel_expressive_shapes">Выразительные формы</string>
-    <string name="pixel_face_alert_refresh">Face alert refresh</string>
+    <string name="pixel_face_alert_refresh">Обновление оповещения о лице</string>
     <string name="pixel_happy_helper">Милый помошник</string>
     <string name="pixel_hop_to_refresh">Прыгает для обновления</string>
     <string name="pixel_m3_shapes_morphing">Изменение формы M3</string>
@@ -1013,7 +1013,7 @@
     <string name="sheets_keep_this_open_virustotal_can_take">Оставить это открытым. VirusTotal может занять немного времени, когда свежему APK нужен анализ.</string>
     <string name="sheets_let_s_go">Идем!</string>
     <string name="sheets_levels_and_pilot_cards">Уровни и карты пилотов</string>
-    <string name="sheets_limit_tip">Limit tip</string>
+    <string name="sheets_limit_tip">Совет по ограничениям</string>
     <string name="sheets_load_more_left">Загрузить еще %1$s ( осталось%2$s)</string>
     <string name="sheets_material_3_expressive">Material 3 Expressive</string>
     <string name="sheets_morphe_builds_modify_original_app_code">Morphe создает модификацию оригинального программного кода. Антивирусные движки могут помечать эти изменения даже тогда, когда сборка чиста.</string>
@@ -1335,8 +1335,8 @@
     <string name="about_voxel">Воксель</string>
     <string name="about_retro">Ретро</string>
     <string name="about_pixie">Пикси</string>
-    <string name="about_cheery">Cheery</string>
-    <string name="about_glee">Glee</string>
+    <string name="about_cheery">Весёлый</string>
+    <string name="about_glee">Гли</string>
     <string name="about_block">Блок</string>
     <string name="about_unit_01_name">Модуль 01</string>
     <string name="wirelessadb_step_1_title">Шаг 1 из 3 - Разблокируйте настройки для разработчиков</string>
