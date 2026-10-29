@@ -24,6 +24,7 @@ import io.github.muntashirakon.adb.AbsAdbConnectionManager
 import io.github.muntashirakon.adb.android.AdbMdns
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -62,6 +63,9 @@ object WirelessAdb {
     val supported get() = Build.VERSION.SDK_INT >= 30
     val connected get() = m?.isConnected == true
 
+    /** No Wi-Fi, so wireless debugging cannot work. Callers ask the user whether to use the regular installer. */
+    class NoWifiError : Exception("Connect to Wi-Fi to install without the wait.")
+
     const val KEY_CODE = "code"
     private const val CHANNEL = "orion_wireless_adb"
     private const val NOTIF = 7310
@@ -70,6 +74,10 @@ object WirelessAdb {
     private const val HOST = "127.0.0.1"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
+    /** The attempt in progress, shared by every caller: a download's warm-up and the install itself must not each start their own,
+     *  because every attempt can make Android ask to allow wireless debugging on the network again. */
+    private var inFlight: Deferred<Unit>? = null
+    @Volatile private var failedAt = 0L
 
     /** RSA identity adbd remembers after pairing. Lives in no-backup storage so a restore onto another phone does not carry it. */
     private class Manager(ctx: Context) : AbsAdbConnectionManager() {
@@ -126,29 +134,42 @@ object WirelessAdb {
 
     private fun tryConnect(mg: Manager, port: Int) = runCatching { mg.connect(HOST, port) }.getOrDefault(false) || mg.isConnected
 
-    /** Connects to adbd: the last known port first (instant), then mDNS, switching Wireless debugging on when Orion is allowed to. */
-    suspend fun connect(ctx: Context): Unit = lock.withLock {
+    /** Connects to adbd: the last known port first (instant), then mDNS, switching Wireless debugging on when Orion is allowed to.
+     *  Concurrent callers join the attempt already running and get its result. */
+    suspend fun connect(ctx: Context) {
+        val app = ctx.applicationContext
+        val job = synchronized(this) {
+            inFlight?.takeIf { it.isActive } ?: scope.async {
+                try { lock.withLock { doConnect(app) } } catch (e: Exception) { if (e !is NoWifiError) failedAt = System.currentTimeMillis(); throw e }
+            }.also { inFlight = it }
+        }
+        job.await()
+    }
+
+    private suspend fun doConnect(ctx: Context) {
         withContext(Dispatchers.IO) {
             val mg = mgr(ctx)
             if (mg.isConnected) return@withContext
             val last = prefs(ctx).getInt("port", 0)
             if (last <= 0 || !tryConnect(mg, last)) {
-                if (!onWifi(ctx)) throw NativeError("Connect to Wi-Fi to install without the wait.")
-                val cr = ctx.contentResolver; val toggle = canToggle(ctx)
+                if (!onWifi(ctx)) throw NoWifiError()
+                val cr = ctx.contentResolver; val toggle = canToggle(ctx); val wasOn = wirelessOn(ctx)
                 // Like Shizuku: with WRITE_SECURE_SETTINGS, Orion brings back Developer options and Wireless debugging itself, and turns off
                 // the 7-day authorization timeout that would otherwise make Android forget the pairing
                 if (toggle) runCatching {
                     if (!devOptions(ctx)) Settings.Global.putInt(cr, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 1)
                     Settings.Global.putLong(cr, "adb_allowed_connection_time", 0)
-                    if (!wirelessOn(ctx)) Settings.Global.putInt(cr, ADB_WIFI, 1)
+                    if (!wasOn) Settings.Global.putInt(cr, ADB_WIFI, 1)
                 }
-                var port = discover(ctx, AdbMdns.SERVICE_TYPE_TLS_CONNECT, 15_000)
-                // On but silent (Wi-Fi changed, adbd stuck): restart Wireless debugging once
-                if (port == null && toggle) {
+                // Just switched on: Android may be asking to allow this network, so give that prompt time to be answered
+                var port = discover(ctx, AdbMdns.SERVICE_TYPE_TLS_CONNECT, if (wasOn) 15_000 else 30_000)
+                // Already on but silent (Wi-Fi changed, adbd stuck): restart Wireless debugging once. Never right after switching it on
+                // ourselves, since the restart would raise the network prompt a second time.
+                if (port == null && toggle && wasOn) {
                     runCatching { Settings.Global.putInt(cr, ADB_WIFI, 0); delay(1500); Settings.Global.putInt(cr, ADB_WIFI, 1) }
                     port = discover(ctx, AdbMdns.SERVICE_TYPE_TLS_CONNECT, 15_000)
                 }
-                val found = port ?: throw NativeError(if (toggle) "Wireless debugging didn't start on this Wi-Fi. Open Wireless debugging once and allow this network." else "Wireless debugging is off. Turn it on or run the setup again.")
+                val found = port ?: throw NativeError(if (toggle) "Wireless debugging didn't start on this Wi-Fi. Open Wireless debugging once and allow this network (tick Always allow)." else "Wireless debugging is off. Turn it on or run the setup again.")
                 if (!tryConnect(mg, found)) throw NativeError("Wireless debugging refused Orion. Run the setup again to re-pair.")
                 prefs(ctx).edit { putInt("port", found) }
             }
@@ -157,7 +178,11 @@ object WirelessAdb {
     }
 
     /** Fire-and-forget connect, started when a download begins so the install itself does not wait on discovery. */
-    fun warm(ctx: Context) { if (!connected) scope.launch { runCatching { connect(ctx.applicationContext) } } }
+    fun warm(ctx: Context) {
+        // Off Wi-Fi there is nothing to warm, and right after a failure another background attempt would only repeat the network prompt
+        if (connected || !onWifi(ctx) || System.currentTimeMillis() - failedAt < 120_000) return
+        scope.launch { runCatching { connect(ctx.applicationContext) } }
+    }
 
     private fun exec(mg: Manager, cmd: String, input: File? = null): String = mg.openStream("exec:$cmd").use { s ->
         // AdbOutputStream.close only flushes, so the stream stays open for the reply
@@ -255,7 +280,7 @@ object WirelessAdb {
             _status.value = Status(Phase.READY, "Paired. Installs now skip the wait.")
             notify(ctx, "Orion is paired", "Apps now install instantly, no 24-hour wait.", done = true)
         } catch (e: Exception) {
-            val msg = (e as? NativeError)?.message ?: "Pairing failed. Try again."
+            val msg = (if (e is NativeError || e is NoWifiError) e.message else null) ?: "Pairing failed. Try again."
             _status.value = Status(Phase.FAILED, msg)
             notify(ctx, "Pairing failed", msg, code = true, open = wirelessDebuggingIntent())
         }

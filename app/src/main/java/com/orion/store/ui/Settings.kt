@@ -433,7 +433,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 vm.haptic(H.LIGHT); vm.pickApk()
                             }) { Chevron() }
                             if (WirelessAdb.supported) Toggle(Sym.Speed, "Skip the 24-hour wait", "Install instantly through built-in wireless debugging", s.directInstall) {
-                                if (vm.s.directInstall) vm.set { it.copy(directInstall = false) } else { picker = "direct" }
+                                if (vm.s.directInstall) vm.set { it.copy(directInstall = false, offWifiInstall = "") } else { picker = "direct" }
                             }
                             Toggle(Sym.Bolt, "Silent install", "Install apps in the background", s.useShizuku) {
                                 shizukuError = null

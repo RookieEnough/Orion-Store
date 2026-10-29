@@ -72,6 +72,8 @@ import kotlin.math.max
     val cloudBackupUri: String = "", val cloudBackupEvery: String = "off", val lastCloudBackup: Long = 0,
     /** Install through Orion's built-in wireless ADB (shell user), skipping the 24-hour unverified-app wait. */
     val directInstall: Boolean = false,
+    /** What to do when direct install has no Wi-Fi: "" = ask each time, "installer" = use Android's installer. */
+    val offWifiInstall: String = "",
     val installerPreference: String = "system",
     val installerPackage: String = "",
     val installerLabel: String = "",

@@ -153,7 +153,7 @@ class ApkInstallActivity : ComponentActivity() {
         }
     }
 
-    private fun install(apk: Apk, s: Settings, regular: Boolean = false) = lifecycleScope.launch {
+    private fun install(apk: Apk, s: Settings, regular: Boolean = false): kotlinx.coroutines.Job = lifecycleScope.launch {
         val withOpts = !regular && optsOn && optionRoute(s) != null
         val picked = if (withOpts) pickedOptions(opts, optInstaller).also { p -> Store.settings.update { it.copy(installFlags = p) } } else null
         val r = if (regular) null else if (withOpts) optionRoute(s) else route(s)?.first
@@ -170,6 +170,8 @@ class ApkInstallActivity : ComponentActivity() {
                 else -> tracker.install(apk.file.name, "system", "")
             }
         }.exceptionOrNull()
+        // No Wi-Fi and the user already chose Android's installer for that case; otherwise the failure sheet below offers it
+        if (r == "adb" && err is WirelessAdb.NoWifiError && s.offWifiInstall == "installer") { install(apk, s, regular = true); return@launch }
         // The system installer reports cancel and failure alike; what is on the phone afterwards is the truth
         val now = withContext(Dispatchers.IO) { tracker.appInfo(apk.pkg) }
         val ok = err == null || (r == null && now.installed && now.versionCode == apk.code && now.versionCode != apk.installedCode)

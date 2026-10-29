@@ -663,7 +663,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      *  background job's no-prompt session. Whatever can't go silently stays ready with its notification. */
     private fun autoInstall(app: AppItem, file: String) = viewModelScope.launch {
         val st = s
-        if (st.rootMode || st.useShizuku || st.useDhizuku || st.directInstall && WirelessAdb.supported) { installFile(app, file, opts = if (st.installOptions) st.installFlags else null); return@launch }
+        // Off Wi-Fi, wireless debugging cannot connect: leave it to the no-prompt session below instead of popping the system installer
+        if (st.rootMode || st.useShizuku || st.useDhizuku || st.directInstall && WirelessAdb.supported && (WirelessAdb.connected || WirelessAdb.onWifi(ctx))) { installFile(app, file, opts = if (st.installOptions) st.installFlags else null); return@launch }
         val f = Downloads.file(file) ?: return@launch
         val pkg = withContext(Dispatchers.IO) { tracker.archivePackage(f) }
         val err = if (pkg == null) "The downloaded file is not a valid APK." else AutoUpdate.install(ctx, tracker, st, f, pkg, app.name)
@@ -739,6 +740,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // region install + verification
     /** An install that can't or didn't work, explained in a dialog: [uninstall] offers removing the blocking app, [retry] installing anyway. */
     data class InstallIssue(val app: AppItem, val title: String, val text: String, val uninstall: String? = null, val retry: String? = null)
+    /** Wireless debugging could not be used for an install: ask whether to use Android's installer. A dialog, because a toast renders under the app sheet.
+     *  [noWifi] is the no-Wi-Fi case, where the choice can be remembered. */
+    data class DirectFail(val app: AppItem, val file: String, val msg: String, val noWifi: Boolean = false)
+    var directFailed by mutableStateOf<DirectFail?>(null)
     var installIssue by mutableStateOf<InstallIssue?>(null)
     /** Developer page: the author, and the app page it was opened from (it closes once another app opens). */
     var devProfile by mutableStateOf<Pair<String, String?>?>(null)
@@ -752,13 +757,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val k = normalizePackageName(app.packageName)
         val meta = versionMetaFromFileName(app, file, s.streamOf(app.id))
         // Direct install runs as the shell user (no 24-hour wait, no "unknown apps" permission). When adbd is unreachable the
-        // user picks the regular installer explicitly: silently falling back lands on the very wait this setting exists to skip.
+        // user picks the regular installer explicitly (or chose it once for "no Wi-Fi"): silently falling back lands on the very
+        // wait this setting exists to skip.
         val dhizuku = opts == null && !regular && !s.rootMode && s.useDhizuku
         val direct = opts == null && !regular && !dhizuku && !s.rootMode && s.directInstall && WirelessAdb.supported
         if (direct && !WirelessAdb.connected) {
             installingId = app.id
             val err = runCatching { WirelessAdb.connect(ctx) }.exceptionOrNull()
-            if (err != null) { installingId = null; toast(err.message ?: "Wireless debugging unreachable.", 8000, "Use installer") { installFile(app, file, true) }; return@launch }
+            if (err != null) {
+                installingId = null
+                val noWifi = err is WirelessAdb.NoWifiError
+                // Without Wi-Fi the user decides (or decided earlier) between Wi-Fi and Android's installer; never a silent switch by default
+                if (noWifi && s.offWifiInstall == "installer") installFile(app, file, regular = true, force = force)
+                else directFailed = DirectFail(app, file, err.message ?: "Wireless debugging unreachable.", noWifi)
+                return@launch
+            }
         }
         val shizuku = opts != null || !regular && !direct && !dhizuku && (s.useShizuku || s.rootMode)
         if (!direct && !shizuku && !dhizuku) try {
