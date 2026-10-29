@@ -15,6 +15,9 @@ import java.util.concurrent.TimeUnit
 class OrionApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
+        // Store.settings is a lateinit: OrionActivity reads it in onStart, which can run before MainViewModel exists
+        // (activity restored after process death), so it must be ready before any component starts.
+        Store.init(this)
         Net.init(this)
         Device.isTv = getSystemService(android.app.UiModeManager::class.java)?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
             packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
