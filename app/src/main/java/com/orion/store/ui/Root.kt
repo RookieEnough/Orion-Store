@@ -466,6 +466,23 @@ private fun Overlays(vm: MainViewModel) {
             confirmButton = { Button({ vm.uninstallAsk = null; vm.uninstall(a, true) }, shapes = ButtonDefaults.shapes()) { Text("Uninstall") } },
             dismissButton = { TextButton({ vm.uninstallAsk = null }) { Text("Cancel") } })
     }
+    vm.directFailed?.let { f ->
+        fun close() { vm.directFailed = null }
+        var always by remember(f) { mutableStateOf(false) }
+        AlertDialog(::close, icon = { Icon(Sym.ErrorOutline, null) },
+            title = { Text(if (f.noWifi) "Wireless debugging needs Wi-Fi" else "Wireless debugging didn't answer") },
+            text = {
+                Column {
+                    Text(if (f.noWifi) "Connect to Wi-Fi to install instantly, or use Android's installer. Android may hold or block apps from unverified developers there."
+                        else f.msg + "\n\nTry again, or install with Android's installer.")
+                    if (f.noWifi) Row(Modifier.fillMaxWidth().clickable { always = !always }.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(always, { always = it }); Text("Always use the installer without Wi-Fi")
+                    }
+                }
+            },
+            confirmButton = { TextButton({ if (always) vm.set { it.copy(offWifiInstall = "installer") }; close(); vm.installFile(f.app, f.file, regular = true) }) { Text("Use installer") } },
+            dismissButton = { TextButton(::close) { Text("Cancel") } })
+    }
     vm.installIssue?.let { i ->
         fun close() { vm.installIssue = null }
         AlertDialog(::close, icon = { Icon(Sym.ErrorOutline, null) }, title = { Text(i.title) },
