@@ -527,10 +527,10 @@ private fun VerifierDialog(vm: MainViewModel) {
         text = {
             Text(when {
                 working -> if (revert) "Switching developer verification back on." else "Switching off developer verification."
-                safe -> "Developer verification is off and sideloaded apps install freely. Changed your mind? Revert puts everything back as it was."
+                safe -> "Developer verification is off and sideloaded apps install freely. While it is off, Android also hides its own \"Install apps from unverified developers\" switch in Developer options. Changed your mind? Revert puts everything back as it was, including that switch."
                 failed -> vm.verifierError
                 setup -> "Orion needs a way to run the change: root, Shizuku, or its built-in wireless debugging. Set up wireless debugging once and this popup comes back to finish."
-                else -> "Android switched on developer verification, which can slow or block sideloaded apps. Orion can turn it off for you, and undo it any time from the shield up top."
+                else -> "Android switched on developer verification, which can slow or block sideloaded apps. Orion can turn it off for you, and undo it any time from the shield up top. While it is off, Android hides its own \"Install apps from unverified developers\" switch."
             })
         },
         confirmButton = {
