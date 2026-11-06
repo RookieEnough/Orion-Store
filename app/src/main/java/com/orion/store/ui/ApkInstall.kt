@@ -96,12 +96,12 @@ class ApkInstallActivity : ComponentActivity() {
         step = ApkStep.Reading; insights = null
         lifecycleScope.launch {
             step = withContext(Dispatchers.IO) { runCatching { parse(uri) }.getOrNull() }?.let { ApkStep.Ready(it) }
-                ?: ApkStep.Failed(null, "This file can't be installed", "It isn't a working APK. Split bundles (.apks, .xapk) aren't supported yet.")
+                ?: ApkStep.Failed(null, "This file can't be installed", "It isn't a working APK or split bundle (.apks, .xapk, .apkm).")
             // Wireless debugging connects while the sheet is read, so Install doesn't sit on discovery
             if (step is ApkStep.Ready && (optionRoute(Store.settings.flow.value) ?: route(Store.settings.flow.value)?.first) == "adb") WirelessAdb.warm(applicationContext)
             (step as? ApkStep.Ready)?.apk?.let { a ->
                 inspecting = true
-                insights = withContext(Dispatchers.IO) { ApkInsights.read(applicationContext, a.file) }
+                insights = withContext(Dispatchers.IO) { ApkInsights.read(applicationContext, com.orion.store.platform.Bundles.parts(applicationContext, a.file).firstOrNull() ?: a.file) }
                 inspecting = false
                 // Switches this APK can't install without are picked for the user; turning options on stays their call
                 needed(a).takeIf { it.isNotEmpty() }?.let { opts = opts + it }
@@ -113,14 +113,14 @@ class ApkInstallActivity : ComponentActivity() {
     private fun parse(uri: Uri): Apk? {
         // Files from earlier sheets that were swiped away mid-copy
         Downloads.dir().listFiles { x -> x.name.startsWith("Ext_") && System.currentTimeMillis() - x.lastModified() > 3_600_000 }?.forEach { it.delete() }
-        val f = Downloads.file("Ext_${System.currentTimeMillis()}.apk") ?: return null
-        contentResolver.openInputStream(uri)?.use { inp -> f.outputStream().use { inp.copyTo(it) } } ?: return null
-        if (!tracker.isValidApk(f)) { f.delete(); return null }
-        val pm = packageManager
-        val pi = pm.getPackageArchiveInfo(f.absolutePath, 0) ?: run { f.delete(); return null }
-        val ai = pi.applicationInfo?.apply { sourceDir = f.absolutePath; publicSourceDir = f.absolutePath }
         val name = runCatching { contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null } }.getOrNull()
-        val label = ai?.let { runCatching { it.loadLabel(pm).toString() }.getOrNull() }?.takeIf { it.isNotBlank() && it != pi.packageName } ?: name?.removeSuffix(".apk") ?: pi.packageName
+        val f = Downloads.file("Ext_${System.currentTimeMillis()}.${fileExt(name ?: uri.toString())}") ?: return null
+        contentResolver.openInputStream(uri)?.use { inp -> f.outputStream().use { inp.copyTo(it) } } ?: return null
+        val base = com.orion.store.platform.Bundles.parts(applicationContext, f).firstOrNull() ?: run { f.delete(); return null }
+        val pm = packageManager
+        val pi = pm.getPackageArchiveInfo(base.absolutePath, 0) ?: run { f.delete(); return null }
+        val ai = pi.applicationInfo?.apply { sourceDir = base.absolutePath; publicSourceDir = base.absolutePath }
+        val label = ai?.let { runCatching { it.loadLabel(pm).toString() }.getOrNull() }?.takeIf { it.isNotBlank() && it != pi.packageName } ?: name?.substringBeforeLast('.') ?: pi.packageName
         val inst = tracker.appInfo(pi.packageName).takeIf { it.installed }
         return Apk(f, label, pi.packageName, pi.versionName.orEmpty(), androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(pi),
             ai?.let { runCatching { it.loadIcon(pm).toBitmap(144, 144) }.getOrNull() }, inst?.version, inst?.versionCode, tracker.clash(f)?.second)
@@ -302,106 +302,7 @@ class ApkInstallActivity : ComponentActivity() {
                     if (r == null) LoadingIndicator(Modifier.size(24.dp)) else Icon(Sym.ChevronRight, "See everything", tint = cs.onSurfaceVariant)
                 }
                 if (r == null) { Text("Reading its code, libraries and permissions...", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant); return@Column }
-                FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    r.frameworks.forEach { Chip(Sym.Layers, it) }
-                    Chip(Sym.Android, "Target Android ${ApkInsights.androidName(r.targetSdk)}")
-                    Chip(Sym.Memory, if (r.abis.isEmpty()) "No native code" else r.abis.joinToString(" · ") { abiShort(it) }, warn = !r.runsHere)
-                    r.pageReady?.let { Chip(if (it) Sym.CheckCircle else Sym.WarningAmber, if (it) "16 KB ready" else "Not 16 KB ready", warn = !it) }
-                    Chip(Sym.Radar, when (r.trackers.size) { 0 -> "No trackers found"; 1 -> "1 tracker"; else -> "${r.trackers.size} trackers" }, warn = r.trackers.isNotEmpty())
-                    Chip(Sym.Policy, "${r.perms.size} permissions" + r.newPerms.size.takeIf { it > 0 }?.let { " · $it new" }.orEmpty(), warn = r.newPerms.any { it.dangerous })
-                    if (r.debuggable || r.debugSigned) Chip(Sym.BugReport, "Debug build", warn = true)
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun Chip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, warn: Boolean = false) {
-        val cs = MaterialTheme.colorScheme
-        Surface(shape = Pill, color = if (warn) cs.tertiaryContainer else cs.surfaceContainerHighest, contentColor = if (warn) cs.onTertiaryContainer else cs.onSurface) {
-            Row(Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, null, Modifier.size(14.dp)); Spacer(Modifier.width(6.dp)); Text(text, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-            }
-        }
-    }
-
-    private fun abiShort(abi: String) = when (abi) { "arm64-v8a" -> "arm64"; "armeabi-v7a" -> "arm32"; "armeabi" -> "arm (old)"; else -> abi }
-
-    /** Everything Orion read from the APK, section by section. */
-    @Composable
-    private fun InspectPage(r: ApkInsights.Report) {
-        val cs = MaterialTheme.colorScheme; val ty = MaterialTheme.typography
-        val clip = androidx.compose.ui.platform.LocalClipboardManager.current
-        val sdk = android.os.Build.VERSION.SDK_INT; val phone = android.os.Build.SUPPORTED_ABIS.toSet()
-        var allPerms by remember { mutableStateOf(false) }; var allLibs by remember { mutableStateOf(false) }
-        @Composable fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-            Text(title, Modifier.padding(start = 4.dp, top = 16.dp, bottom = 6.dp), style = ty.labelLarge, color = cs.primary)
-            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = cs.surfaceContainerHigh) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content) }
-        }
-        @Composable fun Line(label: String, value: String, warn: Boolean = false, sub: String? = null) = Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                Text(label, style = ty.bodyMedium)
-                sub?.let { Text(it, style = ty.bodySmall, color = cs.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-            }
-            Spacer(Modifier.width(12.dp))
-            Text(value, style = ty.labelLarge, color = if (warn) cs.tertiary else cs.onSurfaceVariant, maxLines = 2)
-        }
-
-        Section("Built with") {
-            if (r.frameworks.isEmpty()) Text("Plain Android: Java or Kotlin with Android's own views.", style = ty.bodyMedium)
-            else FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { r.frameworks.forEach { Chip(Sym.Layers, it) } }
-            Text("${r.dexCount} dex file${if (r.dexCount == 1) "" else "s"} · ${"%,d".format(r.classCount)} classes", style = ty.bodySmall, color = cs.onSurfaceVariant)
-        }
-        Section("Compatibility") {
-            Line("Minimum", "Android ${ApkInsights.androidName(r.minSdk)} (API ${r.minSdk})", warn = r.minSdk > sdk, sub = if (r.minSdk > sdk) "This phone runs Android ${ApkInsights.androidName(sdk)}" else null)
-            Line("Target", "Android ${ApkInsights.androidName(r.targetSdk)} (API ${r.targetSdk})", warn = sdk >= 34 && r.targetSdk < 24,
-                sub = if (sdk >= 34 && r.targetSdk < 24) "Android blocks apps this old. Beyond install has Bypass target SDK block" else null)
-            if (r.compileSdk > 0) Line("Compiled with", "API ${r.compileSdk}")
-            Line("Processor", if (r.abis.isEmpty()) "Any" else r.abis.joinToString { abiShort(it) }, warn = !r.runsHere,
-                sub = if (r.abis.isEmpty()) "No native code, so it runs on every phone" else if (r.runsHere) "Runs on this phone (${phone.filter { it in r.abis }.joinToString { abiShort(it) }})" else "Won't run on this phone")
-            r.pageReady?.let { ok ->
-                Line("16 KB pages", if (ok) "Ready" else "${r.unaligned.size} not ready", warn = !ok,
-                    sub = if (ok) "Every 64-bit library works on Android 15+ phones with 16 KB memory pages" else "Phones with 16 KB pages run it in compatibility mode or refuse it: ${r.unaligned.joinToString { it.name }.take(160)}")
-            }
-            if (r.debuggable || r.testOnly) Line("Build", listOfNotNull("Debuggable".takeIf { r.debuggable }, "Test only".takeIf { r.testOnly }).joinToString(" · "), warn = true,
-                sub = if (r.testOnly) "Needs Allow test builds in Beyond install" else null)
-        }
-        Section("Trackers") {
-            if (r.trackers.isEmpty()) Text("None of the known tracker SDKs were found in its code.", style = ty.bodyMedium)
-            else r.trackers.forEach { (n, c) -> Line(n, c, warn = c == "Ads" || c == "Attribution") }
-            Text("Checked offline against tracker signatures, the way Exodus Privacy does.", style = ty.bodySmall, color = cs.onSurfaceVariant)
-        }
-        Section("Permissions · ${r.perms.size}") {
-            if (r.perms.isEmpty()) Text("Asks for nothing.", style = ty.bodyMedium)
-            (if (allPerms) r.perms else r.perms.take(8)).forEach { p ->
-                Line(ApkInsights.permLabel(p.name), listOfNotNull("New".takeIf { p.isNew }, "Sensitive".takeIf { p.dangerous }).joinToString(" · "), warn = p.dangerous, sub = p.name)
-            }
-            if (r.perms.size > 8) TextButton({ allPerms = !allPerms }) { Text(if (allPerms) "Show fewer" else "Show all ${r.perms.size}") }
-        }
-        Section("Components") {
-            r.components.forEach { c -> Line(c.kind, "${c.total}" + if (c.exported > 0) " · ${c.exported} open to other apps" else "") }
-        }
-        if (r.libs.isNotEmpty()) Section("Native libraries · ${r.libs.size}") {
-            (if (allLibs) r.libs else r.libs.take(8)).forEach { l ->
-                val bad = l.abi in ApkInsights.ABI64 && l.align != null && l.align < ApkInsights.PAGE_16K
-                Line(l.name, "${abiShort(l.abi)} · ${CatalogProcessor.formatSize(l.size)}", warn = bad, sub = listOfNotNull(l.known, "Not 16 KB aligned".takeIf { bad }).joinToString(" · ").ifEmpty { null })
-            }
-            if (r.libs.size > 8) TextButton({ allLibs = !allLibs }) { Text(if (allLibs) "Show fewer" else "Show all ${r.libs.size}") }
-        }
-        Section("Size") {
-            val total = r.sizes.sumOf { it.second }.coerceAtLeast(1)
-            r.sizes.forEach { (g, b) ->
-                Column {
-                    Line(g, CatalogProcessor.formatSize(b))
-                    LinearProgressIndicator({ b.toFloat() / total }, Modifier.fillMaxWidth().padding(top = 4.dp), drawStopIndicator = {})
-                }
-            }
-        }
-        r.signer?.let { sig ->
-            Section("Signature") {
-                Line("SHA-256", if (r.debugSigned) "Debug key" else "", warn = r.debugSigned, sub = if (r.debugSigned) "Signed with Android's public debug key, so anyone can sign an update for it" else null)
-                Text(sig, style = ty.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace), color = cs.onSurfaceVariant)
-                TextButton({ clip.setText(androidx.compose.ui.text.AnnotatedString(sig)) }) { Icon(Sym.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Copy") }
+                InsightChips(r, Modifier.padding(top = 10.dp))
             }
         }
     }
@@ -436,3 +337,107 @@ class ApkInstallActivity : ComponentActivity() {
             }
         }
 }
+
+@Composable
+fun InsightChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, warn: Boolean = false) {
+    val cs = MaterialTheme.colorScheme
+    Surface(shape = Pill, color = if (warn) cs.tertiaryContainer else cs.surfaceContainerHighest, contentColor = if (warn) cs.onTertiaryContainer else cs.onSurface) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(14.dp)); Spacer(Modifier.width(6.dp)); Text(text, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        }
+    }
+}
+
+fun abiShort(abi: String) = when (abi) { "arm64-v8a" -> "arm64"; "armeabi-v7a" -> "arm32"; "armeabi" -> "arm (old)"; else -> abi }
+
+/** Everything Orion read from the APK, section by section. */
+@Composable
+fun InspectPage(r: ApkInsights.Report) {
+    val cs = MaterialTheme.colorScheme; val ty = MaterialTheme.typography
+    val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+    val sdk = android.os.Build.VERSION.SDK_INT; val phone = android.os.Build.SUPPORTED_ABIS.toSet()
+    var allPerms by remember { mutableStateOf(false) }; var allLibs by remember { mutableStateOf(false) }
+    @Composable fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+        Text(title, Modifier.padding(start = 4.dp, top = 16.dp, bottom = 6.dp), style = ty.labelLarge, color = cs.primary)
+        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = cs.surfaceContainerHigh) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content) }
+    }
+    @Composable fun Line(label: String, value: String, warn: Boolean = false, sub: String? = null) = Row(verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = ty.bodyMedium)
+            sub?.let { Text(it, style = ty.bodySmall, color = cs.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(value, style = ty.labelLarge, color = if (warn) cs.tertiary else cs.onSurfaceVariant, maxLines = 2)
+    }
+
+    Section("Built with") {
+        if (r.frameworks.isEmpty()) Text("Plain Android: Java or Kotlin with Android's own views.", style = ty.bodyMedium)
+        else FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { r.frameworks.forEach { InsightChip(Sym.Layers, it) } }
+        Text("${r.dexCount} dex file${if (r.dexCount == 1) "" else "s"} · ${"%,d".format(r.classCount)} classes", style = ty.bodySmall, color = cs.onSurfaceVariant)
+    }
+    Section("Compatibility") {
+        Line("Minimum", "Android ${ApkInsights.androidName(r.minSdk)} (API ${r.minSdk})", warn = r.minSdk > sdk, sub = if (r.minSdk > sdk) "This phone runs Android ${ApkInsights.androidName(sdk)}" else null)
+        Line("Target", "Android ${ApkInsights.androidName(r.targetSdk)} (API ${r.targetSdk})", warn = sdk >= 34 && r.targetSdk < 24,
+            sub = if (sdk >= 34 && r.targetSdk < 24) "Android blocks apps this old. Beyond install has Bypass target SDK block" else null)
+        if (r.compileSdk > 0) Line("Compiled with", "API ${r.compileSdk}")
+        Line("Processor", if (r.abis.isEmpty()) "Any" else r.abis.joinToString { abiShort(it) }, warn = !r.runsHere,
+            sub = if (r.abis.isEmpty()) "No native code, so it runs on every phone" else if (r.runsHere) "Runs on this phone (${phone.filter { it in r.abis }.joinToString { abiShort(it) }})" else "Won't run on this phone")
+        r.pageReady?.let { ok ->
+            Line("16 KB pages", if (ok) "Ready" else "${r.unaligned.size} not ready", warn = !ok,
+                sub = if (ok) "Every 64-bit library works on Android 15+ phones with 16 KB memory pages" else "Phones with 16 KB pages run it in compatibility mode or refuse it: ${r.unaligned.joinToString { it.name }.take(160)}")
+        }
+        if (r.debuggable || r.testOnly) Line("Build", listOfNotNull("Debuggable".takeIf { r.debuggable }, "Test only".takeIf { r.testOnly }).joinToString(" · "), warn = true,
+            sub = if (r.testOnly) "Needs Allow test builds in Beyond install" else null)
+    }
+    Section("Trackers") {
+        if (r.trackers.isEmpty()) Text("None of the known tracker SDKs were found in its code.", style = ty.bodyMedium)
+        else r.trackers.forEach { (n, c) -> Line(n, c, warn = c == "Ads" || c == "Attribution") }
+        Text("Checked offline against tracker signatures, the way Exodus Privacy does.", style = ty.bodySmall, color = cs.onSurfaceVariant)
+    }
+    Section("Permissions · ${r.perms.size}") {
+        if (r.perms.isEmpty()) Text("Asks for nothing.", style = ty.bodyMedium)
+        (if (allPerms) r.perms else r.perms.take(8)).forEach { p ->
+            Line(ApkInsights.permLabel(p.name), listOfNotNull("New".takeIf { p.isNew }, "Sensitive".takeIf { p.dangerous }).joinToString(" · "), warn = p.dangerous, sub = p.name)
+        }
+        if (r.perms.size > 8) TextButton({ allPerms = !allPerms }) { Text(if (allPerms) "Show fewer" else "Show all ${r.perms.size}") }
+    }
+    Section("Components") {
+        r.components.forEach { c -> Line(c.kind, "${c.total}" + if (c.exported > 0) " · ${c.exported} open to other apps" else "") }
+    }
+    if (r.libs.isNotEmpty()) Section("Native libraries · ${r.libs.size}") {
+        (if (allLibs) r.libs else r.libs.take(8)).forEach { l ->
+            val bad = l.abi in ApkInsights.ABI64 && l.align != null && l.align < ApkInsights.PAGE_16K
+            Line(l.name, "${abiShort(l.abi)} · ${CatalogProcessor.formatSize(l.size)}", warn = bad, sub = listOfNotNull(l.known, "Not 16 KB aligned".takeIf { bad }).joinToString(" · ").ifEmpty { null })
+        }
+        if (r.libs.size > 8) TextButton({ allLibs = !allLibs }) { Text(if (allLibs) "Show fewer" else "Show all ${r.libs.size}") }
+    }
+    Section("Size") {
+        val total = r.sizes.sumOf { it.second }.coerceAtLeast(1)
+        r.sizes.forEach { (g, b) ->
+            Column {
+                Line(g, CatalogProcessor.formatSize(b))
+                LinearProgressIndicator({ b.toFloat() / total }, Modifier.fillMaxWidth().padding(top = 4.dp), drawStopIndicator = {})
+            }
+        }
+    }
+    r.signer?.let { sig ->
+        Section("Signature") {
+            Line("SHA-256", if (r.debugSigned) "Debug key" else "", warn = r.debugSigned, sub = if (r.debugSigned) "Signed with Android's public debug key, so anyone can sign an update for it" else null)
+            Text(sig, style = ty.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace), color = cs.onSurfaceVariant)
+            TextButton({ clip.setText(androidx.compose.ui.text.AnnotatedString(sig)) }) { Icon(Sym.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Copy") }
+        }
+    }
+}
+
+/** One chip per finding, warnings tinted: the at-a-glance read used by the installer sheet and the app page. */
+@Composable
+fun InsightChips(r: ApkInsights.Report, modifier: Modifier = Modifier) =
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        r.frameworks.forEach { InsightChip(Sym.Layers, it) }
+        InsightChip(Sym.Android, "Target Android ${ApkInsights.androidName(r.targetSdk)}")
+        InsightChip(Sym.Memory, if (r.abis.isEmpty()) "No native code" else r.abis.joinToString(" · ") { abiShort(it) }, warn = !r.runsHere)
+        r.pageReady?.let { InsightChip(if (it) Sym.CheckCircle else Sym.WarningAmber, if (it) "16 KB ready" else "Not 16 KB ready", warn = !it) }
+        InsightChip(Sym.Radar, when (r.trackers.size) { 0 -> "No trackers found"; 1 -> "1 tracker"; else -> "${r.trackers.size} trackers" }, warn = r.trackers.isNotEmpty())
+        InsightChip(Sym.Policy, "${r.perms.size} permissions" + r.newPerms.size.takeIf { it > 0 }?.let { " · $it new" }.orEmpty(), warn = r.newPerms.any { it.dangerous })
+        if (r.debuggable || r.debugSigned) InsightChip(Sym.BugReport, "Debug build", warn = true)
+    }

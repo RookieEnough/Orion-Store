@@ -59,6 +59,8 @@ import kotlin.math.max
     val installOptions: Boolean = false, val installFlags: List<String> = emptyList(),
     /** Launcher icon and dock style, see [APP_ICONS] and [DOCKS]. */
     val appIcon: String = "default", val navDock: String = "pill",
+    /** Where navigation sits on tablets, foldables and TVs: the side rail, or the phone dock at the bottom or top. */
+    val wideNav: String = "rail",
     /** Ads counted toward each locked icon or dock, from zero for everyone: only ads watched while [unlockTarget] is set count. */
     val unlockProgress: Map<String, Int> = emptyMap(), val unlockTarget: String? = null,
     /** Run every privileged action (installs, Guardian) through `su` instead of Shizuku or wireless ADB. */
@@ -99,6 +101,10 @@ import kotlin.math.max
     /** One-time flags for the 2.0 native switch: web data carried over, welcome shown. */
     val webMigrated: Boolean = false, val seenNativeWelcome: Boolean = false,
     val submissionCount: Int = 0,
+    /** How many Orbit apps were saved the last time the library-share reminder was answered. It comes back every five more. */
+    val orbitSharePromptAt: Int = 0,
+    /** The first-visit note on Orbit. It stays until Hide or Keep is tapped, then never comes back. */
+    val seenOrbitHello: Boolean = false,
     val changeRequestCount: Int = 0,
     val lastSubmissionTime: Long = 0,
     val lastLeaderboardSubmissionTime: Long = 0,
@@ -109,6 +115,9 @@ import kotlin.math.max
     val useRemoteJson: Boolean = true,
     val loadLocalData: Boolean = false,
     val githubToken: String = "",
+    /** Personal tokens for Orbit. GitHub is the same value as [githubToken], shared with Developer tools. */
+    val gitlabToken: String = "",
+    val codebergToken: String = "",
     val forcedStoreUpdate: ForcedSnapshot? = null,
     val installedVersions: Map<String, String> = emptyMap(),
     val lastRemoteVersions: Map<String, String> = emptyMap(),
@@ -224,6 +233,8 @@ import kotlin.math.max
 @Serializable data class DataState(
     @Transient val apps: List<AppItem> = emptyList(),
     val importedApps: List<AppItem> = emptyList(),
+    /** Apps the user tracks themselves in Orbit, straight from their sources. */
+    val orbit: List<OrbitApp> = emptyList(),
     val tabs: Map<String, TabViewState> = mapOf("android" to TabViewState(), "pc" to TabViewState(), "tv" to TabViewState()),
     @Transient val activeDownloads: Map<String, String> = emptyMap(),
     @Transient val downloadProgress: Map<String, Float> = emptyMap(),

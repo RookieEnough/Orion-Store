@@ -36,6 +36,8 @@ import kotlinx.serialization.json.jsonObject
 import com.orion.store.platform.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -60,7 +62,7 @@ private val HAPTICS = mapOf(
     H.SUCCESS to (longArrayOf(0, 35, 65, 21) to intArrayOf(0, 250, 0, 180)), H.WARNING to (longArrayOf(0, 30, 40, 30) to intArrayOf(0, 255, 0, 255)),
     H.ERROR to (longArrayOf(0, 27, 45, 50) to intArrayOf(0, 120, 0, 250)),
 )
-enum class Overlay { SETTINGS, RELEASE_NOTES, FAQ, SUBMISSION, AD_DONATION, CUSTOM_BUNDLE, PROFILE_STATS, NOTICE, TUTORIAL, GUIDE, AI }
+enum class Overlay { SETTINGS, RELEASE_NOTES, FAQ, SUBMISSION, AD_DONATION, CUSTOM_BUNDLE, PROFILE_STATS, NOTICE, TUTORIAL, GUIDE, AI, DOWNLOADS }
 
 val FORCED_GUARD = setOf("scanning", "scan_complete", "installing", "install_failed", "export_ready", "byok_required", "ready_to_scan_or_install")
 val FORCED_TEST_PROGRESS = mapOf("checking" to 8, "downloading" to 64, "download_failed" to 32, "scanning" to 72, "installing" to 96)
@@ -148,7 +150,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var loadGen = 0; private var syncJob: Job? = null; private var cleaning = false
     private var devClicks = 0; private var eggClicks = 0
 
-    fun allApps() = d.apps + d.importedApps
+    fun allApps() = d.apps + d.importedApps + orbitItems()
+
+    /** Orbit entries as store items, rebuilt only when the Orbit list itself changes. */
+    private var orbitMemo: Pair<List<OrbitApp>, List<AppItem>> = emptyList<OrbitApp>() to emptyList()
+    fun orbitItems(): List<AppItem> { val o = d.orbit; if (orbitMemo.first !== o) orbitMemo = o to o.map { it.toItem() }; return orbitMemo.second }
     val tabState get() = d.tab(tab.key())
     val effectiveSort get() = displaySort(s.storeLayout, tabState)
 
@@ -177,7 +183,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val (f, l) = withContext(Dispatchers.Default) {
                     PLATFORM_TABS.associate { t -> t.targetPlatform().let { p -> p to (CatalogProcessor.storefront(all, p, mods) to availableFilterCategories(all.filter { it.platform == p })) } } to all.associateBy { it.id }
                 }
-                fronts = f; lookup = l
+                fronts = f; lookup = l + orbitItems().associateBy { it.id }
                 if (!warmed && f.isNotEmpty()) { warmed = true; warmStorefront(f) }
                 pendingDeepLink?.takeIf { lookup.isNotEmpty() }?.let { pendingDeepLink = null; it() }
             }
@@ -193,7 +199,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         viewModelScope.launch {
-            combine(settings, data.map { it.apps + it.importedApps }.distinctUntilChanged()) { st, all -> availableUpdates(all, st, now()) }.distinctUntilChanged().collect { u ->
+            // Orbit apps update like catalog ones, unless the user paused them
+            combine(settings, data.map { it.apps + it.importedApps + it.orbit.filter { o -> !o.paused }.map(OrbitApp::toItem) }.distinctUntilChanged()) { st, all -> availableUpdates(all, st, now()) }.distinctUntilChanged().collect { u ->
                 updates = u
                 if (s.autoUpdateEnabled) u.filter { it.installsHere() && it.id !in d.activeDownloads && it.id !in d.readyToInstall && it.id !in initializing }.forEach { download(it, auto = true) }
             }
@@ -202,6 +209,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             data.map { it.pendingCleanup.size }.distinctUntilChanged().collectLatest { n -> cleanupPill = n > 0; if (n > 0 && s.deleteApk) { delay(10_000); cleanupPill = false } }
         }
         viewModelScope.launch { while (true) { submissionCooldown = cooldown(); delay(60_000) } }
+        // Orbit entries join the lookup as they change, once the catalog has filled it
+        viewModelScope.launch { data.map { it.orbit }.distinctUntilChanged().collect { if (lookup.isNotEmpty()) lookup = lookup.filterKeys { !Orbit.owns(it) } + orbitItems().associateBy { it.id } } }
+        // Sources are checked again on start when the last look is older than half an hour
+        viewModelScope.launch { delay(4000); if (d.orbit.any { !it.paused && now() - it.checkedAt > 30 * 60_000L }) orbitRefresh() }
         popups()
         loadApps(false)
         startup()
@@ -340,9 +351,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (!revert) {
                 // The originals are saved once, so a second Secure me never records Orion's own values
                 if (flag("verifierPrev") == null) setFlag("verifierPrev", Verifier.GLOBALS.map { (k, _) -> run("settings get global $k").trim().takeIf { it.matches(Regex("-?\\d+")) } ?: "null" }.joinToString("|"))
-                Verifier.GLOBALS.forEach { (k, v) -> run("settings put global $k $v") }
-                run(Verifier.DISABLE_CMD)
-                if (Verifier.active(ctx)) run(Verifier.UNINSTALL_CMD) // OEMs that block disable-user often still allow this
+                val pkgDump = run("dumpsys package ${Verifier.PKG}")
+                val overlayDump = run("dumpsys package ${Verifier.OVERLAY}")
+                log.appendLine("verifier home: ${Verifier.home(pkgDump).name.lowercase()}")
+                Verifier.secureSteps(pkgDump, overlayDump).forEach { run(it) }
             } else {
                 Verifier.RESTORE_CMDS.forEach { run(it) }
                 val prev = flag("verifierPrev")?.split("|")
@@ -614,22 +626,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (app.id in d.activeDownloads) { if (!auto) selectedApp = app; return }
         if (!initializing.add(app.id)) return
         if (auto) autoIds += app.id
-        if (s.directInstall && WirelessAdb.supported) WirelessAdb.warm(ctx) // connected by the time the APK lands
-        try {
-            val meta = downloadVersionMeta(app, url, s.streamOf(app.id))
-            set { it.copy(appStreams = it.appStreams + (app.id to meta.second)) }
-            val target = url ?: app.variants.firstOrNull()?.url ?: app.downloadUrl
-            if (target.isEmpty() || target == "#") return
-            if (s.wifiOnly && !onWifi()) { if (!auto) { error("Download blocked: WiFi Only mode."); haptic(H.ERROR) }; return }
-            val safe = sanitizeDownloadUrl(target)
-            if (safe == "#") { if (!auto) { error("Download link is invalid or unsupported."); haptic(H.ERROR) }; return }
-            val std = safe.lowercase().let { it.endsWith(".apk") || it.endsWith(".exe") || it.endsWith(".zip") }
-            if (!app.installsHere()) { if (!auto && (std || app.platform == Platform.PC || app.platform == Platform.TV)) tracker.open(safe); return }
-            if (Downloads.dir().usableSpace < 64L * 1024 * 1024) { if (!auto) error("Not enough space on device!"); return }
-            val file = apkFileName(app, meta.first)
-            val id = runCatching { Downloads.start(safe, file) }.getOrElse { if (!auto) tracker.open(safe); return }
-            upd { it.startDownload(app.id, id, file) }; haptic(H.MEDIUM)
-        } finally { initializing -= app.id }
+        if (s.directInstall && WirelessAdb.supported) WirelessAdb.warm(ctx)
+        viewModelScope.launch {
+            try {
+                val meta = downloadVersionMeta(app, url, s.streamOf(app.id))
+                set { it.copy(appStreams = it.appStreams + (app.id to meta.second)) }
+                val target = url ?: app.variants.firstOrNull()?.url ?: app.downloadUrl
+                if (target.isEmpty() || target == "#") return@launch
+                if (s.wifiOnly && !onWifi()) { if (!auto) { error("Download blocked: WiFi Only mode."); haptic(H.ERROR) }; return@launch }
+                val safe = sanitizeDownloadUrl(target)
+                if (safe == "#") { if (!auto) { error("Download link is invalid or unsupported."); haptic(H.ERROR) }; return@launch }
+                val std = safe.lowercase().let { it.endsWith(".apk") || it.endsWith(".xapk") || it.endsWith(".apkm") || it.endsWith(".apks") || it.endsWith(".exe") || it.endsWith(".zip") }
+                if (!app.installsHere()) { if (!auto && (std || app.platform == Platform.PC || app.platform == Platform.TV)) tracker.open(safe); return@launch }
+                if (Downloads.dir().usableSpace < 64L * 1024 * 1024) { if (!auto) error("Not enough space on device!"); return@launch }
+                val resolved = runCatching { withContext(Dispatchers.IO) { Orbit.prepareDownload(safe) } }.getOrElse { e ->
+                    if (!auto) error(if (e is HttpError && (e.code == 403 || e.code == 429)) "Rate limited by the host, try later" else "Couldn't get the download link.")
+                    return@launch
+                }
+                val file = apkFileName(app, meta.first, resolved)
+                val id = runCatching { Downloads.start(resolved, file) }.getOrElse { if (!auto) tracker.open(safe); return@launch }
+                upd { it.startDownload(app.id, id, file) }; haptic(H.MEDIUM)
+            } finally { initializing -= app.id }
+        }
     }
 
     private fun onDownloads(m: Map<String, Dl>) {
@@ -746,8 +764,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Beyond install: the APK waiting on the options sheet. */
     var installAsk by mutableStateOf<Pair<AppItem, String>?>(null)
 
+    /** The file Inspect just downloaded becomes the one Install uses, so the build is not fetched a second time. */
+    fun stageInspected(app: AppItem, file: File, url: String?) {
+        val name = apkFileName(app, app.latestVersion, url)
+        val dest = Downloads.file(name) ?: return
+        if (file.absolutePath != dest.absolutePath) {
+            file.copyTo(dest, overwrite = true)
+            file.delete()
+        }
+        upd { it.completeDownload(app.id, name, System.currentTimeMillis()) }
+    }
+
     /** [opts]: pm install options picked on the options sheet, which always installs through root or Shizuku. */
-    fun installFile(app: AppItem, file: String, regular: Boolean = false, force: Boolean = false, opts: Collection<String>? = null): kotlinx.coroutines.Job = viewModelScope.launch {
+    fun installFile(app0: AppItem, file: String, regular: Boolean = false, force: Boolean = false, opts: Collection<String>? = null): kotlinx.coroutines.Job = viewModelScope.launch {
+        // An Orbit app added by link learns its package from the first APK it downloads, so installs and updates can be tracked
+        val app = if (Orbit.owns(app0.id) && app0.packageName.isNullOrBlank()) withContext(Dispatchers.IO) { runCatching { tracker.archivePackage(tracker.resolve(file)) }.getOrNull() }
+            ?.takeIf { it.isNotBlank() }?.let { p -> upd { st -> st.copy(orbit = st.orbit.map { if (it.id == app0.id) it.copy(packageName = p) else it }) }; app0.copy(packageName = p) } ?: app0 else app0
         if (opts == null && !regular && s.installOptions) { installAsk = app to file; return@launch }
         val k = normalizePackageName(app.packageName)
         val meta = versionMetaFromFileName(app, file, s.streamOf(app.id))
@@ -1008,6 +1040,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun navigateFromSettings(id: String) { overlays -= Overlay.SETTINGS; viewModelScope.launch { delay(100); openById(id) } }
 
     fun deepLink(uri: Uri?) {
+        // Directory and README "Add to Obtainium" links can open in Orion too: they land in Orbit
+        if (uri?.scheme == "obtainium") { Orbit.parseImport(uri.toString(), now()).takeIf { it.isNotEmpty() }?.let { orbitIncoming = it; tab = Tab.ORBIT }; return }
         if (uri?.scheme != "orionstore") return
         val seg = (listOfNotNull(uri.host) + uri.pathSegments).filter { it.isNotEmpty() }
         if (seg.getOrNull(0) == "settings") { openSettings(seg.getOrNull(1) ?: "none"); return }
@@ -1028,15 +1062,104 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Any APK on the phone, opened on the installer sheet. */
     fun pickApk() = viewModelScope.launch {
-        val u = com.orion.store.platform.ResultHost.run(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/vnd.android.package-archive")).second?.data ?: return@launch
+        val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
+            "application/vnd.android.package-archive", "application/octet-stream", "application/zip", "application/x-zip-compressed", "application/xapk", "application/vnd.apkm"))
+        val u = com.orion.store.platform.ResultHost.run(pick).second?.data ?: return@launch
         runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, u, ctx, ApkInstallActivity::class.java).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 
-    fun openSettings(menu: String = "none") { settingsMenu = menu; if (Overlay.SETTINGS !in overlays) overlays += Overlay.SETTINGS }
+    /** The download queue opens as a sheet over the current screen, not as a Settings page. */
+    fun openSettings(menu: String = "none") { if (menu == "queue") return open(Overlay.DOWNLOADS); settingsMenu = menu; if (Overlay.SETTINGS !in overlays) overlays += Overlay.SETTINGS }
     fun open(o: Overlay) { if (o !in overlays) overlays += o }
     fun close(o: Overlay) { overlays -= o; if (o == Overlay.PROFILE_STATS) badgeIndex = null }
 
-    fun navTo(t: Tab) { if (t != Tab.ABOUT && t.name.lowercase() in s.hiddenTabs) return; haptic(H.LIGHT); tab = t }
+    // region Orbit
+    var orbitQuery by mutableStateOf(""); var orbitRefreshing by mutableStateOf(false)
+    /** An add request from outside (an obtainium:// link): the Orbit tab opens its add sheet with these entries. */
+    var orbitIncoming by mutableStateOf<List<OrbitApp>?>(null)
+
+    var orbitShareAsk by mutableStateOf(false)
+    /** Why an app was refused from Orbit, shown until the user taps OK. */
+    var orbitRefusal by mutableStateOf<String?>(null)
+    fun orbitRefuse(msg: String) { if (orbitRefusal != msg) { orbitRefusal = msg; haptic(H.WARNING) } }
+    /** Set when the reminder's Share button should open that app's share sheet. */
+    var orbitShareFocus by mutableStateOf<String?>(null)
+
+    private fun considerSharePrompt() {
+        val n = d.orbit.size
+        if (n >= 5 && n - s.orbitSharePromptAt >= 5) orbitShareAsk = true
+    }
+    fun laterOrbitShare() { orbitShareAsk = false; set { it.copy(orbitSharePromptAt = d.orbit.size) } }
+    fun shareFromPrompt() {
+        orbitShareAsk = false
+        set { it.copy(orbitSharePromptAt = d.orbit.size) }
+        val git = setOf(OrbitSource.GITHUB, OrbitSource.GITLAB, OrbitSource.CODEBERG)
+        orbitShareFocus = d.orbit.firstOrNull { !it.published && Orbit.sourceOf(it.url) in git }?.id ?: d.orbit.firstOrNull { !it.published }?.id
+    }
+
+    fun orbitSave(o: OrbitApp) {
+        val adding = d.orbit.none { it.id == o.id }
+        if (adding) Orbit.refused(o.url, o.name, o.packageName.orEmpty(), o.author)?.let { orbitRefuse(it); return }
+        upd { st -> st.copy(orbit = if (st.orbit.any { it.id == o.id }) st.orbit.map { if (it.id == o.id) o else it } else st.orbit + o) }
+        if (adding) considerSharePrompt()
+        scheduleInstalledSync()
+    }
+    fun orbitRemove(id: String) { upd { st -> st.copy(orbit = st.orbit.filter { it.id != id }) }; haptic(H.MEDIUM) }
+
+    suspend fun orbitProbe(url: String, base: OrbitApp? = null) = withContext(Dispatchers.IO) { Orbit.probe(url, s.orbitTokens(), now(), base) }
+
+    /** Checks every source (or [ids]) again and keeps what the user edited meanwhile: only versions, time and errors are taken over. */
+    fun orbitRefresh(ids: Set<String>? = null) = viewModelScope.launch {
+        if (orbitRefreshing) return@launch
+        orbitRefreshing = true
+        val fresh = withContext(Dispatchers.IO) { Orbit.refreshAll(d.orbit.filter { ids == null || it.id in ids }, s.orbitTokens(), now()) }.associateBy { it.id }
+        upd { st -> st.copy(orbit = st.orbit.map { cur -> fresh[cur.id]?.let { f -> cur.copy(versions = f.versions, checkedAt = f.checkedAt, error = f.error) } ?: cur }) }
+        orbitRefreshing = false
+    }
+
+    /** Imported entries land at once, then fill in their details and releases in the background. */
+    fun orbitImport(list: List<OrbitApp>) = viewModelScope.launch {
+        val have = d.orbit.map { it.id }.toSet(); val fresh = list.filter { it.id !in have }
+        val blocked = fresh.mapNotNull { Orbit.refused(it.url, it.name, it.packageName.orEmpty(), it.author) }.distinct()
+        val ok = fresh.filter { Orbit.refused(it.url, it.name, it.packageName.orEmpty(), it.author) == null }
+        if (blocked.isNotEmpty()) orbitRefuse(blocked.joinToString("\n\n"))
+        if (ok.isEmpty()) { if (blocked.isEmpty()) toast("Everything here is already in Orbit"); return@launch }
+        upd { st -> st.copy(orbit = st.orbit + ok) }; haptic(H.SUCCESS); toast(if (ok.size == 1) "${ok[0].name.ifBlank { "1 app" }} joined your Orbit" else "${ok.size} apps joined your Orbit")
+        considerSharePrompt()
+        ok.chunked(3).forEach { batch ->
+            val done = batch.map { o -> async(Dispatchers.IO) { runCatching { Orbit.probe(o.url, s.orbitTokens(), now(), o) }.getOrDefault(o) } }.awaitAll()
+            val drop = done.filter { Orbit.refused(it.url, it.name, it.packageName.orEmpty(), it.author) != null }
+            if (drop.isNotEmpty()) orbitRefuse(drop.mapNotNull { Orbit.refused(it.url, it.name, it.packageName.orEmpty(), it.author) }.distinct().joinToString("\n\n"))
+            val keep = done.filter { it.id !in drop.map { d -> d.id }.toSet() }.associateBy { it.id }
+            upd { st -> st.copy(orbit = st.orbit.mapNotNull { if (it.id in drop.map { d -> d.id }) null else keep[it.id] ?: it }) }
+        }
+        scheduleInstalledSync()
+    }
+
+    /** Shares an Orbit app with everyone: opens the same ready GitHub issue the submission form makes, and counts as a contribution. */
+    fun orbitPublish(o: OrbitApp) {
+        val body = pretty.encodeToString(kotlinx.serialization.json.JsonArray.serializer(), kotlinx.serialization.json.JsonArray(listOf(Orbit.catalogJson(o))))
+        tracker.open(submissionIssueUrl(body, 1, o.name, STORE_VERSION))
+        set { it.registerSubmission(now()) }
+        upd { st -> st.copy(orbit = st.orbit.map { if (it.id == o.id) it.copy(published = true) else it }) }
+        haptic(H.SUCCESS)
+    }
+    // endregion
+
+    fun navTo(t: Tab) {
+        if (t != Tab.ABOUT && t.name.lowercase() in s.hiddenTabs) return
+        haptic(H.LIGHT); val was = tab; tab = t
+        if (t != was && t.platform != null) followTab()
+    }
+
+    /** New & Updated and the show-all lists are shared by the store tabs, so switching platforms refills them for the new one
+     *  (New & Updated stays open, now with PC or TV apps). A collection's own list has no twin on another platform: back to its home. */
+    private fun followTab() {
+        when {
+            expandedView == "new_updated" -> platformApps().reversed().take(18).let { if (it.isEmpty()) clearExpanded() else expandedApps = it }
+            showAllSorted && viewAllApps != null -> if (returnToExpanded == "new_updated") viewAllApps = platformApps().reversed() else { clearExpanded(); returnToExpanded = null }
+        }
+    }
 
     fun toggleTheme() {
         val next = when (s.theme) { "light" -> "dusk"; "dusk" -> "dark"; "dark" -> "light"; "oled" -> "light"; else -> "dark" }

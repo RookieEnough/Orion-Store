@@ -18,13 +18,13 @@ GridView MoreVert Tune FilterList SwapVert ArrowDropDown IosShare Category Sell 
 DownloadForOffline Translate TextFields DesktopWindows Smartphone Widgets Bookmark Explore Vibration ViewAgenda Animation FormatPaint Brightness6 AppsOutage
 ChevronLeft CheckSmall Bedtime NorthEast OpenInFull Celebration Hub Policy Encrypted DataObject Rocket StarRate Swipe AdsClick Sailing
 Tonality Routine WaterDrop Wallpaper Cast Backup DeveloperMode Gesture ViewQuilt ViewStream Flare Stars DragHandle Undo Redo
-CallMerge RamenDining Crown Swords Skull Castle Tsunami AllInclusive Hive`.split(/\s+/).filter(Boolean);
+CallMerge RamenDining Crown Swords Skull Castle Tsunami AllInclusive Hive Orbit AddLink Publish FilterAlt`.split(/\s+/).filter(Boolean);
 
 // Names whose Material Icons original was the solid half of an outline/solid pair map to FILL 1.
 const SOLID = new Set(['Favorite', 'AddCircle', 'Delete']);
 // Extra filled variants, exposed as <Name>Filled, for selected/emphasis states.
 const FILLED = `Home Android Computer Tv GridView Star Verified CheckCircle Shield Info Settings Bolt EmojiEvents Lock Notifications Person Folder DarkMode LightMode
-Diamond Widgets Bookmark Explore Category Code DesktopWindows Smartphone Download DownloadForOffline Apps`.split(/\s+/).filter(Boolean);
+Diamond Widgets Bookmark Explore Category Code DesktopWindows Smartphone Download DownloadForOffline Apps Orbit`.split(/\s+/).filter(Boolean);
 const MIRROR = new Set(['ArrowBack', 'ArrowForward', 'HelpOutline', 'KeyboardArrowRight', 'OpenInNew', 'ChevronRight', 'ChevronLeft', 'Sort', 'Login', 'NorthEast']);
 const RENAME = { ErrorOutline: 'error', HelpOutline: 'help', DeleteOutline: 'delete', AddCircleOutline: 'add_circle', FavoriteBorder: 'favorite', WarningAmber: 'warning', SaveAlt: 'download'};
 

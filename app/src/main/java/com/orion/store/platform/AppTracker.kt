@@ -143,7 +143,8 @@ class AppTracker(private val ctx: Context) {
     @Suppress("DEPRECATION")
     fun clash(f: File): Pair<String, Clash>? = runCatching {
         val flag = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
-        val apk = pm.getPackageArchiveInfo(f.absolutePath, flag) ?: return null
+        val apkFile = if (isValidApk(f)) f else Bundles.parts(ctx, f).firstOrNull() ?: return null
+        val apk = pm.getPackageArchiveInfo(apkFile.absolutePath, flag) ?: return null
         val cur = runCatching { pm.getPackageInfo(apk.packageName, flag or PackageManager.MATCH_UNINSTALLED_PACKAGES) }.getOrNull() ?: return null
         val a = signers(apk); val b = signers(cur)
         if (a.isEmpty() || b.isEmpty() || a.any { it in b }) return null
@@ -151,7 +152,7 @@ class AppTracker(private val ctx: Context) {
         apk.packageName to when { ai != null && isSys(ai) -> Clash.SYSTEM; ai != null && ai.flags and ApplicationInfo.FLAG_INSTALLED == 0 -> Clash.HIDDEN; else -> Clash.INSTALLED }
     }.getOrNull()
 
-    fun archivePackage(f: File): String? = runCatching { pm.getPackageArchiveInfo(f.absolutePath, 0)?.packageName }.getOrNull()
+    fun archivePackage(f: File): String? = (if (isValidApk(f)) f else Bundles.parts(ctx, f).firstOrNull())?.let { runCatching { pm.getPackageArchiveInfo(it.absolutePath, 0)?.packageName }.getOrNull() }
 
     private fun isSys(ai: ApplicationInfo) = ai.flags and ApplicationInfo.FLAG_SYSTEM != 0
 
@@ -159,7 +160,13 @@ class AppTracker(private val ctx: Context) {
         val f = Downloads.file(fileName) ?: throw NativeError("INVALID_FILE_NAME")
         repeat(5) { if (!f.exists() || f.length() == 0L) delay(200) }
         if (!f.exists()) throw NativeError("FILE_MISSING")
-        if (!withContext(Dispatchers.IO) { isValidApk(f) }) { f.delete(); throw NativeError("CORRUPT_APK") }
+        val parts = withContext(Dispatchers.IO) { Bundles.parts(ctx, f) }
+        if (parts.isEmpty()) { f.delete(); throw NativeError("CORRUPT_APK") }
+        if (parts.size > 1 || parts[0] != f) {
+            val (status, msg) = SessionInstall.commit(ctx, parts, archivePackage(parts[0]), ask = true)
+            if (status != android.content.pm.PackageInstaller.STATUS_SUCCESS) throw NativeError(msg ?: "INSTALL_FAILED")
+            return
+        }
         val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f)
         val base = Intent(Intent.ACTION_VIEW).setDataAndType(uri, APK_MIME).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).putExtra(Intent.EXTRA_RETURN_RESULT, true)
         val handlers = pm.queryIntentActivities(base, PackageManager.MATCH_DEFAULT_ONLY).map { it.activityInfo }.filter { it.packageName != ctx.packageName }
@@ -243,7 +250,11 @@ class AppTracker(private val ctx: Context) {
 
     /** Streams the APK into `pm install`. Root also records Orion as the installer, so Android's "App details in store" and update ownership point here. */
     suspend fun installShizuku(fileName: String, lock: Boolean = false, opts: Collection<String> = emptyList()) = withContext(Dispatchers.IO) {
-        val f = resolve(fileName)
+        val raw = resolve(fileName)
+        val parts = Bundles.parts(ctx, raw)
+        if (parts.isEmpty()) throw NativeError("CORRUPT_APK")
+        if (parts.size > 1) { installMany(parts, opts); return@withContext }
+        val f = parts[0]
         // A process the background updater started gets Shizuku's binder a moment after launch
         if (!root) for (i in 0 until 30) { if (shizukuRunning()) break; delay(100) }
         requireShizuku()
@@ -259,6 +270,30 @@ class AppTracker(private val ctx: Context) {
         // Some ROMs ship a pm without --update-ownership: install anyway rather than fail the update
         if (code != 0 && "update-ownership" in err) attempt(args.replace(" --update-ownership", "")).let { code = it.first; err = it.second }
         if (code != 0) throw NativeError("Install failed (Code $code): $err")
+    }
+
+    /** Split bundles: pm install-create, then one stdin write per APK, then commit. */
+    private fun installMany(files: List<File>, opts: Collection<String>) {
+        val owner = if (root) " -i ${ctx.packageName}" + if (Build.VERSION.SDK_INT >= 34) "" else "" else ""
+        val args = installArgs(opts, Build.VERSION.SDK_INT, owner)
+        val created = sh("pm install-create -r$args -S ${files.sumOf { it.length() }}")
+        val cout = created.inputStream.bufferedReader().readText(); val ccode = created.waitFor()
+        val id = Regex("\\[(\\d+)]").find(cout)?.groupValues?.get(1)
+        if (ccode != 0 || id == null) throw NativeError(cout.trim().ifEmpty { "INSTALL_FAILED" })
+        try {
+            files.forEachIndexed { i, f ->
+                val p = sh("pm install-write -S ${f.length()} $id ${if (i == 0) "base.apk" else "split$i.apk"} -")
+                p.outputStream.use { o -> f.inputStream().use { it.copyTo(o) } }
+                val out = p.inputStream.bufferedReader().readText(); val code = p.waitFor()
+                if (code != 0 || "Failure" in out) throw NativeError(out.trim().ifEmpty { "INSTALL_FAILED" })
+            }
+            val p = sh("pm install-commit $id")
+            val out = p.inputStream.bufferedReader().readText(); val code = p.waitFor()
+            if (code != 0 || "Failure" in out) throw NativeError(out.trim().ifEmpty { "INSTALL_FAILED" })
+        } catch (e: Exception) {
+            runCatching { sh("pm install-abandon $id").waitFor() }
+            throw e
+        }
     }
 
     /** Root: reinstalls an app's own APKs with Orion as installer. Same signature and version, so data stays; Orion then owns its updates. */

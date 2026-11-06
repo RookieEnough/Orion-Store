@@ -82,7 +82,8 @@ fun otherStore(id: String, s: Settings): String? = s.installSources[id]?.takeIf 
     p.isNotEmpty() && p != com.orion.store.BuildConfig.APPLICATION_ID && p != "com.android.shell" && "packageinstaller" !in p && p != s.installerPackage
 }
 
-fun isManaged(id: String, s: Settings) = s.appManage[id] ?: !(s.skipOtherStores && otherStore(id, s) != null)
+/** Orbit apps are ones the user added on purpose, so the other-stores filter never drops them. */
+fun isManaged(id: String, s: Settings) = s.appManage[id] ?: (Orbit.owns(id) || !(s.skipOtherStores && otherStore(id, s) != null))
 
 fun availableUpdates(apps: List<AppItem>, s: Settings, now: Long) = apps.filter { a ->
     val inst = s.installedVersions[a.id]
@@ -248,7 +249,7 @@ fun archCompat(variant: String, device: String, abis: List<String>): Pair<Boolea
 // endregion
 
 // region images
-private val IMAGE_EXT = listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".svg")
+val IMAGE_EXT = listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".svg")
 
 fun explainRejectedImageLink(url: String?): String? {
     val t = url?.trim().orEmpty()
@@ -500,8 +501,16 @@ fun injectAfterHero(cols: List<StoreCollection>, inj: StoreCollection?): List<St
 
 // region downloads & ownership
 fun sanitizeFileVersionToken(v: String?) = (v?.ifEmpty { null } ?: "latest").replace(Regex("[^a-zA-Z0-9._-]"), "_")
+    fun fileExt(url: String?): String {
+        val path = url?.substringBefore('?')?.substringBefore('#')?.lowercase().orEmpty()
+        return when {
+            path.endsWith(".apks") -> "apks"; path.endsWith(".xapk") -> "xapk"; path.endsWith(".apkm") -> "apkm"
+            path.endsWith(".zip") -> "zip"; else -> "apk"
+        }
+    }
 /** One name per app version: the store and the background updater find each other's downloads by it. */
-fun apkFileName(app: AppItem, version: String) = "${app.name.replace(Regex("[^a-zA-Z0-9]"), "_")}_${sanitizeFileVersionToken(version.ifEmpty { app.latestVersion })}.apk"
+fun apkFileName(app: AppItem, version: String, url: String? = null) =
+    "${app.name.replace(Regex("[^a-zA-Z0-9]"), "_")}_${sanitizeFileVersionToken(version.ifEmpty { app.latestVersion })}.${fileExt(url ?: app.variants.firstOrNull()?.url ?: app.downloadUrl)}"
 
 fun downloadVersionMeta(app: AppItem, url: String?, stream: String = "Stable"): Pair<String, String> {
     if (url != null) app.availableVersions.firstOrNull { v -> v.variants.any { it.url == url } }?.let { return it.version to it.type }
@@ -570,6 +579,50 @@ fun parseRepoSource(repoUrl: String): RepoSource? = runCatching {
 val ANDROID_META_PATHS = listOf("app/src/main/AndroidManifest.xml", "src/main/AndroidManifest.xml", "android/app/src/main/AndroidManifest.xml",
     "app/build.gradle", "app/build.gradle.kts", "android/app/build.gradle", "android/app/build.gradle.kts", "build.gradle", "build.gradle.kts")
 private val PACKAGE_PATTERNS = listOf("""applicationId\s*(?:=)?\s*["']([a-zA-Z0-9_.]+)["']""", """namespace\s*(?:=)?\s*["']([a-zA-Z0-9_.]+)["']""", """package\s*=\s*["']([a-zA-Z0-9_.]+)["']""").map(::Regex)
+
+/** Where repos keep their launcher art, most reliable first: F-Droid/fastlane metadata, the Play Store export, then the launcher mipmaps. */
+val ICON_PATHS = listOf("fastlane/metadata/android/en-US/images/icon.png", "metadata/en-US/images/icon.png", "app/src/main/ic_launcher-playstore.png",
+    "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png", "app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp", "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+    "app/src/main/res/mipmap-xxhdpi/ic_launcher.png", "app/src/main/res/mipmap-xxhdpi/ic_launcher.webp", "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+    "fastlane/metadata/android/en-GB/images/icon.png")
+/** Folders of store screenshots in F-Droid/fastlane metadata. */
+val SCREENSHOT_DIRS = listOf("fastlane/metadata/android/en-US/images/phoneScreenshots", "metadata/en-US/images/phoneScreenshots", "fastlane/metadata/android/en-GB/images/phoneScreenshots")
+
+private val MD_IMAGE = Regex("""!\[([^\]]*)]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)""")
+private val HTML_IMAGE = Regex("""<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>""", RegexOption.IGNORE_CASE)
+private val HTML_ALT = Regex("""\balt\s*=\s*["']([^"']*)["']""", RegexOption.IGNORE_CASE)
+/** Badges, store buttons and CI shields: images in a README that are never screenshots. */
+private val NOT_A_SHOT = Regex("""shields\.io|badgen|badge|/actions/workflows|get-?it-?on|google-?play|play_store|fdroid|f-droid|obtainium|izzy|apt\.izzysoft|liberapay|ko-?fi|buymeacoffee|paypal|patreon|opencollective|discord|telegram|matrix|weblate|crowdin|contributors|star-?history|license|codecov|sonarcloud|\.svg(\?|$)""", RegexOption.IGNORE_CASE)
+private val LOOKS_LIKE_SHOT = Regex("""screen|shot|preview|demo|showcase|phone|mockup|ui|light|dark""", RegexOption.IGNORE_CASE)
+private val LOOKS_LIKE_ICON = Regex("""icon|logo|launcher|banner""", RegexOption.IGNORE_CASE)
+
+/** Images in a README as absolute links with their alt text, relative paths resolved against the repo's raw file base. */
+fun readmeImages(md: String, rawBase: String): List<Pair<String, String>> {
+    val found = MD_IMAGE.findAll(md).map { it.groupValues[2] to it.groupValues[1] } +
+        HTML_IMAGE.findAll(md).map { it.groupValues[1] to (HTML_ALT.find(it.value)?.groupValues?.get(1).orEmpty()) }
+    return found.mapNotNull { (u, alt) ->
+        val t = u.trim()
+        val abs = when {
+            t.startsWith("http://") || t.startsWith("https://") -> sanitizeGitHubImageUrl(t)
+            t.startsWith("//") -> "https:$t"
+            t.startsWith("data:") || t.startsWith("#") -> return@mapNotNull null
+            else -> rawBase.trimEnd('/') + "/" + t.removePrefix("./").trimStart('/')
+        }
+        abs to alt
+    }.distinctBy { it.first }.toList()
+}
+
+/** Screenshot links out of README images: badges and store buttons dropped, ones that say they are screens first, at most [max]. */
+fun pickScreenshots(images: List<Pair<String, String>>, max: Int = 8): List<String> {
+    val usable = images.filter { (u, alt) -> !NOT_A_SHOT.containsMatchIn(u) && !NOT_A_SHOT.containsMatchIn(alt) && !LOOKS_LIKE_ICON.containsMatchIn(u.substringAfterLast('/')) && explainRejectedImageLink(u) == null }
+    val (named, rest) = usable.partition { (u, alt) -> LOOKS_LIKE_SHOT.containsMatchIn(u.substringAfterLast('/')) || LOOKS_LIKE_SHOT.containsMatchIn(alt) }
+    return (named + rest).map { it.first }.take(max)
+}
+
+/** A README image that says it is the app's icon or logo, when the repo keeps none in the usual places. */
+fun pickReadmeIcon(images: List<Pair<String, String>>): String? = images.firstOrNull { (u, alt) ->
+    (LOOKS_LIKE_ICON.containsMatchIn(u.substringAfterLast('/')) || LOOKS_LIKE_ICON.containsMatchIn(alt)) && !NOT_A_SHOT.containsMatchIn(u) && explainRejectedImageLink(u) == null && !u.contains("banner", true)
+}?.first
 
 fun extractPackageName(content: String): String? = PACKAGE_PATTERNS.firstNotNullOfOrNull { it.find(content)?.groupValues?.get(1) }
 

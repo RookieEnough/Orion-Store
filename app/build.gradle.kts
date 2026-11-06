@@ -15,8 +15,8 @@ android {
         applicationId = "com.orion.store"
         minSdk = 24
         targetSdk = 36
-        versionCode = 34
-        versionName = "2.6.5"
+        versionCode = 35
+        versionName = "2.7.5"
         // Phones and TVs are ARM; the x86 builds of the native libraries only served emulators
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }

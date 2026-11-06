@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -44,6 +45,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -55,7 +57,7 @@ import kotlinx.coroutines.launch
 private data class NavItem(val tab: Tab, val icon: ImageVector, val selected: ImageVector, val label: String, val subtitle: String)
 private val NAV = listOf(
     NavItem(Tab.ANDROID, Sym.Android, Sym.AndroidFilled, "Apps", "apps"), NavItem(Tab.PC, Sym.DesktopWindows, Sym.DesktopWindowsFilled, "PC", "PC"),
-    NavItem(Tab.TV, Sym.Tv, Sym.TvFilled, "TV", "TV"), NavItem(Tab.MYAPPS, Sym.GridView, Sym.GridViewFilled, "My Apps", "my"),
+    NavItem(Tab.TV, Sym.Tv, Sym.TvFilled, "TV", "TV"), NavItem(Tab.ORBIT, Sym.Orbit, Sym.OrbitFilled, "Orbit", "Orbit"), NavItem(Tab.MYAPPS, Sym.GridView, Sym.GridViewFilled, "My Apps", "my"),
     NavItem(Tab.ABOUT, Sym.Code, Sym.CodeFilled, "Dev", "About Orion"),
 )
 
@@ -63,7 +65,9 @@ private val NAV = listOf(
 fun OrionRoot(vm: MainViewModel) {
     val s by vm.settings.collectAsState(); val d by vm.data.collectAsState()
     val act = LocalActivity.current
-    CompositionLocalProvider(LocalVm provides vm, LocalS provides s, LocalD provides d) {
+    // The window's own width (it changes with split screen, freeform and folding), read once here for every screen
+    val win = with(LocalDensity.current) { androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width.toDp() }
+    CompositionLocalProvider(LocalVm provides vm, LocalS provides s, LocalD provides d, LocalWidthClass provides widthClassOf(win)) {
         OrionTheme(s) { ThemeRevealHost {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) { SharedTransitionLayout(if (Device.isTv) Modifier.padding(horizontal = 48.dp, vertical = 27.dp) else Modifier) { CompositionLocalProvider(LocalShared provides this) {
                 BackHandler { if (!vm.back()) act?.finish() }
@@ -85,7 +89,7 @@ fun OrionRoot(vm: MainViewModel) {
 private fun Home(vm: MainViewModel) {
     val s = LocalS.current; val d = LocalD.current
     val items = NAV.filter { it.tab == Tab.ABOUT || it.tab.name.lowercase() !in s.hiddenTabs }
-    val wide = LocalConfiguration.current.screenWidthDp >= 600
+    val nav = navPlacement(); val rail = nav == "rail"; val topDock = nav == "top"; val bottomDock = nav == "bottom"
     val density = LocalDensity.current
     val navDensity = Density(density.density * s.bottomNavScale.coerceIn(.8f, 1.2f), density.fontScale)
     val updateCount = vm.updates.size
@@ -99,7 +103,7 @@ private fun Home(vm: MainViewModel) {
         }
     }
     Row(Modifier.fillMaxSize()) {
-        if (wide) CompositionLocalProvider(LocalDensity provides navDensity) {
+        if (rail) CompositionLocalProvider(LocalDensity provides navDensity) {
             NavigationRail(containerColor = if (s.isOled) Color.Black else MaterialTheme.colorScheme.surfaceContainer, header = {
                 Spacer(Modifier.height(12.dp))
                 if (s.aiButton) AiStarFace(vm, Modifier.padding(vertical = 8.dp))
@@ -113,9 +117,9 @@ private fun Home(vm: MainViewModel) {
             Scaffold(
                 Modifier.nestedScroll(hideOnScroll),
                 contentWindowInsets = WindowInsets(0),
-                snackbarHost = { SnackbarHost(vm.snackbar, Modifier.padding(bottom = if (wide) 0.dp else 80.dp)) },
+                snackbarHost = { SnackbarHost(vm.snackbar, Modifier.padding(horizontal = 16.dp).padding(bottom = if (bottomDock) 88.dp else 12.dp)) { OrionMessage(it) } },
                 floatingActionButton = {
-                    androidx.compose.animation.AnimatedVisibility(vm.cleanupPill && vm.selectedApp == null && vm.overlays.isEmpty(), Modifier.padding(bottom = if (wide) 0.dp else 80.dp),
+                    androidx.compose.animation.AnimatedVisibility(vm.cleanupPill && vm.selectedApp == null && vm.overlays.isEmpty(), Modifier.padding(bottom = if (bottomDock) 80.dp else 0.dp),
                         enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
                         ExtendedFloatingActionButton({ vm.batchCleanup() }, containerColor = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer) {
                             Icon(Sym.CleaningServices, null); Spacer(Modifier.width(12.dp))
@@ -129,7 +133,9 @@ private fun Home(vm: MainViewModel) {
             ) { pad ->
                 // Status bar is hidden; its slot is kept so the header clears the camera cutout, and content scrolls up through it.
                 val top = WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding()
-                val inner = PaddingValues(top = top, bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (wide) 16.dp else 84.dp)
+                // A top dock floats over the first row, so the content starts under it (scaled like the dock itself)
+                val dockH = 80.dp * s.bottomNavScale.coerceIn(.8f, 1.2f)
+                val inner = PaddingValues(top = top + if (topDock) dockH else 0.dp, bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (bottomDock) 84.dp else 16.dp)
                 // Fade-through on effects springs: a bouncy spatial scale wobbled the whole screen. Each tab keeps its saved state (scroll, entrances) while away.
                 val fx = MaterialTheme.motionScheme.defaultEffectsSpec<Float>(); val fast = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
                 val saved = rememberSaveableStateHolder()
@@ -137,16 +143,17 @@ private fun Home(vm: MainViewModel) {
                     saved.SaveableStateProvider(t.name) {
                         when (t) {
                             Tab.MYAPPS -> MyAppsTab(vm, inner)
+                            Tab.ORBIT -> OrbitTab(vm, inner)
                             Tab.ABOUT -> AboutTab(vm, inner)
                             else -> StoreTab(vm, t.platform ?: Platform.ANDROID, inner)
                         }
                     }
                 }
             }
-            if (!wide) CompositionLocalProvider(LocalDensity provides navDensity) {
-                FloatingNav(vm, items, updateCount, vm.navShown, Modifier.align(Alignment.BottomCenter))
+            if (!rail) CompositionLocalProvider(LocalDensity provides navDensity) {
+                FloatingNav(vm, items, updateCount, vm.navShown, topDock, Modifier.align(if (topDock) Alignment.TopCenter else Alignment.BottomCenter))
             }
-            if (!wide && s.aiButton) AiStar(vm)
+            if (!rail && s.aiButton) AiStar(vm)
         }
     }
 }
@@ -183,28 +190,44 @@ private fun BoxScope.AiStar(vm: MainViewModel) = BoxWithConstraints(Modifier.mat
         }, dragging)
 }
 
-/** The dock in the style picked in Settings (see [DOCKS]); every style slides away while scrolling down. A locked style falls back to the pill. */
+/** Where the navigation lives: phones always get the bottom dock; wider windows (tablets, unfolded foldables, TVs, a wide split screen)
+ *  get the side rail unless Settings moved the dock to the bottom or top. */
 @Composable
-private fun FloatingNav(vm: MainViewModel, items: List<NavItem>, updates: Int, shown: Boolean, modifier: Modifier) {
+fun navPlacement(): String {
+    if (!LocalWidthClass.current.wide) return "bottom"
+    return LocalS.current.wideNav.takeIf { it == "bottom" || it == "top" } ?: "rail"
+}
+
+/** The dock in the style picked in Settings (see [DOCKS]); every style slides away while scrolling down. A locked style falls back to the pill.
+ *  On wide screens it can sit at the top instead, sliding up out of view. */
+@Composable
+private fun FloatingNav(vm: MainViewModel, items: List<NavItem>, updates: Int, shown: Boolean, top: Boolean, modifier: Modifier) {
     val cs = MaterialTheme.colorScheme; val s = LocalS.current
     val dock = DOCKS.firstOrNull { it.id == s.navDock && it.unlocked(s) }?.id ?: "pill"
+    // Orbit makes six tabs. A slightly tighter dock keeps every one on screen.
+    val tight = items.size >= 6
     val drop by animateFloatAsState(if (shown) 0f else 1f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "drop")
-    // Slides by its own height plus everything below it (system bar, margin, shadow), so no sliver stays on screen at any dock size or inset
-    val below = WindowInsets.navigationBars.getBottom(LocalDensity.current)
-    val slide = Modifier.graphicsLayer { translationY = drop * (size.height + below + 32.dp.toPx()) }
+    // Slides by its own height plus everything past it (system bar, margin, shadow), so no sliver stays on screen at any dock size or inset
+    val dn = LocalDensity.current
+    val past = if (top) WindowInsets.statusBarsIgnoringVisibility.getTop(dn) else WindowInsets.navigationBars.getBottom(dn)
+    val slide = Modifier.graphicsLayer { translationY = (if (top) -1 else 1) * drop * (size.height + past + 32.dp.toPx()) }
+    val edge = if (top) Modifier.windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility).padding(top = 8.dp) else Modifier.navigationBarsPadding().padding(bottom = 12.dp)
     if (dock == "bar") {
-        NavigationBar(modifier.then(slide), containerColor = if (s.isOled) Color.Black else cs.surfaceContainer) {
-            items.forEach { n -> NavigationBarItem(vm.tab == n.tab, { vm.navTo(n.tab) }, { NavIcon(n, vm.tab == n.tab, updates) }, label = { Text(n.label, maxLines = 1) }) }
+        // The classic bar spans the screen on phones; wide screens get it as a floating card, so it never stretches edge to edge
+        val wide = LocalWidthClass.current.wide
+        val m = if (wide) modifier.then(edge).then(slide).widthIn(max = 560.dp).shadow(8.dp, RoundedCornerShape(28.dp)).clip(RoundedCornerShape(28.dp)) else modifier.then(slide)
+        NavigationBar(m, containerColor = if (s.isOled) Color.Black else cs.surfaceContainer, windowInsets = if (wide) WindowInsets(0) else NavigationBarDefaults.windowInsets) {
+            items.forEach { n -> NavigationBarItem(vm.tab == n.tab, { vm.navTo(n.tab) }, { NavIcon(n, vm.tab == n.tab, updates) }, label = { Text(n.label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = if (tight) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium) }) }
         }
         return
     }
-    if (dock == "vibrant") { ExpressiveDock(vm, items, updates, modifier.navigationBarsPadding().padding(bottom = 12.dp).then(slide)); return }
+    if (dock == "vibrant") { ExpressiveDock(vm, items, updates, modifier.then(edge).then(slide)); return }
     val oled = s.isOled
     val color = if (oled) Color.Black else cs.surfaceContainerHigh.copy(alpha = if (s.glassEffect) .95f else 1f)
     // OLED: a pitch-black dock, set apart from the black page by a hairline outline instead of a lighter fill
-    Surface(modifier.navigationBarsPadding().padding(bottom = 12.dp).then(slide), shape = if (dock == "labels") RoundedCornerShape(28.dp) else Pill, color = color, shadowElevation = 8.dp,
+    Surface(modifier.then(edge).then(slide), shape = if (dock == "labels") RoundedCornerShape(28.dp) else Pill, color = color, shadowElevation = 8.dp,
         border = if (oled) androidx.compose.foundation.BorderStroke(1.dp, cs.outline.copy(alpha = .5f)) else null) {
-        Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(if (dock == "pill") 2.dp else 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(if (tight) 4.dp else 6.dp), horizontalArrangement = Arrangement.spacedBy(if (dock == "pill") 2.dp else 4.dp), verticalAlignment = Alignment.CenterVertically) {
             items.forEach { n ->
                 val on = vm.tab == n.tab
                 val fx = MaterialTheme.motionScheme.defaultEffectsSpec<Color>(); val sp = MaterialTheme.motionScheme.defaultSpatialSpec<androidx.compose.ui.unit.IntSize>()
@@ -213,22 +236,25 @@ private fun FloatingNav(vm: MainViewModel, items: List<NavItem>, updates: Int, s
                 val fg by animateColorAsState(if (on) onFg else offFg, fx, label = "fg")
                 val tap = Modifier.selectable(on, role = Role.Tab) { vm.navTo(n.tab) }
                 when (dock) {
-                    "pill" -> Row(Modifier.height(52.dp).clip(Pill).background(bg).then(tap).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    "pill" -> Row(Modifier.height(if (tight) 46.dp else 52.dp).clip(Pill).background(bg).then(tap).padding(horizontal = if (tight) 8.dp else 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         CompositionLocalProvider(LocalContentColor provides fg) { NavIcon(n, on, updates) }
                         AnimatedVisibility(on, enter = expandHorizontally(sp) + fadeIn(), exit = shrinkHorizontally(sp) + fadeOut()) {
-                            Text(n.label, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelLarge, color = fg, maxLines = 1)
+                            Text(n.label, Modifier.padding(start = if (tight) 4.dp else 8.dp), style = if (tight) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge, color = fg, maxLines = 1)
                         }
                     }
-                    "labels" -> Column(Modifier.clip(RoundedCornerShape(22.dp)).then(tap).padding(horizontal = 8.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.size(56.dp, 32.dp).clip(Pill).background(bg), contentAlignment = Alignment.Center) { CompositionLocalProvider(LocalContentColor provides fg) { NavIcon(n, on, updates) } }
-                        Text(n.label, Modifier.padding(top = 4.dp), style = if (on) MaterialTheme.typography.labelMediumEmphasized else MaterialTheme.typography.labelMedium,
-                            color = if (on) cs.onSurface else offFg, maxLines = 1)
+                    "labels" -> Column(Modifier.clip(RoundedCornerShape(22.dp)).then(tap).padding(horizontal = if (tight) 2.dp else 8.dp, vertical = if (tight) 4.dp else 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.size(if (tight) 40.dp else 56.dp, if (tight) 28.dp else 32.dp).clip(Pill).background(bg), contentAlignment = Alignment.Center) { CompositionLocalProvider(LocalContentColor provides fg) { NavIcon(n, on, updates) } }
+                        Text(n.label, Modifier.padding(top = if (tight) 2.dp else 4.dp), style = when {
+                            tight -> MaterialTheme.typography.labelSmall
+                            on -> MaterialTheme.typography.labelMediumEmphasized
+                            else -> MaterialTheme.typography.labelMedium
+                        }, color = if (on) cs.onSurface else offFg, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     // Each tab owns an M3 shape: picking it morphs its indicator from a circle into that shape
-                    "shapes" -> MorphBlob(listOf(MaterialShapes.Circle, DOCK_SHAPES[items.indexOf(n) % DOCK_SHAPES.size]), if (on) 1 else 0, 52.dp, bg, Modifier.clip(CircleShape).then(tap)) {
+                    "shapes" -> MorphBlob(listOf(MaterialShapes.Circle, DOCK_SHAPES[items.indexOf(n) % DOCK_SHAPES.size]), if (on) 1 else 0, if (tight) 44.dp else 52.dp, bg, Modifier.clip(CircleShape).then(tap)) {
                         CompositionLocalProvider(LocalContentColor provides fg) { NavIcon(n, on, updates) }
                     }
-                    else -> Box(Modifier.size(52.dp).clip(CircleShape).background(bg).then(tap), contentAlignment = Alignment.Center) {
+                    else -> Box(Modifier.size(if (tight) 44.dp else 52.dp).clip(CircleShape).background(bg).then(tap), contentAlignment = Alignment.Center) {
                         CompositionLocalProvider(LocalContentColor provides fg) { NavIcon(n, on, updates) }
                     }
                 }
@@ -248,8 +274,26 @@ private fun ExpressiveDock(vm: MainViewModel, items: List<NavItem>, updates: Int
         else FloatingToolbarDefaults.standardFloatingToolbarColors()) {
         items.forEach { n ->
             val on = vm.tab == n.tab
-            FilledIconToggleButton(on, { vm.navTo(n.tab) }, modifier = Modifier.size(52.dp), shapes = IconButtonDefaults.toggleableShapes(),
+            FilledIconToggleButton(on, { vm.navTo(n.tab) }, modifier = Modifier.size(if (items.size >= 6) 44.dp else 52.dp), shapes = IconButtonDefaults.toggleableShapes(),
                 colors = IconButtonDefaults.filledIconToggleButtonColors(containerColor = Color.Transparent)) { NavIcon(n, on, updates) }
+        }
+    }
+}
+
+/** A short message along the bottom: the same job as a snackbar, drawn as an expressive card instead of a plain white bar. */
+@Composable
+private fun OrionMessage(data: SnackbarData) {
+    val cs = MaterialTheme.colorScheme
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp), color = cs.primaryContainer, shadowElevation = 6.dp) {
+        Row(Modifier.padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            MorphBlob(listOf(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny), 0, 40.dp, cs.primary) {
+                Icon(Sym.Info, null, Modifier.size(20.dp), tint = cs.onPrimary)
+            }
+            Text(data.visuals.message, Modifier.weight(1f).padding(horizontal = 12.dp), style = MaterialTheme.typography.bodyMedium, color = cs.onPrimaryContainer, maxLines = 4)
+            data.visuals.actionLabel?.let { label ->
+                FilledTonalButton({ data.performAction() }, contentPadding = ButtonDefaults.ContentPadding) { Text(label, maxLines = 1) }
+            }
+            IconButton({ data.dismiss() }) { Icon(Sym.Close, "Close", tint = cs.onPrimaryContainer) }
         }
     }
 }
@@ -281,11 +325,22 @@ fun Header(vm: MainViewModel) {
         // The pill carries the shield on store tabs; the Dev tab has no pill, so it sits here. The megaphone, when there is news, lives here too.
         if (vm.tab == Tab.ABOUT) ShieldButton(vm)
         else AnnouncementButton(vm)
-        val dl = d.activeDownloads.size; val up = vm.updates.size
+        val dl = d.activeDownloads.size; val rd = d.readyToInstall.size; val up = vm.updates.size
+        // While anything downloads or waits to install, the queue is one tap away as a sheet over the page
+        AnimatedVisibility(dl + rd > 0, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
+            IconButton({ vm.haptic(H.LIGHT); vm.open(Overlay.DOWNLOADS) }) {
+                BadgedBox({ Badge(containerColor = cs.primary) { Text("${dl + rd}") } }) {
+                    val prog = d.activeDownloads.keys.mapNotNull { d.downloadProgress[it] }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
+                    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                        if (prog != null) CircularProgressIndicator({ prog / 100f }, Modifier.matchParentSize(), strokeWidth = 2.dp)
+                        Icon(if (dl > 0) Sym.Downloading else Sym.InstallMobile, "Downloads", Modifier.size(18.dp))
+                    }
+                }
+            }
+        }
         IconButton({ vm.openSettings() }) {
             BadgedBox({
                 when {
-                    dl > 0 -> Badge(containerColor = cs.primary) { Text("$dl") }
                     up > 0 -> Badge(containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text("$up") }
                     vm.storeUpdateAvailable -> Badge { Text("!") }
                 }
@@ -330,17 +385,18 @@ private fun Logo(vm: MainViewModel) {
 @Composable
 private fun SearchPill(vm: MainViewModel, scope: String) {
     val s = LocalS.current; val cs = MaterialTheme.colorScheme
-    val lib = vm.tab == Tab.MYAPPS
+    val lib = vm.tab == Tab.MYAPPS; val orbit = vm.tab == Tab.ORBIT
     // Read through LocalD: vm.tabState is a plain StateFlow read, invisible to Compose, so this skippable pill never saw the typed text.
-    val q = if (lib) vm.libraryQuery else LocalD.current.tab(vm.tab.key()).query
-    val set: (String) -> Unit = { if (lib) vm.libraryQuery = it else vm.search(it) }
-    Row(Modifier.fillMaxWidth().height(52.dp).clip(Pill).background(cs.surfaceContainerHigh).padding(start = 6.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+    val q = if (lib) vm.libraryQuery else if (orbit) vm.orbitQuery else LocalD.current.tab(vm.tab.key()).query
+    val set: (String) -> Unit = { if (lib) vm.libraryQuery = it else if (orbit) vm.orbitQuery = it else vm.search(it) }
+    // Capped so the pill keeps a search bar's proportions on tablets and TVs instead of running across the whole store
+    Row(Modifier.fillMaxWidth().widthIn(max = 680.dp).height(52.dp).clip(Pill).background(cs.surfaceContainerHigh).padding(start = 6.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Logo(vm)
         BasicTextField(q, set, Modifier.weight(1f).padding(horizontal = 12.dp), singleLine = true,
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface), cursorBrush = SolidColor(cs.primary),
             decorationBox = { field ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (q.isEmpty()) Text(if (lib) "Search my apps" else "Search $scope", style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    if (q.isEmpty()) Text(if (lib) "Search my apps" else if (orbit) "Search your Orbit" else "Search $scope", style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     field()
                 }
             })
@@ -441,6 +497,7 @@ private fun Overlays(vm: MainViewModel) {
     if (vm.welcomeOpen) WelcomeSheet(vm)
     if (o(Overlay.CUSTOM_BUNDLE)) CustomBundleSheet(vm) { vm.close(Overlay.CUSTOM_BUNDLE) }
     if (o(Overlay.PROFILE_STATS)) ProfileStatsSheet(vm) { vm.close(Overlay.PROFILE_STATS) }
+    if (o(Overlay.DOWNLOADS)) DownloadsSheet(vm) { vm.close(Overlay.DOWNLOADS) }
     if (o(Overlay.NOTICE)) NoticeSheet(vm) { vm.dismissNotice() }
     if (o(Overlay.TUTORIAL)) TutorialSheet(vm) { vm.close(Overlay.TUTORIAL) }
     // The bundle stays selected while one of its apps is open, so backing out of the detail page lands on the bundle again.

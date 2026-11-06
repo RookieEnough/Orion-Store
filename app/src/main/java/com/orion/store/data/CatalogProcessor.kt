@@ -36,7 +36,7 @@ object CatalogProcessor {
         when { "arm64" in it || "v8a" in it -> "ARM64"; "armeabi" in it || "v7a" in it -> "ARMv7"; "x86_64" in it || "x64" in it -> "x64"; "x86" in it -> "x86"; else -> "Universal" }
     }
 
-    private val VERSION_NOISE = listOf("armeabi-v7a", "arm64-v8a", "x86_64", "x86", "v7a", "v8a", "-all", "_all", "-universal", "_universal", "universal", ".apk", "release", "mod", "beta", "alpha", "nightly", "debug")
+    private val VERSION_NOISE = listOf("armeabi-v7a", "arm64-v8a", "x86_64", "x86", "v7a", "v8a", "-all", "_all", "-universal", "_universal", "universal", ".apks", ".xapk", ".apkm", ".apk", "release", "mod", "beta", "alpha", "nightly", "debug")
     private val VERSION = Regex("v?(\\d+(?:\\.\\d+)+)")
     private val REPO_HOST = Regex("^https?://(www\\.)?(github\\.com|gitlab\\.com|codeberg\\.org)/")
     fun extractVersion(s: String?): String? {
@@ -113,6 +113,9 @@ object CatalogProcessor {
             else Release(s("tag_name"), s("name"), (o["prerelease"] as? JsonPrimitive)?.booleanOrNull ?: false, s("published_at").ifEmpty { s("created_at") }, assets)
         }
     }
+
+    /** GitHub-shaped releases (GitHub, Codeberg, Forgejo, Gitea) from any API response, APK assets only. */
+    fun releasesFrom(v: JsonElement): List<Release> = releasesOf(v).orEmpty()
 
     /** Decodes repo by repo, so only one repo's JSON tree is alive at a time. */
     private object ReleasesSerializer : KSerializer<List<Release>> {

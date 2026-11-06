@@ -55,8 +55,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -336,9 +338,11 @@ fun SettingsScreen(vm: MainViewModel) {
         installersLoading = false
     }
     val fx = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val saved = rememberSaveableStateHolder()
     SharedTransitionLayout(Modifier.fillMaxSize()) {
         AnimatedContent(menu, transitionSpec = { fadeIn(fx) togetherWith fadeOut(fx) }, label = "menu") { m ->
-            val avs = this
+            saved.SaveableStateProvider(m) {
+            val avs = this@AnimatedContent
             val cat = CATS.firstOrNull { it.id == m }
             if (cat == null) Hub(vm, s, d, active, ready, pending) { c ->
                 Modifier.sharedBounds(rememberSharedContentState("cat-${c.id}"), avs, resizeMode = PAGE_RESIZE)
@@ -506,42 +510,6 @@ fun SettingsScreen(vm: MainViewModel) {
                             InfoCard("Janitor mode clears installed APK files on next app start.")
                         }
                     }
-                    "queue" -> {
-                        StatHero("${active + ready + pending}", "in the queue · $active active · $ready ready · $pending updates") {
-                            if ((s.useShizuku || s.useDhizuku || s.directInstall || s.rootMode) && ready > 1) Button(vm::batchInstall, shapes = ButtonDefaults.shapes()) { Icon(Sym.Bolt, null); Spacer(Modifier.width(8.dp)); Text("Update all ($ready)") }
-                        }
-                        if (active == 0 && vm.updates.isEmpty() && ready == 0) EmptyState(Sym.DownloadDone, "Queue is empty", "Downloads and updates show up here.")
-                        else Section("Queue") {
-                            fun app(id: String) = all.firstOrNull { it.id == id }
-                            d.readyToInstall.forEach { (id, file) ->
-                                val a = app(id)
-                                ListItem({ Text(a?.name ?: id, style = MaterialTheme.typography.titleMedium) }, Modifier.clip(RoundedCornerShape(4.dp)).clickable { a?.let { vm.navigateFromSettings(it.id) } },
-                                    supportingContent = { Text("Ready to install") }, leadingContent = { a?.let { AppIcon(it, 44.dp) } ?: TonalIcon(Sym.Inventory, Safe) },
-                                    trailingContent = {
-                                        if (vm.installingId == id) LoadingIndicator(Modifier.size(32.dp))
-                                        else Button({ a?.let { vm.installFile(it, file) } }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("Install") }
-                                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer))
-                            }
-                            d.activeDownloads.keys.forEach { id ->
-                                val a = app(id); val p = d.downloadProgress[id] ?: 0f
-                                Column(Modifier.clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainer).clickable { a?.let { vm.navigateFromSettings(it.id) } }.padding(16.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        a?.let { AppIcon(it, 44.dp) }; Spacer(Modifier.width(12.dp))
-                                        Text(a?.name ?: id, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text("${p.roundToInt()}%", style = MaterialTheme.typography.labelLarge)
-                                        IconButton({ vm.cancelDownload(id) }) { Icon(Sym.Close, "Cancel download") }
-                                    }
-                                    LinearWavyProgressIndicator({ p / 100f }, Modifier.fillMaxWidth().padding(top = 8.dp))
-                                }
-                            }
-                            vm.updates.filter { it.id !in d.activeDownloads && it.id !in d.readyToInstall }.forEach { a ->
-                                ListItem({ Text(a.name, style = MaterialTheme.typography.titleMedium) }, Modifier.clip(RoundedCornerShape(4.dp)).clickable { vm.navigateFromSettings(a.id) },
-                                    supportingContent = { Text("Update to v${a.latestVersion}") }, leadingContent = { AppIcon(a, 44.dp) },
-                                    trailingContent = { FilledTonalButton({ vm.download(a) }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("Update") } },
-                                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer))
-                            }
-                        }
-                    }
                     "visuals" -> {
                         ThemePicker(vm, s)
                         PalettePicker(vm, s)
@@ -575,13 +543,14 @@ fun SettingsScreen(vm: MainViewModel) {
                         if (!Device.isTv) IconPicker(vm, s)
                         DockPicker(vm, s)
                         DockSize(vm, s)
+                        DockPosition(vm, s)
                     }
                     "interface" -> {
                         LayoutPicker(vm, s)
                         Section("Navigation tabs") {
                             listOf(Triple("android", "Apps", "Android apps"), Triple("pc", "PC", "PC and desktop software"),
-                                Triple("tv", "TV", "TV and big-screen apps"), Triple("myapps", "My Apps", "Library and download history")).forEach { (t, title, desc) ->
-                                Toggle(when (t) { "android" -> Sym.Android; "pc" -> Sym.DesktopWindows; "tv" -> Sym.Tv; else -> Sym.GridView }, title, desc, t !in s.hiddenTabs) {
+                                Triple("tv", "TV", "TV and big-screen apps"), Triple("orbit", "Orbit", "Apps you track from their own source"), Triple("myapps", "My Apps", "Library and download history")).forEach { (t, title, desc) ->
+                                Toggle(when (t) { "android" -> Sym.Android; "pc" -> Sym.DesktopWindows; "tv" -> Sym.Tv; "orbit" -> Sym.Orbit; else -> Sym.GridView }, title, desc, t !in s.hiddenTabs) {
                                     vm.set { it.toggleHiddenTab(t) }
                                 }
                             }
@@ -612,6 +581,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         DevTools(vm)
                     }
                 }
+            }
             }
         }
     }
@@ -703,10 +673,12 @@ private fun Hub(vm: MainViewModel, s: Settings, d: DataState, active: Int, ready
         HubHeader("Quick toggles") { IconButton({ editing = true }) { Icon(Sym.Edit, "Edit quick toggles", tint = cs.primary) } }
         val quick = (s.quickTiles ?: DEFAULT_QUICK).mapNotNull { id -> QUICK.firstOrNull { it.id == id && it.shown(s) } }
         if (quick.isEmpty()) Text("No quick toggles. Tap the pencil to add your favorites.", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
-        quick.chunked(2).forEach { row ->
+        // Three across on big screens, so the tiles keep a tile's shape instead of stretching into long bars
+        val per = if (LocalWidthClass.current.wide) 3 else 2
+        quick.chunked(per).forEach { row ->
             Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { q -> QuickTile(q.icon, q.label, q.get(s), Modifier.weight(1f)) { vm.haptic(H.SELECTION); vm.set(q.flip) } }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+                repeat(per - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
         if (editing) QuickTilesSheet(vm, s) { editing = false }
@@ -884,7 +856,7 @@ private fun QuickTilesSheet(vm: MainViewModel, s: Settings, onDismiss: () -> Uni
 @Composable
 private fun Bento(vm: MainViewModel, cat: Cat, shared: @Composable (Cat) -> Modifier, modifier: Modifier, compact: Boolean = false, badge: String? = null, extra: @Composable ColumnScope.() -> Unit = {}) {
     val (bg, fg) = tonal(cat.color)
-    Box(modifier.then(shared(cat)).springClick(RoundedCornerShape(28.dp)) { vm.haptic(H.LIGHT); vm.settingsMenu = cat.id }.background(bg)) {
+    Box(modifier.then(shared(cat)).springClick(RoundedCornerShape(28.dp)) { vm.haptic(H.LIGHT); if (cat.id == "queue") vm.open(Overlay.DOWNLOADS) else vm.settingsMenu = cat.id }.background(bg)) {
         // Short tiles (the full-width Developer strip) get the small shape, so it hugs the corner like the others instead of filling the strip
         Spinner(cat.shape, fg.copy(.1f), if (compact || cat.id == "developer") 120.dp else 168.dp, Modifier.align(Alignment.BottomEnd).offset(36.dp, 36.dp))
         CompositionLocalProvider(LocalContentColor provides fg) {
@@ -910,10 +882,11 @@ private fun Page(cat: Cat, modifier: Modifier, onBack: () -> Unit, content: @Com
     CompositionLocalProvider(LocalAccent provides cat.color) {
         val screen = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
         // At least a screen tall, so the footer settles at the bottom of short pages (weight works once the scroll column has a min height).
-        Column(modifier.fillMaxSize().background(cs.surface).readableWidth().verticalScroll(rememberScrollState()).readableWidth().heightIn(min = screen).padding(bottom = 40.dp)) {
-            Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(bg, cs.surface)))) {
+        // The tinted hero runs edge to edge on every screen; only the text and rows keep to a readable column
+        Column(modifier.fillMaxSize().background(cs.surface).verticalScroll(rememberScrollState()).heightIn(min = screen).padding(bottom = 40.dp)) {
+            Box(Modifier.fillMaxWidth().clipToBounds().background(Brush.verticalGradient(listOf(bg, cs.surface)))) {
                 Spinner(cat.shape, fg.copy(.08f), 260.dp, Modifier.align(Alignment.TopEnd).offset(70.dp, (-30).dp), periodMs = 40_000)
-                Column(Modifier.windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility).padding(bottom = 12.dp)) {
+                Column(Modifier.readableWidth().windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility).padding(bottom = 12.dp)) {
                     Box(Modifier.padding(start = 24.dp, top = 24.dp).size(72.dp), contentAlignment = Alignment.Center) {
                         Spinner(cat.shape, fg.copy(.16f), 72.dp, periodMs = 18_000)
                         Icon(cat.icon, null, Modifier.size(34.dp), tint = fg)
@@ -922,9 +895,9 @@ private fun Page(cat: Cat, modifier: Modifier, onBack: () -> Unit, content: @Com
                     Text(cat.desc, Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp), style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant)
                 }
             }
-            Column(Modifier.reveal(1)) { content() }
+            Column(Modifier.readableWidth().reveal(1)) { content() }
             Spacer(Modifier.weight(1f))
-            PageFooter(cat)
+            Box(Modifier.readableWidth()) { PageFooter(cat) }
         }
     }
 }
@@ -1030,6 +1003,62 @@ private fun FeatureTile(icon: ImageVector, title: String, desc: String, c: Color
         Spacer(Modifier.weight(1f))
         Text(title, style = MaterialTheme.typography.titleLargeEmphasized, color = fg)
         Text(desc, style = MaterialTheme.typography.bodySmall, color = fg.copy(.8f), maxLines = 2)
+    }
+}
+
+/** The download queue as a compact sheet over whatever is open, like the profile card: active downloads, ready installs and pending
+ *  updates. Tapping a row opens that app; the sheet closes so the app page lands on top. */
+@Composable
+fun DownloadsSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
+    val s = LocalS.current; val d = LocalD.current; val cs = MaterialTheme.colorScheme
+    val active = d.activeDownloads.size; val ready = d.readyToInstall.size
+    val updates = vm.updates.filter { it.id !in d.activeDownloads && it.id !in d.readyToInstall }
+    val all = vm.allApps()
+    fun app(id: String) = all.firstOrNull { it.id == id }
+    fun open(id: String) { vm.close(Overlay.DOWNLOADS); vm.navigateFromSettings(id) }
+    CompositionLocalProvider(LocalAccent provides Blue) {
+        SheetTitle("Downloads", Sym.Downloading, if (active + ready + updates.size == 0) "All caught up" else "$active active · $ready ready · ${updates.size} updates")
+        val silent = s.useShizuku || s.useDhizuku || s.directInstall || s.rootMode
+        val rows = ready + active + updates.size
+        if (rows == 0) EmptyState(Sym.DownloadDone, "Queue is empty", "Downloads and updates show up here.", Modifier.navigationBarsPadding())
+        else Column(Modifier.weight(1f, false).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+            var i = 0
+            val colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh)
+            d.readyToInstall.forEach { (id, file) ->
+                val a = app(id)
+                SegmentedListItem({ a?.let { open(it.id) } }, ListItemDefaults.segmentedShapes(i++, rows), colors = colors,
+                    leadingContent = { a?.let { AppIcon(it, 44.dp) } ?: TonalIcon(Sym.Inventory, Safe) }, supportingContent = { Text("Ready to install") },
+                    trailingContent = {
+                        if (vm.installingId == id) LoadingIndicator(Modifier.size(32.dp))
+                        else Button({ a?.let { vm.installFile(it, file) } }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("Install") }
+                    }) { Text(a?.name ?: id, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+            d.activeDownloads.keys.forEach { id ->
+                val a = app(id); val p = d.downloadProgress[id] ?: 0f
+                SegmentedListItem({ a?.let { open(it.id) } }, ListItemDefaults.segmentedShapes(i++, rows), colors = colors,
+                    leadingContent = { a?.let { AppIcon(it, 44.dp) } ?: TonalIcon(Sym.Downloading, Blue) },
+                    supportingContent = {
+                        Column {
+                            Text(if (p > 0f) "Downloading ${p.roundToInt()}%" else "Starting download")
+                            if (p <= 0f) LinearWavyProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp)) else LinearWavyProgressIndicator({ p / 100f }, Modifier.fillMaxWidth().padding(top = 6.dp))
+                        }
+                    },
+                    trailingContent = { IconButton({ vm.cancelDownload(id) }) { Icon(Sym.Close, "Cancel download") } }) {
+                    Text(a?.name ?: id, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            updates.forEach { a ->
+                SegmentedListItem({ open(a.id) }, ListItemDefaults.segmentedShapes(i++, rows), colors = colors,
+                    leadingContent = { AppIcon(a, 44.dp) }, supportingContent = { Text("Update to v${a.latestVersion.removePrefix("v")}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    trailingContent = { FilledTonalButton({ vm.download(a) }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("Update") } }) {
+                    Text(a.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (silent && ready > 1) CtaButton("Install all ($ready)", vm::batchInstall, Modifier.padding(top = 12.dp), Sym.Bolt)
+            else if (updates.size > 1) CtaButton("Update all (${updates.size})", { vm.haptic(H.MEDIUM); updates.filter { it.installsHere() }.forEach { vm.download(it) } }, Modifier.padding(top = 12.dp), Sym.SystemUpdate, tonal = true)
+            Text(TIPS.getValue("queue"), Modifier.fillMaxWidth().padding(top = 12.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
     }
 }
 
@@ -1188,6 +1217,27 @@ private fun DockSize(vm: MainViewModel, s: Settings) = Section("Dock size") {
         }
         Slider(scale, { v -> vm.set { it.copy(bottomNavScale = (v * 20).roundToInt() / 20f) } }, valueRange = .85f..1.15f, steps = 5)
         Row { Text("Compact", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium); Text("${(scale * 100).roundToInt()}%", style = MaterialTheme.typography.labelLargeEmphasized); Text("Large", Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.labelMedium) }
+    }
+}
+
+/** Tablets, foldables and TVs: keep the side rail, or bring the phone dock to the bottom or top. Phones always keep the bottom dock. */
+@Composable
+private fun DockPosition(vm: MainViewModel, s: Settings) = Section("Big screen navigation") {
+    val cs = MaterialTheme.colorScheme
+    val opts = listOf(Triple("rail", "Side", Sym.ViewQuilt), Triple("bottom", "Bottom", Sym.ArrowDownward), Triple("top", "Top", Sym.ArrowUpward))
+    val cur = s.wideNav.takeIf { w -> opts.any { it.first == w } } ?: "rail"
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(cs.surfaceContainer).padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+            opts.forEachIndexed { i, (id, label, icon) ->
+                ToggleButton(cur == id, { vm.haptic(H.SELECTION); vm.set { it.copy(wideNav = id) } }, Modifier.weight(1f),
+                    shapes = when (i) { 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes(); opts.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes(); else -> ButtonGroupDefaults.connectedMiddleButtonShapes() },
+                    contentPadding = PaddingValues(horizontal = 6.dp)) {
+                    Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        Text("For tablets, foldables, TVs and wide split screens. Phones always keep the dock at the bottom.",
+            Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
     }
 }
 

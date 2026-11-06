@@ -52,7 +52,6 @@ import kotlin.math.abs
 private val MODERN_SORTS = listOf(SortOption.NEWEST, SortOption.NAME_ASC, SortOption.NAME_DESC, SortOption.SIZE_ASC, SortOption.SIZE_DESC, SortOption.OLDEST)
 private val CLASSIC_SORTS = SortOption.entries - SortOption.HOME
 private val full: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
-private val half: LazyGridItemSpanScope.(AppItem) -> GridItemSpan = { GridItemSpan(if (maxLineSpan >= 6) maxLineSpan / 2 else maxLineSpan) }
 private val BLOB_SHAPES = listOf(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny, MaterialShapes.Clover4Leaf, MaterialShapes.Cookie6Sided, MaterialShapes.Pentagon, MaterialShapes.Flower, MaterialShapes.Gem)
 private val FAN = listOf(-6f, 5f, 3f, -4f)
 
@@ -73,8 +72,11 @@ fun StoreTab(vm: MainViewModel, platform: String, contentPadding: PaddingValues)
     val view = "${ts.category}|${ts.sort}|${ts.filterFavorites}|${vm.showAllSorted}|${vm.expandedView}"
     var lastView by rememberSaveable { mutableStateOf(view) }
     LaunchedEffect(view) { if (view != lastView) { lastView = view; grid.scrollToItem(0) } }
-    val ptr = rememberPullToRefreshState()
-    Box(Modifier.fillMaxSize()) {
+    val ptr = rememberPullToRefreshState(); val wc = LocalWidthClass.current
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // Classic rows become a card grid on medium and expanded windows: as many 320dp-or-wider columns as the store has room for
+        val gridW = minOf(maxWidth, 1200.dp)
+        val cols = if (!wc.wide) 1 else ((gridW - 32.dp + 12.dp) / (320.dp + 12.dp)).toInt().coerceAtLeast(1)
         PullToRefreshBox(vm.refreshing, vm::reload, Modifier.fillMaxSize(), state = ptr,
             indicator = { PtrIndicator(ptr, vm.refreshing, s.pullToRefreshCharacter, Modifier.align(Alignment.TopCenter)) }) {
             LazyVerticalGrid(GridCells.Adaptive(if (s.compactMode) 78.dp else 100.dp), Modifier.fillMaxSize().wrapContentWidth().widthIn(max = 1200.dp), grid, contentPadding,
@@ -94,15 +96,15 @@ fun StoreTab(vm: MainViewModel, platform: String, contentPadding: PaddingValues)
                         itemsIndexed(vm.expandedApps, key = { _, it -> "exp-" + it.id }) { i, it -> AppTile(vm, it, "exp", Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null).reveal(i)) }
                         item("exp-more", span = full) { MoreButton("View more apps", vm::expandedMore) }
                     }
-                    else -> classicList(vm, groups, view)
+                    else -> classicList(vm, groups, view, cols)
                 }
             }
         }
         val showTop by remember { derivedStateOf { grid.firstVisibleItemIndex > 8 } }
         // Sits just above the dock, and drops to the corner when the dock slides away, instead of floating at a fixed dock-clearing height.
-        val lift by animateDpAsState(if (vm.navShown) 88.dp else 16.dp, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "fab")
+        val lift by animateDpAsState(if (vm.navShown && navPlacement() == "bottom") 88.dp else 16.dp, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "fab")
         AnimatedVisibility(showTop, Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 16.dp, bottom = lift), enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
-            SmallFloatingActionButton({ scope.launch { grid.animateScrollToItem(0) }; vm.haptic(H.LIGHT) }) { Icon(Sym.KeyboardArrowUp, "Scroll to top") }
+            SmallFloatingActionButton({ scope.launch { grid.toTop() }; vm.haptic(H.LIGHT) }) { Icon(Sym.KeyboardArrowUp, "Scroll to top") }
         }
     }
 }
@@ -110,7 +112,8 @@ fun StoreTab(vm: MainViewModel, platform: String, contentPadding: PaddingValues)
 @Composable
 fun StoreSkeleton(modern: Boolean) = Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
     if (modern) {
-        Skeleton(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(176.dp), RoundedCornerShape(28.dp))
+        // Same footprint as the hero cards, which keep a phone card's width on wide screens
+        Skeleton(Modifier.padding(horizontal = 16.dp).fillMaxWidth().widthIn(max = 480.dp).height(176.dp), RoundedCornerShape(28.dp))
         repeat(2) {
             Skeleton(Modifier.padding(start = 20.dp, top = 28.dp).size(180.dp, 22.dp), Pill)
             Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -171,10 +174,12 @@ private fun Filters(vm: MainViewModel, ts: TabViewState, cats: List<String>, cou
 @Composable
 fun Choice(on: Boolean, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, onClick: () -> Unit) {
     val vm = LocalVm.current
-    ToggleButton(on, { vm.haptic(H.SELECTION); onClick() }, shapes = ToggleButtonDefaults.shapesFor(ToggleButtonDefaults.size),
-        icon = icon?.let { { Icon(it, null, Modifier.size(ToggleButtonDefaults.IconSize)) } }) {
-        Text(label, maxLines = 1)
-    }
+    // A step up on medium and expanded windows: taller, with a bigger icon and label, so filters keep their weight on a large canvas
+    val wide = LocalWidthClass.current.wide
+    val ic: (@Composable () -> Unit)? = icon?.let { { Icon(it, null, Modifier.size(if (wide) 22.dp else ToggleButtonDefaults.IconSize)) } }
+    if (!wide) ToggleButton(on, { vm.haptic(H.SELECTION); onClick() }, shapes = ToggleButtonDefaults.shapesFor(ToggleButtonDefaults.size), icon = ic) { Text(label, maxLines = 1) }
+    else ToggleButton(on, { vm.haptic(H.SELECTION); onClick() }, Modifier.heightIn(min = 48.dp), shapes = ToggleButtonDefaults.shapesFor(48.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp), icon = ic) { Text(label, maxLines = 1, style = MaterialTheme.typography.titleSmall) }
 }
 
 @Composable
@@ -220,11 +225,18 @@ fun Shot(url: String, maxW: Dp, maxH: Dp, modifier: Modifier = Modifier, portrai
 }
 
 /** Classic layout: an M3 Expressive segmented list. Name sorts split into lettered groups, each group one rounded container. */
-private fun LazyGridScope.classicList(vm: MainViewModel, groups: List<Pair<String, List<AppItem>>>, view: String) {
+private fun LazyGridScope.classicList(vm: MainViewModel, groups: List<Pair<String, List<AppItem>>>, view: String, cols: Int) {
     groups.forEach { (letter, apps) ->
         if (letter.isNotEmpty()) item("L-$letter", span = full) { LetterHeader(letter, apps.size) }
         // Keyed per view: a new category or sort arrives as a fresh list with its entrance, instead of old rows gliding across into new slots.
-        itemsIndexed(apps, key = { _, it -> view + "|" + it.id }, span = { _, it -> half(it) }) { i, app -> AppRow(vm, app, i, apps.size, Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null).reveal(i)) }
+        if (cols == 1) itemsIndexed(apps, key = { _, it -> view + "|" + it.id }, span = { _, _ -> GridItemSpan(maxLineSpan) }) { i, app -> AppRow(vm, app, i, apps.size, Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null).reveal(i)) }
+        // Wide windows: rows of equal cards that fill their columns exactly, 16dp from the edges and 12dp apart, so no gutter is left over
+        else itemsIndexed(apps.chunked(cols), key = { _, row -> view + "|" + row.first().id }, span = { _, _ -> GridItemSpan(maxLineSpan) }) { i, row ->
+            Row(Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null).reveal(i).padding(start = 16.dp, end = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { app -> AppRow(vm, app, 0, 1, Modifier.weight(1f), inset = 0.dp) }
+                repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
     }
 }
 
@@ -270,14 +282,14 @@ private fun StateBlob(app: AppItem, src: MutableInteractionSource) {
 
 /** List row used by every platform in the classic layout (and for search results): one segment of a grouped list. */
 @Composable
-fun AppRow(vm: MainViewModel, app: AppItem, index: Int = 0, count: Int = 1, modifier: Modifier = Modifier) {
+fun AppRow(vm: MainViewModel, app: AppItem, index: Int = 0, count: Int = 1, modifier: Modifier = Modifier, inset: Dp = 16.dp) {
     val s = LocalS.current; val compact = s.compactMode; val fav = app.id in LocalD.current.favorites; val cs = MaterialTheme.colorScheme
     val status = statusText(app)
     val src = remember { MutableInteractionSource() }
     val shapes = ListItemDefaults.segmentedShapes(index, count)
     val about = remember(app.description) { app.description.replace(SPACES, " ").trim() }
     // Swipe left to favorite (or unfavorite); the row springs back once the heart has filled.
-    SwipeRow(shapes.shape, modifier.padding(horizontal = 16.dp).focusRing(src, shapes.shape), left = SwipeAction(if (fav) Sym.HeartBroken else Sym.Favorite, if (fav) "Remove from favorites" else "Add to favorites",
+    SwipeRow(shapes.shape, modifier.padding(horizontal = inset).focusRing(src, shapes.shape), left = SwipeAction(if (fav) Sym.HeartBroken else Sym.Favorite, if (fav) "Remove from favorites" else "Add to favorites",
         cs.tertiaryContainer, cs.onTertiaryContainer, removes = false) { vm.toggleFavorite(app.id) }) {
     SegmentedListItem({ vm.haptic(H.SELECTION); vm.selectApp(app, "list") }, shapes, if (compact) CompactRowHeight else Modifier,
         leadingContent = { AppIcon(app, if (compact) 44.dp else 52.dp, from = "list") },
@@ -365,23 +377,35 @@ private fun LazyGridScope.collection(vm: MainViewModel, c: StoreCollection, inde
 }
 
 @Composable
-private fun Hero(vm: MainViewModel, c: StoreCollection, modifier: Modifier) = Column(modifier.padding(top = 8.dp)) {
+private fun Hero(vm: MainViewModel, c: StoreCollection, modifier: Modifier) = BoxWithConstraints(modifier.padding(top = 8.dp)) {
     val n = c.apps.size; val pager = rememberPagerState { n }; val s = LocalS.current; val cs = MaterialTheme.colorScheme
     val glide = MaterialTheme.motionScheme.slowSpatialSpec<Float>()
-    LaunchedEffect(pager, n) {
-        if (n > 1 && !s.calm) while (true) { delay(5500); if (!pager.isScrollInProgress) pager.animateScrollToPage((pager.currentPage + 1) % n, animationSpec = glide) }
+    // Phones: one card at a time. Wider windows: as many whole cards as fit at 420dp or more, sized to fill the row exactly, so no card
+    // is ever cut by the screen edge (that cut left one rounded side and one square side)
+    val gap = 10.dp; val room = maxWidth - 32.dp
+    val k = if (!LocalWidthClass.current.wide) 1 else ((room + gap) / (420.dp + gap)).toInt().coerceIn(1, n.coerceAtLeast(1))
+    val page = (room - gap * (k - 1)) / k
+    LaunchedEffect(pager, n, k) {
+        if (n > k && !s.calm) while (true) {
+            delay(5500)
+            if (!pager.isScrollInProgress) pager.animateScrollToPage(if (pager.currentPage >= n - k) 0 else pager.currentPage + 1, animationSpec = glide)
+        }
     }
-    // On tablets and unfolded foldables the cards keep a phone card's proportions and the next ones peek in, instead of one card stretched edge to edge
-    val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
-    HorizontalPager(pager, Modifier.fillMaxWidth().height(176.dp), contentPadding = PaddingValues(horizontal = 16.dp), pageSpacing = 10.dp, key = { c.apps[it].id },
-        pageSize = if (wide) androidx.compose.foundation.pager.PageSize.Fixed(480.dp) else androidx.compose.foundation.pager.PageSize.Fill) { i ->
-        HeroCard(vm, c.apps[i], c.id) { pager.getOffsetDistanceInPages(i).coerceIn(-1f, 1f) }
-    }
-    if (n > 1) Row(Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        repeat(n) { k ->
-            val on = k == pager.currentPage
-            val w by animateDpAsState(if (on) 22.dp else 6.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "dot")
-            Box(Modifier.height(6.dp).width(w).clip(Pill).background(if (on) cs.primary else cs.outlineVariant))
+    Column {
+        HorizontalPager(pager, Modifier.fillMaxWidth().height(176.dp), contentPadding = PaddingValues(horizontal = 16.dp), pageSpacing = gap, key = { c.apps[it].id },
+            pageSize = if (k == 1) androidx.compose.foundation.pager.PageSize.Fill else androidx.compose.foundation.pager.PageSize.Fixed(page)) { i ->
+            // Side by side cards sit still; the paging tilt and parallax only make sense one card at a time
+            HeroCard(vm, c.apps[i], c.id) { if (k == 1) pager.getOffsetDistanceInPages(i).coerceIn(-1f, 1f) else 0f }
+        }
+        // The dot row keeps its height even when there is nothing to page, so the next section always starts the same distance below
+        Box(Modifier.fillMaxWidth().padding(top = 12.dp).height(6.dp), contentAlignment = Alignment.Center) {
+            if (n > k) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                repeat(n - k + 1) { j ->
+                    val on = j == pager.currentPage.coerceAtMost(n - k)
+                    val w by animateDpAsState(if (on) 22.dp else 6.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "dot")
+                    Box(Modifier.height(6.dp).width(w).clip(Pill).background(if (on) cs.primary else cs.outlineVariant))
+                }
+            }
         }
     }
 }
@@ -443,9 +467,13 @@ private val RANK_SHAPES = listOf(MaterialShapes.Cookie9Sided, MaterialShapes.Coo
 private fun Ranked(vm: MainViewModel, c: StoreCollection, modifier: Modifier) = Column(modifier.padding(top = 20.dp)) {
     val cs = MaterialTheme.colorScheme
     SectionTitle(c.title, subtitle = c.subtitle)
+    // Columns of three; on wider windows a chart short enough to fit shares the row instead of stopping halfway across it
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val groups = c.apps.chunked(3); val room = maxWidth - 16.dp
+    val colW = if (LocalWidthClass.current.wide && groups.size * 296 <= room.value) room / groups.size.coerceAtLeast(1) else 296.dp
     LazyRow(contentPadding = PaddingValues(horizontal = 8.dp)) {
-        itemsIndexed(c.apps.chunked(3), key = { i, _ -> i }) { col, group ->
-            Column(Modifier.width(296.dp)) {
+        itemsIndexed(groups, key = { i, _ -> i }) { col, group ->
+            Column(Modifier.width(colW)) {
                 group.forEachIndexed { k, app ->
                     val rank = col * 3 + k; val top = rank < 3
                     Row(Modifier.fillMaxWidth().springClick { vm.selectApp(app, c.id) }.padding(horizontal = 8.dp, vertical = 6.dp),
@@ -468,6 +496,7 @@ private fun Ranked(vm: MainViewModel, c: StoreCollection, modifier: Modifier) = 
             }
         }
     }
+    }
 }
 
 /** Updates as a slim strip, not a hero: overlapping icons, the count and who is waiting, and a one-tap Update all. */
@@ -475,7 +504,8 @@ private fun Ranked(vm: MainViewModel, c: StoreCollection, modifier: Modifier) = 
 private fun UpdateDeck(vm: MainViewModel, c: StoreCollection, modifier: Modifier) {
     val cs = MaterialTheme.colorScheme; val d = LocalD.current
     val n = c.totalAppCount ?: c.apps.size
-    Row(modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp).fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cs.surfaceContainer)
+    // A strip, not a banner: on wide screens it stops at a card's width instead of running the length of the store
+    Row(modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp).fillMaxWidth().widthIn(max = 760.dp).clip(RoundedCornerShape(28.dp)).background(cs.surfaceContainer)
         .clickable { vm.haptic(H.SELECTION); vm.showCollectionAll(c) }.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width((40 + (minOf(3, c.apps.size) - 1) * 22).dp).height(40.dp)) {
             c.apps.take(3).forEachIndexed { i, a -> AppIcon(a, 40.dp, Modifier.offset(x = (i * 22).dp).graphicsLayer { shadowElevation = 2.dp.toPx(); shape = RoundedCornerShape(10.dp) }, from = c.id) }
@@ -514,45 +544,64 @@ private fun Recommended(vm: MainViewModel, c: StoreCollection, modifier: Modifie
     }
 }
 
-/** Curated picks as a numbered chart, three rows per column. */
+/** Curated picks as a numbered chart. Phones: three rows per column, scrolling sideways. Wider windows: the six picks fill the
+ *  row in two or three equal columns, so a short list never leaves half the screen empty. */
 @Composable
 private fun Spotlight(vm: MainViewModel, c: StoreCollection, modifier: Modifier) = Column(modifier.padding(top = 20.dp)) {
-    val cs = MaterialTheme.colorScheme
+    val cs = MaterialTheme.colorScheme; val picks = c.apps.take(6)
     SectionTitle(c.title, subtitle = c.subtitle)
-    LazyHorizontalGrid(GridCells.Fixed(3), Modifier.fillMaxWidth().height(228.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
-        itemsIndexed(c.apps.take(6), key = { _, it -> it.id }) { i, app ->
-            Row(Modifier.width(312.dp).springClick { vm.selectApp(app, c.id) }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${i + 1}", Modifier.width(30.dp), style = MaterialTheme.typography.headlineSmallEmphasized, color = cs.primary)
-                AppIcon(app, 56.dp, state = true, from = c.id)
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(app.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(listOf(app.category, app.size).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall,
-                        color = cs.onSurfaceVariant, maxLines = 1)
+    @Composable fun Pick(i: Int, app: AppItem, m: Modifier) =
+        Row(m.springClick { vm.selectApp(app, c.id) }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("${i + 1}", Modifier.width(30.dp), style = MaterialTheme.typography.headlineSmallEmphasized, color = cs.primary)
+            AppIcon(app, 56.dp, state = true, from = c.id)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(app.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(listOf(app.category, app.size).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall,
+                    color = cs.onSurfaceVariant, maxLines = 1)
+            }
+        }
+    if (!LocalWidthClass.current.wide) LazyHorizontalGrid(GridCells.Fixed(3), Modifier.fillMaxWidth().height(228.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
+        itemsIndexed(picks, key = { _, it -> it.id }) { i, app -> Pick(i, app, Modifier.width(312.dp)) }
+    } else BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+        val cols = (maxWidth / 300.dp).toInt().coerceIn(2, 3)
+        Column {
+            picks.chunked(cols).forEachIndexed { r, row ->
+                Row(Modifier.fillMaxWidth()) {
+                    row.forEachIndexed { k, app -> Pick(r * cols + k, app, Modifier.weight(1f)) }
+                    repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
     }
 }
 
-/** Categories as expressive shape blobs that round out while pressed. */
+/** Categories as expressive shape blobs that round out while pressed. Bigger on medium and expanded windows, and spread across the
+ *  whole row when they all fit, instead of huddling at the start. */
 @Composable
 private fun Categories(vm: MainViewModel, c: StoreCollection, modifier: Modifier) = Column(modifier.padding(top = 20.dp)) {
-    val cs = MaterialTheme.colorScheme
+    val cs = MaterialTheme.colorScheme; val wide = LocalWidthClass.current.wide
     if (c.title.isNotEmpty()) SectionTitle(c.title, subtitle = c.subtitle)
-    LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        itemsIndexed(c.categoryCards, key = { _, it -> it.id }) { i, card ->
-            val (bg, fg) = tonal(hex(card.accent, cs.primary))
-            val src = remember { MutableInteractionSource() }; val pressed by src.collectIsPressedAsState()
-            val morph = remember(i) { Morph(BLOB_SHAPES[i % BLOB_SHAPES.size], MaterialShapes.Circle) }
-            val p by animateFloatAsState(if (pressed) 1f else 0f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "m")
-            Column(Modifier.width(88.dp).springClick(RoundedCornerShape(24.dp), src = src) { vm.categoryNavigate(card.label) }.padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(72.dp).graphicsLayer { rotationZ = p * 30f }.background(bg, MorphShape(morph, p)), contentAlignment = Alignment.Center) {
-                    Icon(faIcon(card.icon, Sym.Layers), null, Modifier.size(30.dp).graphicsLayer { rotationZ = -p * 30f }, tint = fg)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val n = c.categoryCards.size.coerceAtLeast(1)
+        val base = if (wide) 112.dp else 88.dp
+        val itemW = if (!wide) base else ((maxWidth - 24.dp - 4.dp * (n - 1)) / n).coerceIn(base, 168.dp)
+        val blob = if (wide) 88.dp else 72.dp
+        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            itemsIndexed(c.categoryCards, key = { _, it -> it.id }) { i, card ->
+                val (bg, fg) = tonal(hex(card.accent, cs.primary))
+                val src = remember { MutableInteractionSource() }; val pressed by src.collectIsPressedAsState()
+                val morph = remember(i) { Morph(BLOB_SHAPES[i % BLOB_SHAPES.size], MaterialShapes.Circle) }
+                val p by animateFloatAsState(if (pressed) 1f else 0f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "m")
+                Column(Modifier.width(itemW).springClick(RoundedCornerShape(24.dp), src = src) { vm.categoryNavigate(card.label) }.padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.size(blob).graphicsLayer { rotationZ = p * 30f }.background(bg, MorphShape(morph, p)), contentAlignment = Alignment.Center) {
+                        Icon(faIcon(card.icon, Sym.Layers), null, Modifier.size(if (wide) 36.dp else 30.dp).graphicsLayer { rotationZ = -p * 30f }, tint = fg)
+                    }
+                    Text(card.label, Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp), style = if (wide) MaterialTheme.typography.titleSmall else MaterialTheme.typography.labelLarge,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                    Text("${card.count} apps", style = if (wide) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
                 }
-                Text(card.label, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-                Text("${card.count} apps", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
             }
         }
     }
@@ -564,18 +613,23 @@ private fun Bundles(vm: MainViewModel, c: StoreCollection, modifier: Modifier) =
     val s = LocalS.current; val cs = MaterialTheme.colorScheme
     val folder = RoundedCornerShape(40.dp)
     SectionTitle(c.title, subtitle = c.subtitle)
+    // Wider windows: folders grow to share the row when there are only a few, so the shelf never ends in a dead gap
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val n = c.bundles.size + 1
+    val itemW = if (!LocalWidthClass.current.wide) 164.dp else ((maxWidth - 24.dp - 4.dp * (n - 1)) / n).coerceIn(164.dp, 300.dp)
+    val box = itemW - 8.dp; val icon = (box - 48.dp) / 2
     LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         itemsIndexed(c.bundles, key = { _, b -> b.id }) { i, b ->
             val removed = s.removedBundleApps[b.id].orEmpty()
             val count = (b.apps.map { it.id }.filter { it !in removed } + s.extraBundleApps[b.id].orEmpty()).toSet().size
             if (count == 0) return@itemsIndexed
             val (bg, _) = b.color?.let { tonal(hex(it, cs.primary)) } ?: listOf(cs.primaryContainer, cs.tertiaryContainer, cs.secondaryContainer)[i % 3].let { it to it }
-            Column(Modifier.width(164.dp).springClick(RoundedCornerShape(28.dp)) { vm.selectedBundle = b }.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 12.dp)) {
-                Box(Modifier.size(156.dp).clip(folder).background(bg), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(itemW).springClick(RoundedCornerShape(28.dp)) { vm.selectedBundle = b }.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 12.dp)) {
+                Box(Modifier.size(box).clip(folder).background(bg), contentAlignment = Alignment.Center) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         b.apps.filter { it.id !in removed }.take(4).chunked(2).forEachIndexed { r, row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                row.forEachIndexed { k, a -> AppIcon(a, 54.dp, Modifier.graphicsLayer { rotationZ = FAN[(r * 2 + k) % FAN.size] }) }
+                                row.forEachIndexed { k, a -> AppIcon(a, icon, Modifier.graphicsLayer { rotationZ = FAN[(r * 2 + k) % FAN.size] }) }
                             }
                         }
                     }
@@ -587,8 +641,8 @@ private fun Bundles(vm: MainViewModel, c: StoreCollection, modifier: Modifier) =
         }
         item("create") {
             val line = cs.outline
-            Column(Modifier.width(164.dp).springClick(RoundedCornerShape(28.dp)) { vm.open(Overlay.CUSTOM_BUNDLE) }.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 12.dp)) {
-                Box(Modifier.size(156.dp).drawBehind {
+            Column(Modifier.width(itemW).springClick(RoundedCornerShape(28.dp)) { vm.open(Overlay.CUSTOM_BUNDLE) }.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 12.dp)) {
+                Box(Modifier.size(box).drawBehind {
                     drawRoundRect(line, cornerRadius = CornerRadius(40.dp.toPx()), style = Stroke(2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(18f, 12f))))
                 }, contentAlignment = Alignment.Center) {
                     Box(Modifier.size(56.dp).background(cs.primaryContainer, MaterialShapes.Cookie6Sided.toShape()), contentAlignment = Alignment.Center) {
@@ -599,5 +653,6 @@ private fun Bundles(vm: MainViewModel, c: StoreCollection, modifier: Modifier) =
                 Text("Pick your own apps", Modifier.padding(horizontal = 6.dp), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
             }
         }
+    }
     }
 }

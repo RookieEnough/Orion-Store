@@ -121,6 +121,13 @@ fun OrionTheme(s: Settings, content: @Composable () -> Unit) {
     val ff by produceState(first, s.appFont, s.customFonts) { value = Fonts.load(ctx, s.appFont, s) }
     val type = remember(ff) { typography(ff) }
     val motion = remember(s.disableAnimations) { if (s.disableAnimations) InstantMotion else MotionScheme.expressive() }
+    // Bar icons follow Orion's own theme, not the system's: a dark Orion on a light-mode phone kept dark icons on a dark page
+    val view = androidx.compose.ui.platform.LocalView.current; val light = colors.isLight
+    if (!view.isInEditMode) androidx.compose.runtime.SideEffect {
+        (view.context as? android.app.Activity)?.window?.let { w ->
+            androidx.core.view.WindowCompat.getInsetsController(w, view).run { isAppearanceLightStatusBars = light; isAppearanceLightNavigationBars = light }
+        }
+    }
     MaterialExpressiveTheme(colorScheme = colors, motionScheme = motion, typography = type, content = content)
 }
 

@@ -147,7 +147,9 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
     val ads = s.adWatchCount
     val (rankLabel, rankIcon) = QUEST_BOSSES.lastOrNull { ads >= it.lvl }?.let { "Rank: ${it.rank}" to (BADGES[it.badge]?.first ?: Sym.Shield) } ?: ("Start your journey" to Sym.RocketLaunch)
     val slots = s.showcasedBadges.take(3)
-    LazyColumn(Modifier.fillMaxSize().readableWidth(), contentPadding = padding) {
+    // Groups cap at a card's width; centred, so on tablets they line up under the coin instead of hugging the left edge
+    val wide = LocalWidthClass.current.wide
+    LazyColumn(Modifier.fillMaxSize().adaptiveContentWidth(if (wide) 1040.dp else 840.dp), contentPadding = padding, horizontalAlignment = Alignment.CenterHorizontally) {
         item("header") { Header(vm) }
         item("hero") {
             Column(Modifier.fillMaxWidth().padding(top = 8.dp).reveal(0), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -164,7 +166,7 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                 if (slots.size < 3) AssistChip({ vm.profileClick("badges", slots.size) }, { Text("Add badge") }, leadingIcon = { Icon(Sym.Add, null, Modifier.size(AssistChipDefaults.IconSize)) }, shape = Pill)
             }
         }
-        item("connect") { Group("Connect", Modifier.reveal(2)) {
+        val connect = @Composable { m: Modifier -> Group("Connect", m.reveal(2)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 listOf(Triple(Sym.BrandGitHub, "GitHub", Gray) to socials.github, Triple(Sym.BrandX, "X", Color(0xFF64748B)) to socials.x, Triple(Sym.BrandDiscord, "Discord", Color(0xFF5865F2)) to socials.discord,
                     Triple(Sym.Public, "Website", Color(0xFF6366F1)) to ORION_SITE)
@@ -181,7 +183,7 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                     }
             }
         } }
-        item("support") { Group("Support Orion", Modifier.reveal(3)) {
+        val support = @Composable { m: Modifier -> Group("Support Orion", m.reveal(3)) {
             val next = QUEST_BOSSES.firstOrNull { ads < it.lvl }?.let { it.lvl to it.rank }
             val (bg, fg) = tonal(Fuchsia)
             var shown by remember { mutableStateOf(false) }; LaunchedEffect(Unit) { shown = true }
@@ -210,7 +212,7 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                 Icon(Sym.ChevronRight, null)
             }
         } }
-        item("help") { Group("Help", Modifier.reveal(4)) {
+        val help = @Composable { m: Modifier -> Group("Help", m.reveal(4)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(Triple(Sym.HelpOutline, "FAQs", "Secrets & safety") to { vm.open(Overlay.FAQ) }, Triple(Sym.NewReleases, "What's new", "Release notes") to { vm.open(Overlay.RELEASE_NOTES) })
                     .forEach { (spec, go) ->
@@ -222,6 +224,13 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                     }
             }
         } }
+        // Phones stack the groups; medium and expanded windows set them side by side in an adaptive grid of cards
+        if (!wide) { item("connect") { connect(Modifier) }; item("support") { support(Modifier) }; item("help") { help(Modifier) } }
+        else item("groups") {
+            FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp), maxItemsInEachRow = 2, verticalArrangement = Arrangement.Top) {
+                support(Modifier.weight(1f)); connect(Modifier.weight(1f)); help(Modifier.weight(1f)); Spacer(Modifier.weight(1f))
+            }
+        }
         item("footer") {
             Column(Modifier.fillMaxWidth().padding(top = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

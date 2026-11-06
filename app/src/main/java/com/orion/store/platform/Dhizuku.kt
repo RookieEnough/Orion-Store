@@ -14,6 +14,8 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Parcel
 import android.os.ParcelFileDescriptor
+import java.io.File
+import java.io.FileInputStream
 import com.rosan.dhizuku.api.Dhizuku
 import com.rosan.dhizuku.api.DhizukuRequestPermissionListener
 import com.rosan.dhizuku.api.DhizukuUserServiceArgs
@@ -21,8 +23,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.File
-import java.io.FileInputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -71,8 +71,19 @@ object DhizukuBridge {
         } finally { data.recycle(); reply.recycle() }
     }
 
-    suspend fun install(ctx: Context, f: File) = ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
-        call(ctx, DhizukuService.INSTALL) { it.writeLong(f.length()); fd.writeToParcel(it, 0) }
+    suspend fun install(ctx: Context, f: File) {
+        val parts = Bundles.parts(ctx, f).ifEmpty { listOf(f) }
+        if (parts.size == 1) ParcelFileDescriptor.open(parts[0], ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
+            call(ctx, DhizukuService.INSTALL) { it.writeLong(parts[0].length()); fd.writeToParcel(it, 0) }
+        } else {
+            val fds = parts.map { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
+            try {
+                call(ctx, DhizukuService.INSTALL_MANY) { p ->
+                    p.writeInt(parts.size)
+                    parts.zip(fds).forEach { (file, fd) -> p.writeLong(file.length()); fd.writeToParcel(p, 0) }
+                }
+            } finally { fds.forEach { runCatching { it.close() } } }
+        }
     }
 
     suspend fun uninstall(ctx: Context, pkg: String) = call(ctx, DhizukuService.UNINSTALL) { it.writeString(pkg) }
@@ -84,6 +95,7 @@ class DhizukuService(private val ctx: Context) : Binder() {
     companion object {
         const val DESCRIPTOR = "com.orion.store.DhizukuService"
         const val INSTALL = FIRST_CALL_TRANSACTION + 10
+        const val INSTALL_MANY = FIRST_CALL_TRANSACTION + 12
         const val UNINSTALL = FIRST_CALL_TRANSACTION + 11
         private const val ACTION = "com.orion.store.DHIZUKU_RESULT"
     }
@@ -92,21 +104,27 @@ class DhizukuService(private val ctx: Context) : Binder() {
     override fun getInterfaceDescriptor() = DESCRIPTOR
 
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
-        if (code != INSTALL && code != UNINSTALL) return code in FIRST_CALL_TRANSACTION + 1..FIRST_CALL_TRANSACTION + 2 || super.onTransact(code, data, reply, flags)
+        if (code != INSTALL && code != INSTALL_MANY && code != UNINSTALL) return code in FIRST_CALL_TRANSACTION + 1..FIRST_CALL_TRANSACTION + 2 || super.onTransact(code, data, reply, flags)
         data.enforceInterface(DESCRIPTOR)
         val (status, msg) = runCatching {
             val pi = ctx.packageManager.packageInstaller
-            if (code == INSTALL) {
-                val size = data.readLong(); val fd = ParcelFileDescriptor.CREATOR.createFromParcel(data)
+            if (code == UNINSTALL) {
+                val pkg = data.readString().orEmpty(); result { pi.uninstall(pkg, it) }
+            } else {
+                val files = if (code == INSTALL) listOf(data.readLong() to ParcelFileDescriptor.CREATOR.createFromParcel(data))
+                else List(data.readInt()) { data.readLong() to ParcelFileDescriptor.CREATOR.createFromParcel(data) }
                 val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-                    setSize(size); if (Build.VERSION.SDK_INT >= 31) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+                    setSize(files.sumOf { it.first }); if (Build.VERSION.SDK_INT >= 31) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
                 }
                 val id = pi.createSession(params)
                 result { sender -> pi.openSession(id).use { s ->
-                    s.openWrite("base.apk", 0, size).use { out -> FileInputStream(fd.fileDescriptor).use { it.copyTo(out) }; s.fsync(out) }
-                    fd.close(); s.commit(sender)
+                    files.forEachIndexed { i, (size, fd) ->
+                        s.openWrite(if (i == 0) "base.apk" else "split$i.apk", 0, size).use { out -> FileInputStream(fd.fileDescriptor).use { it.copyTo(out) }; s.fsync(out) }
+                        fd.close()
+                    }
+                    s.commit(sender)
                 } }
-            } else { val pkg = data.readString().orEmpty(); result { pi.uninstall(pkg, it) } }
+            }
         }.getOrElse { PackageInstaller.STATUS_FAILURE to (it.message ?: it.toString()) }
         reply?.writeInt(status); reply?.writeString(msg)
         return true

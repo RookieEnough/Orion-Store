@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -57,7 +58,7 @@ private val CHAPTERS = listOf(
         Feature(Sym.StarRate, "Most popular and Hidden gems", "Two charts after the bundles rank apps by their GitHub stars: the most starred, and the least starred ones worth a look. Stars come with the catalog, so they cost no GitHub requests."),
         Feature(Sym.Layers, "App bundles", "Curated folders of apps that belong together. Open one to see every app, add or remove apps and install them one by one."),
         Feature(Sym.LibraryAdd, "Your own bundles", "Build a bundle in three steps: pick apps, give it a name, color and icon, then keep it local or submit it for everyone.", { open(Overlay.CUSTOM_BUNDLE) }),
-        Feature(Sym.AutoAwesome, "Orion AI", "Tap the star and describe what you need, like a free music app. Use your own Gemini, ChatGPT or Claude key, or a model that runs on the phone. Drag the star anywhere.", { open(Overlay.AI) }),
+        Feature(Sym.AutoAwesome, "Orion AI", "Tap the star and describe what you need, like a free music app. Use your own Gemini, ChatGPT or Claude key, or a model that runs on the phone. Import a LiteRT model from this phone, or paste a Hugging Face link to one. Drag the star anywhere.", { open(Overlay.AI) }),
         Feature(Sym.Search, "Search", "The search pill at the top finds apps by name, developer, category or description, and forgives accents and typos in spacing."),
         Feature(Sym.SwapVert, "Sort and filter", "Sort by newest, oldest, name or size, and narrow the list to a single category with the filter buttons."),
         Feature(Sym.Favorite, "Favorites", "Long-press any card, swipe a classic row, or tap the heart on an app page. The heart filter shows only your favorites."),
@@ -67,7 +68,7 @@ private val CHAPTERS = listOf(
         Feature(Sym.Campaign, "Announcements", "News from the Orion team drops from a megaphone next to Settings in the header. It pulses until you tap Got it, then leaves until a new announcement arrives. The last one stays readable from the megaphone at the top of Settings. It pulses until you have read it."),
         Feature(Sym.AutoFixHigh, "Pull to refresh characters", "Pull down to reload the catalog with a pixel cat, dog, owl, ghost and friends, or an expressive shape. Pick yours in Orion Xtra.", settings("installer")),
         Feature(Sym.KeyboardArrowUp, "Back to top", "A floating arrow appears once you scroll far down. One tap and you are back at the top."),
-        Feature(Sym.AddCircleOutline, "Submit an app", "Suggest an app from GitHub, GitLab or Codeberg. Orion detects its name, package, description and category, accepts Obtainium exports and opens a ready GitHub issue.", { open(Overlay.SUBMISSION) }),
+        Feature(Sym.AddCircleOutline, "Submit an app", "Suggest an app from GitHub, GitLab or Codeberg. Orion detects its name, package, description, category, icon and screenshots (from store metadata or the README), accepts Obtainium exports and opens a ready GitHub issue.", { open(Overlay.SUBMISSION) }),
     )),
     Chapter("page", "App Pages", "Everything about one app, and every way to get it.", Sym.Info, Color(0xFF0EA5E9), MaterialShapes.Sunny, listOf(
         Feature(Sym.Download, "One-tap install", "Download, install, update or open an app from its page. Progress wraps the icon while it downloads."),
@@ -75,6 +76,8 @@ private val CHAPTERS = listOf(
         Feature(Sym.History, "Versions and channels", "Pick Stable, Beta, Alpha or Nightly per app, or choose an exact older version. Install a Beta or Nightly and its updates follow that channel, so it no longer shows the Stable build as an update."),
         Feature(Sym.Memory, "Right build for your phone", "Orion picks the APK that matches your phone's processor, and lets you choose another architecture yourself."),
         Feature(Sym.Star, "GitHub stars", "Apps hosted on GitHub show their star count right under the developer name."),
+        Feature(Sym.AccountTree, "Forks", "When an app's repo is a fork, Source and safety names the original project and its stars, one tap away."),
+        Feature(Sym.Science, "Inspect package", "Tap Inspect in the stats row to see trackers, permissions, libraries, compatibility and the signature before you install. When Orion has to download the build to read it, that same file stays, so Install uses it instead of downloading again.", settings("installer")),
         Feature(Sym.Info, "App info", "Developer, size, package name and source, folded away until you want them."),
         Feature(Sym.NewReleases, "What's new", "The release notes of the version you would download, folded into one row below About. The row shows right away and the notes load in the background, also when an update is waiting."),
         Feature(Sym.Extension, "Patches", "Modded builds list every patch applied to them in one folding row."),
@@ -94,7 +97,7 @@ private val CHAPTERS = listOf(
     Chapter("library", "My Apps and Downloads", "Your library, your queue and updates that look after themselves.", Sym.GridView, Color(0xFF22C55E), MaterialShapes.Clover4Leaf, listOf(
         Feature(Sym.Inventory2, "Library", "Every app you have downloaded or installed through Orion, filtered by All, Installed, Downloaded and Updates, with its own search.", { navTo(Tab.MYAPPS) }),
         Feature(Sym.Delete, "Uninstall several apps", "Long-press an installed app in My Apps to start picking, tap more (or All), then Uninstall. Silent with root, Shizuku or Dhizuku, one system prompt each otherwise."),
-        Feature(Sym.Downloading, "Download queue", "Active downloads, ready installs and pending updates in one place, with Update all when installs can run silently.", settings("queue")),
+        Feature(Sym.Downloading, "Download queue", "Active downloads, ready installs and pending updates in a compact sheet over whatever you are doing, with Install all or Update all. While something downloads, a progress ring in the header opens it.", settings("queue")),
         Feature(Sym.Notifications, "Background downloads", "Downloads keep going when you leave Orion, with live progress in your notifications and a tap to install when they finish."),
         Feature(Sym.Autorenew, "Auto-update", "Orion checks for updates every few hours, even when closed and after a reboot, and downloads them for you.", settings("network")),
         Feature(Sym.SystemUpdate, "Install automatically", "Let Orion install the updates it downloads, whether it is open or closed. Anything that cannot finish is reported the next time you open the app.", settings("network")),
@@ -102,10 +105,24 @@ private val CHAPTERS = listOf(
         Feature(Sym.Wifi, "Wi-Fi only", "Keep downloads off mobile data.", settings("network")),
         Feature(Sym.CleaningServices, "Janitor", "Leftover APKs are cleaned a week after install, or right away with Auto-cleanup on. A pill offers a one-tap clean when files pile up.", settings("storage")),
     )),
+    Chapter("orbit", "Orbit", "Any app, straight from its source, installed and updated by Orion.", Sym.Orbit, Color(0xFF14B8A6), MaterialShapes.Cookie9Sided, listOf(
+        Feature(Sym.AddLink, "Add any app by link", "Paste a GitHub, GitLab, Codeberg, SourceHut, F-Droid, IzzyOnDroid, Uptodown, APKMirror, APKPure, Aptoide, itch.io, Farsroid, LiteAPKs, APK4Free, CoolApk, SourceForge, Jenkins, Telegram or Discord link, a direct APK, XAPK or APKM link, or any web page that offers them. Orion reads its name, icon, description, screenshots and releases.", { navTo(Tab.ORBIT) }),
+        Feature(Sym.WarningAmber, "Not for Orbit", "ReVanced apps and Metrolist are not allowed in Orbit, because Orbit can't maintain them. Follow Morphe instead of ReVanced, and ArchiveTune or BiTChord instead of Metrolist.", { navTo(Tab.ORBIT) }),
+        Feature(Sym.VisibilityOff, "Hide Orbit", "The first time you open Orbit, you can hide it if you only want Orion's own apps. Turn it back on under Settings, Interface, Navigation tabs."),
+        Feature(Sym.SystemUpdate, "One-tap install and update", "Orbit apps install, update and auto-update like store apps, with every install route Orion has: root, Shizuku, Dhizuku and wireless debugging.", { navTo(Tab.ORBIT) }),
+        Feature(Sym.History, "Any version", "Every recent release of an Orbit app shows in its version picker, so going back to an older build is one tap."),
+        Feature(Sym.Tune, "Fine-tune", "Pick which APK counts with a file name filter, include pre-releases, read the version out of the tag with a pattern, and set the icon and screenshots yourself."),
+        Feature(Sym.Key, "Source tokens", "Tokens on the Orbit tab let GitHub, GitLab and Codeberg answer private repos and skip the public rate limit. Each field links to the page that creates that token. The GitHub token is the same one in Developer tools, so a token you already saved is used.", { navTo(Tab.ORBIT) }),
+        Feature(Sym.Sell, "Tags", "Give an Orbit app tags in Fine-tune. All, Sources, Tags and the i button sit in one row. Sources and Tags open a box where you can pick more than one, then tap Done. The i button lists every link Orbit can read.", { navTo(Tab.ORBIT) }),
+        Feature(Sym.TravelExplore, "Discover", "The Obtainium apps directory lives inside Orbit: search hundreds of ready-made configs and add one in a tap.", { navTo(Tab.ORBIT) }),
+        Feature(Sym.FileDownload, "Obtainium import and export", "Bring your Obtainium export file, JSON or obtainium:// links over, and take your Orbit back out in Obtainium's format. Add to Obtainium links open in Orion too."),
+        Feature(Sym.Publish, "Share with the Orion library", "Long-press an Orbit app and share it: it opens a ready submission so everyone can find the app, and it counts as a contribution with XP. After every five apps you add, Orion asks again. That reminder stays until you tap Share one or Later."),
+        Feature(Sym.NotificationsOff, "Pause updates", "Hold an Orbit app on the version it has from its long-press menu."),
+    )),
     Chapter("install", "Installing, Your Way", "From one-tap installs to fully silent updates.", Sym.InstallMobile, Color(0xFFF97316), MaterialShapes.Gem, listOf(
         Feature(Sym.Android, "Choose your installer", "Use the system installer, pick one every time, or always hand APKs to a specific installer app.", settings("installer")),
         Feature(Sym.Speed, "Skip the 24-hour wait", "Built-in wireless debugging installs apps instantly as the shell user, set up once with a few guided steps. Orion turns Wireless debugging back on by itself when it is off.", settings("installer")),
-        Feature(Sym.InstallMobile, "Install any APK", "Orion is an APK installer too: open an APK in your file manager or browser and pick Install with Orion, or use Install an APK file in Settings. A sheet shows the app, its version and what is installed, can scan the file with your VirusTotal key, and installs through root, Shizuku, Dhizuku or wireless debugging, skipping the 24-hour wait.", settings("installer")),
+        Feature(Sym.InstallMobile, "Install any APK", "Orion is an installer too: open an APK, XAPK, APKM, APKS or a zip of APKs in your file manager or browser and pick Install with Orion, or use Install an APK file in Settings. A bundle is opened by the APKs inside it, even when the file itself is not an APK. A sheet shows the app, its version and what is installed, can scan the file with your VirusTotal key, and installs through root, Shizuku, Dhizuku or wireless debugging, skipping the 24-hour wait. Split bundles keep only the pieces that match this phone.", settings("installer")),
         Feature(Sym.Science, "Inside this APK", "The APK installer sheet reads the file before it installs: the framework it was built with (Flutter, React Native, Unity, Compose and more), its processor support and whether it runs on this phone, 16 KB page readiness, trackers found in its code, permissions with the ones an update adds marked New, components, SDK levels, native libraries, where the size goes and the signing key. Tap the card for the full page. Everything is read offline.", settings("installer")),
         Feature(Sym.Tune, "Options on the APK sheet", "Beyond install has its own switch on the APK installer sheet, through root, Shizuku or wireless debugging. Switches the APK needs, like Allow downgrade for an older version or Bypass target SDK block for an old app, are picked for you and marked Needed.", settings("installer")),
         Feature(Sym.Shield, "Sideloading protection", "When Android switches on its developer verification component, which can slow down or block sideloaded apps, Orion offers Secure me: one tap turns it off through root, Shizuku or wireless debugging. Without any of those, the popup walks you through the wireless debugging setup and comes back to finish. Orion checks the phone afterwards and tells you exactly why if Android refused.", settings("installer")),
@@ -135,6 +152,7 @@ private val CHAPTERS = listOf(
         Feature(Sym.FontDownload, "Fonts", "Eleven built-in fonts, or import your own TTF, OTF or WOFF2 file.", settings("visuals")),
         Feature(Sym.Compress, "Compact mode", "Smaller tiles, slimmer rows and an extra column, so more fits on every screen.", settings("visuals")),
         Feature(Sym.BlurOn, "Glass dock", "A floating, slightly translucent navigation dock that slides away while you scroll down.", settings("visuals")),
+        Feature(Sym.ViewQuilt, "Big screen navigation", "On tablets, foldables, TVs and wide split screens, keep the side rail or move the dock to the bottom or top. Phones always keep the dock at the bottom.", settings("visuals")),
         Feature(Sym.ViewAgenda, "Dock styles", "Pill, Classic, Icons, Labeled, Expressive and Shape shift. Expressive and Shape shift unlock with Fuel the Code ads.", settings("visuals")),
         Feature(Sym.Palette, "App icons", "Six launcher icons beyond the classic one. Neon and Gold unlock with Fuel the Code ads: tap one, then every ad you watch counts toward it.", settings("visuals")),
         Feature(Sym.OpenInFull, "Dock size", "Scale the dock between compact and large with a live preview. It starts compact.", settings("visuals")),
@@ -216,9 +234,10 @@ fun KnowOrionScreen(vm: MainViewModel, onClose: () -> Unit) {
     }
     val floating by remember { derivedStateOf { list.firstVisibleItemIndex >= 3 } }
     LaunchedEffect(current) { if (current >= 0) { if (floating) chips.animateScrollToItem(current) else chips.requestScrollToItem(current) } }
-    Box(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize().background(cs.surface).readableWidth(), list, contentPadding = WindowInsets.navigationBars.asPaddingValues()) {
-        item("hero") { GuideHero(total) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val gutter = readableGutter(maxWidth)
+        LazyColumn(Modifier.fillMaxSize().background(cs.surface), list, contentPadding = PaddingValues(start = gutter, end = gutter, bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())) {
+        item("hero") { Box(Modifier.bleed(gutter)) { GuideHero(total, gutter) } }
         item("search") { GuideSearch(query) { query = it } }
         item("chips") { ChapterChips(shown, -1, rememberLazyListState(), ::jump) }
         if (shown.isEmpty()) item("empty") { EmptyState(Sym.SearchOff, "Nothing matches “$query”", "Try a shorter word, like backup or theme.") }
@@ -244,9 +263,9 @@ fun KnowOrionScreen(vm: MainViewModel, onClose: () -> Unit) {
     androidx.compose.animation.AnimatedVisibility(floating, Modifier.align(Alignment.TopCenter).windowInsetsPadding(GuideTop).padding(horizontal = 12.dp, vertical = 8.dp),
         enter = androidx.compose.animation.slideInVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) { -it } + androidx.compose.animation.fadeIn(),
         exit = androidx.compose.animation.slideOutVertically { -it } + androidx.compose.animation.fadeOut()) {
-        Surface(shape = RoundedCornerShape(32.dp), color = cs.surfaceContainerHigh, shadowElevation = 6.dp) {
+        Surface(Modifier.widthIn(max = 840.dp), shape = RoundedCornerShape(32.dp), color = cs.surfaceContainerHigh, shadowElevation = 6.dp) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton({ scope.launch { list.animateScrollToItem(0) } }, Modifier.padding(start = 4.dp)) { Icon(Sym.KeyboardArrowUp, "Back to top") }
+                IconButton({ scope.launch { list.toTop() } }, Modifier.padding(start = 4.dp)) { Icon(Sym.KeyboardArrowUp, "Back to top") }
                 ChapterChips(shown, current, chips, ::jump, start = 0.dp)
             }
         }
@@ -263,13 +282,13 @@ private fun ChapterChips(shown: List<Chapter>, current: Int, state: androidx.com
 private val HERO_SHAPES = listOf(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny, MaterialShapes.Clover4Leaf, MaterialShapes.Gem, MaterialShapes.Flower, MaterialShapes.SoftBurst)
 
 @Composable
-private fun GuideHero(total: Int) {
+private fun GuideHero(total: Int, gutter: Dp) {
     val cs = MaterialTheme.colorScheme; val still = LocalS.current.calm
     var shape by remember { mutableIntStateOf(0) }
     LaunchedEffect(still) { if (!still) while (true) { delay(2600); shape++ } }
-    Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(cs.primaryContainer, cs.surface)))) {
+    Box(Modifier.fillMaxWidth().clipToBounds().background(Brush.verticalGradient(listOf(cs.primaryContainer, cs.surface)))) {
         Turning(MaterialShapes.Cookie12Sided, cs.primary.copy(.08f), 280.dp, Modifier.align(Alignment.TopEnd).offset(90.dp, (-40).dp), 50_000)
-        Column(Modifier.windowInsetsPadding(GuideTop).padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 12.dp)) {
+        Column(Modifier.windowInsetsPadding(GuideTop).padding(horizontal = 20.dp + gutter).padding(top = 8.dp, bottom = 12.dp)) {
             MorphBlob(HERO_SHAPES, shape, 104.dp, cs.primary, Modifier.padding(top = 12.dp)) {
                 Icon(painterResource(com.orion.store.R.drawable.ic_splash_logo), null, Modifier.size(72.dp), tint = cs.onPrimary)
             }

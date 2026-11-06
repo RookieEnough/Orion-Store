@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -28,6 +30,7 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.orion.store.data.*
+import kotlinx.coroutines.launch
 
 private val Sky = Color(0xFF0EA5E9)
 private fun filterIcon(f: MyAppsFilter) = when (f) {
@@ -49,12 +52,18 @@ private fun tone(r: MyAppRow): Pair<ImageVector, Color> = when {
 @Composable
 fun MyAppsTab(vm: MainViewModel, padding: PaddingValues) {
     val s = LocalS.current; val d = LocalD.current
-    var filter by rememberSaveable { mutableStateOf(MyAppsFilter.ALL) }; val query = vm.libraryQuery
+    val filters = myAppsFilterOrder(s.myAppsFilters)
+    var savedFilter by rememberSaveable { mutableStateOf(MyAppsFilter.ALL.name) }
+    val pager = rememberPagerState(initialPage = filters.indexOfFirst { it.name == savedFilter }.coerceAtLeast(0)) { filters.size }
+    val pageFilter = filters.getOrElse(pager.currentPage) { filters.first() }
+    LaunchedEffect(pager.currentPage, filters) { savedFilter = pageFilter.name }
+    val scope = rememberCoroutineScope()
+    val query = vm.libraryQuery
     var unmanagedOpen by rememberSaveable { mutableStateOf(false) }
     val updateIds = vm.updates.map { it.id }.toSet()
     val rows = remember(d, s, updateIds) { buildMyAppsRows(vm.allApps(), s, d, updateIds) }
     val pending = rows.filter { it.hasUpdate && it.status != "downloading" }
-    val visible = rows.filter { it.matches(filter) && it.matchesQuery(query) }
+    val visible = rows.filter { it.matches(pageFilter) && it.matchesQuery(query) }
     val queue = d.activeDownloads.size + d.readyToInstall.size
     val cs = MaterialTheme.colorScheme
     // Long-press an installed app to start picking, tap more to add them, then uninstall them together
@@ -62,76 +71,79 @@ fun MyAppsTab(vm: MainViewModel, padding: PaddingValues) {
     val removable = visible.filter { it.isInstalledNow && it.app.installsHere() }
     LaunchedEffect(rows) { picked = picked.filterTo(mutableSetOf()) { id -> rows.any { it.app.id == id && it.isInstalledNow } } }
     androidx.activity.compose.BackHandler(picked.isNotEmpty()) { picked = emptySet() }
-    LazyColumn(Modifier.fillMaxSize().readableWidth(), contentPadding = padding) {
-        item("header") { Header(vm) }
-        item {
+    Column(Modifier.fillMaxSize().readableWidth()) {
+        Column(Modifier.padding(top = padding.calculateTopPadding())) {
+            Header(vm)
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 FilledTonalButton({ vm.haptic(H.SELECTION); vm.openSettings("queue") }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) {
                     Icon(Sym.Downloading, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Queue")
                     if (queue > 0) { Spacer(Modifier.width(6.dp)); Badge { Text("$queue") } }
                 }
                 VerticalDivider(Modifier.height(28.dp).padding(horizontal = 4.dp), color = cs.outlineVariant)
-                FilterPills(vm, s.myAppsFilters) { f -> Choice(filter == f, "${f.label} · ${rows.count { it.matches(f) }}", filterIcon(f)) { filter = f } }
+                FilterPills(vm, s.myAppsFilters) { f -> Choice(pageFilter == f, "${f.label} · ${rows.count { it.matches(f) }}", filterIcon(f)) {
+                    scope.launch { pager.animateScrollToPage(filters.indexOf(f).coerceAtLeast(0)) }
+                } }
             }
         }
-        if (picked.isNotEmpty()) stickyHeader("picked") {
-            Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RoundedCornerShape(28.dp), color = cs.secondaryContainer, contentColor = cs.onSecondaryContainer, shadowElevation = 2.dp) {
-                Row(Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton({ picked = emptySet(); vm.haptic(H.LIGHT) }) { Icon(Sym.Close, "Stop selecting") }
-                    Text("${picked.size} selected", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    if (picked.size < removable.size) TextButton({ picked = removable.map { it.app.id }.toSet(); vm.haptic(H.SELECTION) }) { Text("All") }
-                    Button({ vm.uninstallManyAsk = rows.filter { it.app.id in picked }.map { it.app }; picked = emptySet() }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) {
-                        Icon(Sym.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Uninstall")
+        if (picked.isNotEmpty()) Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RoundedCornerShape(28.dp), color = cs.secondaryContainer, contentColor = cs.onSecondaryContainer, shadowElevation = 2.dp) {
+            Row(Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton({ picked = emptySet(); vm.haptic(H.LIGHT) }) { Icon(Sym.Close, "Stop selecting") }
+                Text("${picked.size} selected", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                if (picked.size < removable.size) TextButton({ picked = removable.map { it.app.id }.toSet(); vm.haptic(H.SELECTION) }) { Text("All") }
+                Button({ vm.uninstallManyAsk = rows.filter { it.app.id in picked }.map { it.app }; picked = emptySet() }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) {
+                    Icon(Sym.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Uninstall")
+                }
+            }
+        }
+        HorizontalPager(pager, Modifier.weight(1f)) { page ->
+            val filter = filters[page]
+            val shown = rows.filter { it.matches(filter) && it.matchesQuery(query) }
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = padding.calculateBottomPadding())) {
+                if (filter == MyAppsFilter.UPDATES && pending.isNotEmpty()) item {
+                    CtaButton("Update all (${pending.size})", { vm.haptic(H.MEDIUM); pending.forEach { vm.download(it.app) } }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), Sym.SystemUpdate)
+                }
+                if (vm.loading) item("loading") { StoreSkeleton(false) }
+                else if (shown.isEmpty()) item {
+                    if (query.isNotBlank()) Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Sym.SearchOff, null, Modifier.size(48.dp), tint = cs.onSurfaceVariant)
+                        Text("No apps matching “$query”", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleMedium)
+                        TextButton({ vm.libraryQuery = "" }) { Text("Clear search") }
+                    } else EmptyState(filterIcon(filter), EMPTY.getValue(filter), if (filter == MyAppsFilter.ALL) "Apps you download from Orion show up here. Swipe sideways for the other lists." else "Swipe sideways for the other lists.", Modifier.padding(top = 32.dp))
+                }
+                itemsIndexed(shown, key = { _, it -> it.app.id }) { i, r ->
+                    val can = r.isInstalledNow && r.app.installsHere()
+                    LibraryRow(vm, r, Modifier.animateItem().reveal(i), if (picked.isEmpty()) null else (r.app.id in picked),
+                        onPick = if (!can) null else ({ vm.haptic(H.SELECTION); picked = if (r.app.id in picked) picked - r.app.id else picked + r.app.id }))
+                }
+                val now = System.currentTimeMillis(); val lookup = vm.lookup
+                val ignored = if (filter == MyAppsFilter.ALL || filter == MyAppsFilter.UPDATES)
+                    s.ignoredUpdates.keys.mapNotNull { id -> lookup[id]?.takeIf { isManaged(id, s) && isUpdateIgnored(it, s, now) } } else emptyList()
+                if (ignored.isNotEmpty()) item("ignored-title") {
+                    Text("Ignored updates · ${ignored.size}", Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 8.dp), style = MaterialTheme.typography.titleMediumEmphasized)
+                }
+                itemsIndexed(ignored, key = { _, a -> "ignored-${a.id}" }) { i, a ->
+                    val ig = s.ignoredUpdates[a.id]
+                    val until = when (ig?.type) {
+                        "week" -> ((ONE_WEEK_MS - (now - (ig.timestamp ?: now))) / 86_400_000L + 1).coerceIn(1, 7).let { "Hidden for $it more day${if (it == 1L) "" else "s"}" }
+                        "version" -> "Hidden until the next version"; else -> "Hidden for good"
+                    }
+                    SideRow(a, i, ignored.size, until, "Unignore") { vm.set { it.copy(ignoredUpdates = it.ignoredUpdates - a.id) } }
+                }
+                if (filter == MyAppsFilter.ALL || filter == MyAppsFilter.INSTALLED) {
+                    val off = vm.allApps().filter { !isManaged(it.id, s) && (it.id in s.installedVersions || s.appManage[it.id] == false) }
+                    if (off.isNotEmpty()) item("unmanaged-title") {
+                        val open = unmanagedOpen
+                        Row(Modifier.fillMaxWidth().padding(top = 16.dp).clickable { vm.haptic(H.SELECTION); unmanagedOpen = !open }.padding(start = 24.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("Not managed · ${off.size}", Modifier.weight(1f), style = MaterialTheme.typography.titleMediumEmphasized)
+                            Icon(if (open) Sym.ExpandLess else Sym.ExpandMore, if (open) "Collapse" else "Expand", tint = cs.onSurfaceVariant)
+                        }
+                    }
+                    if (unmanagedOpen) itemsIndexed(off, key = { _, a -> "unmanaged-${a.id}" }) { i, a ->
+                        val why = if (s.appManage[a.id] == false) "Hidden by you" else otherStore(a.id, s)?.let { "Installed by ${vm.tracker.labelOf(it)}" } ?: "Not managed"
+                        SideRow(a, i, off.size, why, "Manage") { vm.set { it.withManaged(a.id, true) } }
                     }
                 }
-            }
-        }
-        if (filter == MyAppsFilter.UPDATES && pending.isNotEmpty()) item {
-            CtaButton("Update all (${pending.size})", { vm.haptic(H.MEDIUM); pending.forEach { vm.download(it.app) } }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), Sym.SystemUpdate)
-        }
-        if (vm.loading) item("loading") { StoreSkeleton(false) }
-        else if (visible.isEmpty()) item {
-            if (query.isNotBlank()) Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Sym.SearchOff, null, Modifier.size(48.dp), tint = cs.onSurfaceVariant)
-                Text("No apps matching “$query”", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleMedium)
-                TextButton({ vm.libraryQuery = "" }) { Text("Clear search") }
-            } else EmptyState(filterIcon(filter), EMPTY.getValue(filter), if (filter == MyAppsFilter.ALL) "Apps you download from Orion show up here." else null, Modifier.padding(top = 32.dp))
-        }
-        itemsIndexed(visible, key = { _, it -> it.app.id }) { i, r ->
-            val can = r.isInstalledNow && r.app.installsHere()
-            LibraryRow(vm, r, Modifier.animateItem().reveal(i), if (picked.isEmpty()) null else (r.app.id in picked),
-                onPick = if (!can) null else ({ vm.haptic(H.SELECTION); picked = if (r.app.id in picked) picked - r.app.id else picked + r.app.id }))
-        }
-        // Ignored updates: listed with a one-tap undo, under All and Updates where a missing update would be noticed
-        val now = System.currentTimeMillis(); val lookup = vm.lookup
-        val ignored = if (filter == MyAppsFilter.ALL || filter == MyAppsFilter.UPDATES)
-            s.ignoredUpdates.keys.mapNotNull { id -> lookup[id]?.takeIf { isManaged(id, s) && isUpdateIgnored(it, s, now) } } else emptyList()
-        if (ignored.isNotEmpty()) item("ignored-title") {
-            Text("Ignored updates · ${ignored.size}", Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 8.dp), style = MaterialTheme.typography.titleMediumEmphasized)
-        }
-        // Segmented items draw their own rounded container, so the corners come out the same on every GPU instead of depending on clip support
-        itemsIndexed(ignored, key = { _, a -> "ignored-${a.id}" }) { i, a ->
-            val ig = s.ignoredUpdates[a.id]
-            val until = when (ig?.type) {
-                "week" -> ((ONE_WEEK_MS - (now - (ig.timestamp ?: now))) / 86_400_000L + 1).coerceIn(1, 7).let { "Hidden for $it more day${if (it == 1L) "" else "s"}" }
-                "version" -> "Hidden until the next version"; else -> "Hidden for good"
-            }
-            SideRow(a, i, ignored.size, until, "Unignore") { vm.set { it.copy(ignoredUpdates = it.ignoredUpdates - a.id) } }
-        }
-        // Not managed: hidden by the user or by the other-stores filter. Collapsed, so they stay out of the way.
-        if (filter == MyAppsFilter.ALL || filter == MyAppsFilter.INSTALLED) {
-            val off = vm.allApps().filter { !isManaged(it.id, s) && (it.id in s.installedVersions || s.appManage[it.id] == false) }
-            if (off.isNotEmpty()) item("unmanaged-title") {
-                val open = unmanagedOpen
-                Row(Modifier.fillMaxWidth().padding(top = 16.dp).clickable { vm.haptic(H.SELECTION); unmanagedOpen = !open }.padding(start = 24.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Text("Not managed · ${off.size}", Modifier.weight(1f), style = MaterialTheme.typography.titleMediumEmphasized)
-                    Icon(if (open) Sym.ExpandLess else Sym.ExpandMore, if (open) "Collapse" else "Expand", tint = cs.onSurfaceVariant)
-                }
-            }
-            if (unmanagedOpen) itemsIndexed(off, key = { _, a -> "unmanaged-${a.id}" }) { i, a ->
-                val why = if (s.appManage[a.id] == false) "Hidden by you" else otherStore(a.id, s)?.let { "Installed by ${vm.tracker.labelOf(it)}" } ?: "Not managed"
-                SideRow(a, i, off.size, why, "Manage") { vm.set { it.withManaged(a.id, true) } }
             }
         }
     }

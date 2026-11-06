@@ -157,8 +157,26 @@ private fun Modifier.sharedIcon(key: String?, visible: Boolean): Modifier {
     return with(sc) { this@sharedIcon.sharedElementWithCallerManagedVisibility(rememberSharedContentState(key), visible) }
 }
 
+/** Material window width classes, from the window Orion actually has (a split screen half counts as its own size, not the device's). */
+enum class WidthClass { COMPACT, MEDIUM, EXPANDED; val wide get() = this != COMPACT }
+fun widthClassOf(w: Dp) = when { w < 600.dp -> WidthClass.COMPACT; w < 840.dp -> WidthClass.MEDIUM; else -> WidthClass.EXPANDED }
+/** Provided once at the root and read by every screen, so layouts follow the window and never ask which device they are on. */
+val LocalWidthClass = compositionLocalOf { WidthClass.COMPACT }
+
+/** Centres a single column (cards, forms, banners) and stops it at [max], so on medium and expanded windows it never stretches
+ *  into a ribbon. On phones the cap is wider than the screen, so nothing changes. */
+fun Modifier.adaptiveContentWidth(max: Dp = 840.dp) = fillMaxWidth().wrapContentWidth().widthIn(max = max).fillMaxWidth()
+
 /** Tablets and landscape: centre the page in a readable column instead of stretching rows across the whole screen. No-op on phones. */
-fun Modifier.readableWidth() = wrapContentWidth().widthIn(max = 840.dp)
+fun Modifier.readableWidth() = adaptiveContentWidth()
+
+/** Back to the top of a long list briskly: far down, it jumps close to the top first, so the animation covers a few rows instead of crawling past hundreds. */
+suspend fun androidx.compose.foundation.lazy.grid.LazyGridState.toTop() { if (firstVisibleItemIndex > 15) scrollToItem(5); animateScrollToItem(0) }
+suspend fun androidx.compose.foundation.lazy.LazyListState.toTop() { if (firstVisibleItemIndex > 15) scrollToItem(5); animateScrollToItem(0) }
+
+/** For a full-width list: the side padding that keeps its rows in the same readable column. A tinted hero row then wears
+ *  [bleed] with the same gutter so its color runs edge to edge while its text stays in the column. */
+fun readableGutter(width: Dp) = ((width - 840.dp) / 2).coerceAtLeast(0.dp)
 
 /** Squash-on-press with an expressive spatial spring, plus ripple, clipped to [shape]. */
 @Composable
@@ -333,7 +351,7 @@ fun OrionSheet(onDismiss: () -> Unit, dismissible: Boolean = true, content: @Com
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { it != SheetValue.Hidden || canHide }); val scope = rememberCoroutineScope()
     val dismiss by rememberUpdatedState(onDismiss)
     val close: () -> Unit = remember { { scope.launch { state.hide() }.invokeOnCompletion { dismiss() } } }
-    ModalBottomSheet(onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+    ModalBottomSheet(onDismiss, sheetState = state, sheetMaxWidth = 640.dp, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         // A sheet is its own window: shared elements can't measure across windows ("layouts are not part of the same hierarchy")
         CompositionLocalProvider(LocalSheetClose provides close, LocalShared provides null) { content() }
     }
