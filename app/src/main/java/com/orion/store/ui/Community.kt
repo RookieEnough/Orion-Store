@@ -77,6 +77,7 @@ import com.unity3d.ads.IUnityAdsShowListener
 import com.unity3d.ads.UnityAds
 import com.unity3d.ads.UnityAdsShowOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -956,38 +957,19 @@ private fun BundleCard(title: String, desc: String, icon: String, stops: List<Co
 // ---------------- App submission ----------------
 
 private const val KEYWORD_HELP = "1. Tap 'Check Releases Page' below.\n2. Go to the 'Assets' section of the latest version.\n3. Look at the APK filename.\n4. Copy a unique word from it.\n\nEXAMPLE:\nFile: \"app-release-arm64.apk\"\nKeyword: \"app-release\"\n\nIf the file is just \"app.apk\", simply use \"apk\"."
-private val pretty = Json { prettyPrint = true; @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class) prettyPrintIndent = "  " }
+internal val pretty = Json { prettyPrint = true; @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class) prettyPrintIndent = "  " }
 
 private data class SubDraft(
     val mode: String, val json: String = "", val shots: List<String> = emptyList(), val oIcon: String = "", val oKeyword: String = "", val oDesc: String = "",
     val manualKeyword: Boolean = false, val name: String = "", val description: String = "", val icon: String = "", val repoUrl: String = "", val keyword: String = "apk",
     val packageName: String = "", val category: String = "Utility", val manualCategory: Boolean = false, val topics: List<String> = emptyList(), val author: String = "", val downloadUrl: String = "",
     val autoName: String = "", val autoDesc: String = "", val autoPkg: String = "", val autoStatus: String = "idle", val autoMsg: String = "",
+    val autoIcon: String = "", val autoShots: List<String> = emptyList(),
 )
 
 // Note: draft lives for the process like the web's sessionStorage; persist to disk if users lose long drafts to process death.
 private var draft: SubDraft? = null
 
-private data class Detected(val name: String?, val description: String?, val packageName: String?, val author: String?, val topics: List<String> = emptyList())
-
-private suspend fun detectRepo(src: RepoSource, token: String): Detected {
-    val h = if (src.provider == "github" && token.isNotEmpty()) mapOf("Authorization" to "Bearer $token") else emptyMap()
-    val api = when (src.provider) {
-        "github" -> "https://api.github.com/repos/${src.owner}/${src.repo}"
-        "gitlab" -> "https://${src.domain}/api/v4/projects/${enc(src.repoPath)}"
-        else -> "https://codeberg.org/api/v1/repos/${src.owner}/${src.repo}"
-    }
-    val info = json.parseToJsonElement(Net.text(api, h)).jsonObject
-    val desc = info["description"]?.jsonPrimitive?.contentOrNull.orEmpty(); val branch = info["default_branch"]?.jsonPrimitive?.contentOrNull ?: "main"
-    val raw = when (src.provider) {
-        "github" -> "https://raw.githubusercontent.com/${src.owner}/${src.repo}/$branch"
-        "gitlab" -> "https://${src.domain}/${src.repoPath}/-/raw/$branch"
-        else -> "https://codeberg.org/${src.owner}/${src.repo}/raw/branch/$branch"
-    }
-    val pkg = ANDROID_META_PATHS.firstNotNullOfOrNull { p -> runCatching { Net.text("$raw/$p", h) }.getOrNull()?.let(::extractPackageName) }
-    val topics = (info["topics"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
-    return Detected(humanizeRepoName(src.repo), desc.ifEmpty { null }, pkg, src.owner.ifEmpty { null }, topics)
-}
 
 private fun autofillMessage(d: Detected) = when {
     d.name != null && d.packageName != null && d.description != null -> "App name, package name, and description detected automatically."
@@ -996,7 +978,8 @@ private fun autofillMessage(d: Detected) = when {
     d.name != null -> "App name detected. Orion still needs Android metadata."
     d.description != null -> "Description detected. Package name still needs confirmation."
     else -> "Repo found, but Orion could not detect Android metadata."
-}
+} + listOfNotNull("the icon".takeIf { d.icon != null }, d.shots.size.takeIf { it > 0 }?.let { if (it == 1) "1 screenshot" else "$it screenshots" })
+    .takeIf { it.isNotEmpty() }?.let { " Found ${it.joinToString(" and ")} too, check they fit." }.orEmpty()
 
 @Composable
 fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
@@ -1015,9 +998,9 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
     LaunchedEffect(source) {
         val src = source ?: run { lastKey = ""; f = f.copy(autoStatus = "idle", autoMsg = ""); return@LaunchedEffect }
         val key = "${src.provider}:${src.domain.orEmpty()}:${src.repoPath}"; if (key == lastKey) return@LaunchedEffect
-        f = f.copy(autoStatus = "loading", autoMsg = "Detecting description and package name from the repo...")
+        f = f.copy(autoStatus = "loading", autoMsg = "Detecting description, package name, icon and screenshots from the repo...")
         delay(650)
-        runCatching { detectRepo(src, s.githubToken) }.onSuccess { d ->
+        runCatching { detectRepo(src, s.orbitTokens()) }.onSuccess { d ->
             lastKey = key
             val p = f
             f = p.copy(
@@ -1025,8 +1008,12 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
                 name = if (d.name != null && (p.name.isEmpty() || p.name == p.autoName)) d.name else p.name,
                 description = if (d.description != null && (p.description.isEmpty() || p.description == p.autoDesc)) d.description else p.description,
                 packageName = if (d.packageName != null && (p.packageName.isEmpty() || p.packageName == p.autoPkg)) d.packageName else p.packageName,
+                // Fetched art only fills what the user hasn't set, and follows the repo while the field still holds the last fetch
+                icon = if (d.icon != null && (p.icon.isEmpty() || p.icon == p.autoIcon)) d.icon else p.icon,
+                shots = if (d.shots.isNotEmpty() && (p.shots.isEmpty() || p.shots == p.autoShots)) d.shots else p.shots,
+                autoIcon = d.icon ?: p.autoIcon, autoShots = d.shots.ifEmpty { p.autoShots },
                 topics = d.topics, autoName = d.name ?: p.autoName, autoDesc = d.description ?: p.autoDesc, autoPkg = d.packageName ?: p.autoPkg,
-                autoStatus = if (d.packageName != null || d.description != null) "success" else "error", autoMsg = autofillMessage(d))
+                autoStatus = if (d.packageName != null || d.description != null || d.icon != null || d.shots.isNotEmpty()) "success" else "error", autoMsg = autofillMessage(d))
         }.onFailure { f = f.copy(autoStatus = "error", autoMsg = "Could not auto-detect repo metadata right now.") }
     }
     // Category follows the name, description and repo topics, learned from how the catalog files its apps, until the user picks one

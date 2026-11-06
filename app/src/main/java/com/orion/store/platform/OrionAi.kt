@@ -41,6 +41,14 @@ object OrionAi {
     /** Cloud models get every catalog name (a few tokens each, same text every turn so providers cache it) and draw on what they
      *  know about those apps. On-device models have a small context, so they only see each message's local matches. */
     fun system(tv: Boolean, catalog: List<AppItem>, guide: List<Pair<String, String>>, full: Boolean) = buildString {
+        if (!full) {
+            append("You are Orion AI in Orion Store. Reply in the user's language, plain text, under 70 words. ")
+            append("Recommend only apps from Catalog matches, with the number in brackets like Metrolist [12]. Suggest 3 apps. ")
+            append("For how-to questions, use the Orion guide lines and mention the guide number like Palette maker [g12]. ")
+            append("Do not invent apps or numbers. Skip apps already on this phone unless asked. ")
+            append(if (tv) "Prefer TV apps." else "Prefer Android apps.")
+            return@buildString
+        }
         append("""You are Orion AI inside Orion Store, a free and open source Android app store with no ads. Help people find apps from the Orion catalog.
 - Mention every app you recommend with its catalog number in square brackets, like Metrolist [12]. For app requests suggest 3 to 5 apps, best first, a few words on each.
 - Recommend only apps ${if (full) "in the catalog below. \"Catalog matches\" in a message adds details for likely ones" else "from \"Catalog matches\" in the latest message"}. Never invent apps or numbers. If nothing fits, say so and suggest how to ask.

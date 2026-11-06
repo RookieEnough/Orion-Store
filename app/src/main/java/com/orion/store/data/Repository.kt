@@ -14,7 +14,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import okhttp3.Cache
 import okhttp3.CacheControl
+import okhttp3.Cookie
+import okhttp3.CookieJar
 import okhttp3.Dns
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -64,6 +67,34 @@ object Net {
             .apply { cacheDir?.let { cache(Cache(it, 64L * 1024 * 1024)) } }.build()
     }
 
+    const val BROWSER_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+
+    private val cookies = object : CookieJar {
+        private val box = java.util.concurrent.ConcurrentHashMap<String, List<Cookie>>()
+        override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+            cookies.forEach { c ->
+                val key = c.domain.removePrefix(".")
+                box[key] = (box[key].orEmpty().filter { it.name != c.name || it.path != c.path } + c)
+            }
+        }
+        // A cookie set on itch.io has to be sent to user.itch.io too
+        override fun loadForRequest(url: HttpUrl) = box.values.flatten().filter { it.matches(url) }
+    }
+
+    /** Pages and files outside GitHub. The 8 second catalog client times out on F-Droid and gets blocked, as okhttp, by Uptodown and APKMirror. */
+    val browser: OkHttpClient by lazy {
+        client.newBuilder().callTimeout(30, TimeUnit.SECONDS).connectTimeout(15, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS).cookieJar(cookies)
+            .addInterceptor { chain ->
+                val req = chain.request(); val b = req.newBuilder()
+                if (req.header("User-Agent") == null) b.header("User-Agent", BROWSER_UA)
+                if (req.header("Accept") == null) b.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                if (req.header("Accept-Language") == null) b.header("Accept-Language", "en-US,en;q=0.9")
+                chain.proceed(b.build())
+            }.build()
+    }
+
+    data class Page(val url: String, val code: Int, val type: String, val body: String)
+
     suspend fun text(url: String, headers: Map<String, String> = emptyMap(), noStore: Boolean = false, c: OkHttpClient = client): String = withContext(Dispatchers.IO) {
         val rb = Request.Builder().url(url); headers.forEach(rb::header); if (noStore) rb.header("Cache-Control", "no-store")
         c.newCall(rb.build()).execute().use { r -> val b = r.body.string(); if (!r.isSuccessful) throw HttpError(r.code, b); b }
@@ -83,6 +114,35 @@ object Net {
         runCatching {
             client.newBuilder().callTimeout(timeoutMs, TimeUnit.MILLISECONDS).build().newCall(Request.Builder().url(url).head().build()).execute().use { it.code in 200..399 }
         }.getOrDefault(false)
+    }
+
+    suspend fun postForm(url: String, body: String, headers: Map<String, String> = emptyMap(), c: OkHttpClient = browser): Pair<Int, String> = withContext(Dispatchers.IO) {
+        val rb = Request.Builder().url(url).post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType())); headers.forEach(rb::header)
+        c.newCall(rb.build()).execute().use { it.code to it.body.string() }
+    }
+
+    /** Follows redirects. Binary responses come back with an empty body so a download link is not pulled into memory. */
+    suspend fun open(url: String, headers: Map<String, String> = emptyMap(), c: OkHttpClient = browser): Page = withContext(Dispatchers.IO) {
+        val rb = Request.Builder().url(url); headers.forEach(rb::header)
+        c.newCall(rb.build()).execute().use { r ->
+            val type = r.header("Content-Type").orEmpty()
+            val binary = r.isSuccessful && listOf("html", "text", "json", "xml", "javascript").none { it in type }
+            Page(r.request.url.toString(), r.code, type, if (binary) "" else r.body.string())
+        }
+    }
+
+    /** Bytes in the file. A one-byte range answers Content-Length: 1 for the single byte, so the full size is the
+     *  number after the slash in Content-Range. Anything under 2 KB is not an APK and is ignored. */
+    suspend fun length(url: String): Long? = withContext(Dispatchers.IO) {
+        fun len(r: okhttp3.Response): Long? {
+            val total = r.header("Content-Range")?.let { Regex("""/(\d+)\s*$""").find(it)?.groupValues?.get(1)?.toLongOrNull() }?.takeIf { it > 0 }
+            val cl = r.header("Content-Length")?.toLongOrNull()?.takeIf { it > 0 }
+            return if (r.code == 206) total else total?.takeIf { cl == null || it >= cl } ?: cl
+        }
+        val head = runCatching { browser.newCall(Request.Builder().url(url).head().build()).execute().use { r -> if (r.isSuccessful) len(r) else null } }.getOrNull()
+        if (head != null && head >= 2048) return@withContext head
+        val ranged = runCatching { browser.newCall(Request.Builder().url(url).header("Range", "bytes=0-0").build()).execute().use { r -> if (r.code == 200 || r.code == 206) len(r) else null } }.getOrNull()
+        listOfNotNull(head, ranged).filter { it >= 2048 }.maxOrNull()
     }
 }
 
@@ -192,10 +252,41 @@ private val notesCache = java.util.concurrent.ConcurrentHashMap<String, String>(
 
 /** [tag]'s release notes for [app], cleaned for display and kept for the session (GitHub allows 60 anonymous calls an hour).
  *  Empty when the release has none, null when they could not be fetched. */
+/** The project a repo was forked from: owner/name, its page and its stars when the host says. */
+data class ForkInfo(val parent: String, val url: String, val stars: Int?)
+
+private val forkCache = java.util.concurrent.ConcurrentHashMap<String, ForkInfo>()
+private val NOT_A_FORK = ForkInfo("", "", null)
+
+/** Asks the repo's host whether it is a fork (GitHub, GitLab and Codeberg all say so in their repo endpoint). Remembered for the
+ *  session, a "not a fork" answer too, so reopening a page costs nothing. Null when it isn't a fork or the host didn't answer. */
+suspend fun fetchForkOf(app: AppItem, githubToken: String): ForkInfo? {
+    val r = appRepo(app) ?: return null
+    val (url, host) = when (r.provider) {
+        "github" -> "https://api.github.com/repos/${r.repoPath}" to "https://github.com"
+        "gitlab" -> "https://${r.domain}/api/v4/projects/${java.net.URLEncoder.encode(r.repoPath, "UTF-8")}" to "https://${r.domain}"
+        else -> "https://codeberg.org/api/v1/repos/${r.repoPath}" to "https://codeberg.org"
+    }
+    forkCache[url]?.let { return it.takeIf { it !== NOT_A_FORK } }
+    val h = if (r.provider == "github" && githubToken.isNotEmpty()) mapOf("Authorization" to "Bearer $githubToken") else emptyMap()
+    val body = runCatching { if (r.provider == "gitlab") GitlabPace.text(url, h) else Net.text(url, h) }.getOrNull() ?: return null
+    val o = runCatching { json.parseToJsonElement(body) as kotlinx.serialization.json.JsonObject }.getOrNull() ?: return null
+    fun kotlinx.serialization.json.JsonObject.s(k: String) = (get(k) as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+    fun kotlinx.serialization.json.JsonObject.n(k: String) = (get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull()
+    val p = (o[if (r.provider == "gitlab") "forked_from_project" else "parent"] as? kotlinx.serialization.json.JsonObject)
+    val info = p?.let {
+        val name = it.s("full_name") ?: it.s("path_with_namespace") ?: return@let null
+        ForkInfo(name, it.s("html_url") ?: it.s("web_url") ?: "$host/$name", it.n("stargazers_count") ?: it.n("stars_count") ?: it.n("star_count"))
+    }
+    forkCache[url] = info ?: NOT_A_FORK
+    return info
+}
+
 suspend fun fetchReleaseNotes(app: AppItem, tag: String, githubToken: String): String? {
     val (url, field) = releaseNotesApi(app, tag) ?: return null
     notesCache[url]?.let { return it }
     val h = if ("api.github.com" in url && githubToken.isNotEmpty()) mapOf("Authorization" to "Bearer $githubToken") else emptyMap()
-    return runCatching { cleanNotes(CatalogProcessor.str((json.parseToJsonElement(Net.text(url, h)) as kotlinx.serialization.json.JsonObject)[field]).orEmpty()) }
-        .getOrNull()?.also { notesCache[url] = it }
+    val raw = if ("gitlab" in url) runCatching { GitlabPace.text(url, h) }.getOrNull() else runCatching { Net.text(url, h) }.getOrNull()
+    return raw?.let { runCatching { cleanNotes(CatalogProcessor.str((json.parseToJsonElement(it) as kotlinx.serialization.json.JsonObject)[field]).orEmpty()) }.getOrNull() }
+        ?.also { notesCache[url] = it }
 }

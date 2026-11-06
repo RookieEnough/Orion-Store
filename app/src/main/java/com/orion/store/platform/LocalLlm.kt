@@ -61,7 +61,7 @@ object LocalLlm {
         return ok
     }
 
-    fun model(id: String) = MODELS.firstOrNull { it.id == id }
+    fun model(id: String) = MODELS.firstOrNull { it.id == id } ?: added().firstOrNull { it.id == id }
     /** LiteRT-LM ships for 64-bit ARM only. */
     val supported get() = "arm64-v8a" in Build.SUPPORTED_ABIS
     fun ramGb(ctx: Context) = ActivityManager.MemoryInfo().also { ctx.getSystemService(ActivityManager::class.java).getMemoryInfo(it) }.totalMem.let { (it / 1e9).roundToInt() }
@@ -74,6 +74,37 @@ object LocalLlm {
     fun download(ctx: Context, m: Model) { if (!engineReady(ctx)) downloadEngine(); Downloads.start(m.url, m.fileName) }
     fun cancel(m: Model) { runCatching { Downloads.cancel(m.fileName) } }
     fun delete(m: Model) { if (loaded == m.id) close(); file(m)?.delete(); Downloads.forget(m.fileName) }
+
+    /** Models the user imported or fetched from a Hugging Face link. Built-in ones keep their own ids. */
+    fun added(): List<Model> {
+        val known = MODELS.map { it.fileName }.toSet()
+        return runCatching { Downloads.dir().listFiles()?.toList() }.getOrNull().orEmpty()
+            .filter { it.isFile && it.name.startsWith("orion-llm-") && it.name.endsWith(".litertlm") && it.name !in known && it.length() > 0 }
+            .map { f ->
+                val base = f.name.removePrefix("orion-llm-")
+                Model("x:$base", base.removeSuffix(".litertlm"), "", base, (f.length() / 1_000_000L).toInt().coerceAtLeast(1), 0, "Added by you")
+            }
+    }
+
+    private fun litertName(raw: String) = raw.substringBefore('?').substringAfterLast('/').substringAfterLast("%2F")
+        .takeIf { it.endsWith(".litertlm") && it.none { c -> c == '\\' } }
+
+    /** Copies a .litertlm the user picked. Returns its id. */
+    fun import(ctx: Context, displayName: String, input: java.io.InputStream): String {
+        val base = litertName(displayName) ?: throw AiError("Choose a .litertlm file. GGUF models such as MiniCPM use another engine and will not run here.")
+        if (!engineReady(ctx)) downloadEngine()
+        val out = File(Downloads.dir(), "orion-llm-$base")
+        input.use { i -> out.outputStream().use { i.copyTo(it) } }
+        return "x:$base"
+    }
+
+    /** A Hugging Face file link. blob links are turned into the download link. */
+    fun downloadLink(ctx: Context, url: String) {
+        val clean = url.trim().replace("/blob/", "/resolve/")
+        val base = litertName(clean) ?: throw AiError("Paste a Hugging Face link that ends in .litertlm.")
+        if (!engineReady(ctx)) downloadEngine()
+        Downloads.start(if ("download=" in clean) clean else "$clean?download=true", "orion-llm-$base")
+    }
 
     private val lock = Mutex()
     private var engine: Engine? = null; private var loaded: String? = null
@@ -91,7 +122,7 @@ object LocalLlm {
             }
             val e = engine?.takeIf { loaded == m.id } ?: run {
                 close()
-                runCatching { Engine(EngineConfig(modelPath = f.path, backend = Backend.CPU(), maxNumTokens = 2048, cacheDir = ctx.cacheDir.path)).apply { initialize() } }
+                runCatching { Engine(EngineConfig(modelPath = f.path, backend = Backend.CPU(), maxNumTokens = 768, cacheDir = ctx.cacheDir.path)).apply { initialize() } }
                     .getOrElse { throw AiError("This phone could not load ${m.name}. Try a smaller model.") }
                     .also { engine = it; loaded = m.id }
             }

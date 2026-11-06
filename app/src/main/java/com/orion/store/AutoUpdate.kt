@@ -91,7 +91,12 @@ object AutoUpdate {
             val r = repo.loadCatalog(s, false); val m = r.mirror.orEmpty()
             if (r.failed || m.isEmpty()) null else CatalogProcessor.process(r.rawApps, m) + Store.data.value.importedApps.map { CatalogProcessor.processItem(it, m) }
         }.getOrNull()
-        fresh?.takeIf { it.isNotEmpty() } ?: (repo.cached()?.apps.orEmpty() + Store.data.value.importedApps)
+        val base = fresh?.takeIf { it.isNotEmpty() } ?: (repo.cached()?.apps.orEmpty() + Store.data.value.importedApps)
+        // Orbit apps are checked at their own sources on the same pass, keeping anything the user edited meanwhile
+        val now = System.currentTimeMillis()
+        val orbit = runCatching { Orbit.refreshAll(Store.data.value.orbit, s.orbitTokens(), now) }.getOrNull()?.associateBy { it.id }
+        if (orbit != null) Store.data.update { st -> st.copy(orbit = st.orbit.map { cur -> orbit[cur.id]?.let { f -> cur.copy(versions = f.versions, checkedAt = f.checkedAt, error = f.error) } ?: cur }) }
+        base + Store.data.value.orbit.filter { !it.paused }.map { it.toItem() }
     }
 
     /** One app: download (or reuse a finished download), verify, install. Null = nothing worth reporting (download-only mode). */
@@ -151,15 +156,18 @@ object AutoUpdate {
 
     /** PackageInstaller session that asks for no user action. Android allows it for apps Orion installed (Android 12+). */
     private suspend fun sessionInstall(ctx: Context, f: File, pkg: String): Pair<Int, String?> = withContext(Dispatchers.IO) {
+        val parts = com.orion.store.platform.Bundles.parts(ctx, f).ifEmpty { listOf(f) }
         val pi = ctx.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-            setAppPackageName(pkg); setSize(f.length()); setInstallReason(PackageManager.INSTALL_REASON_USER)
+            setAppPackageName(pkg); setSize(parts.sumOf { it.length() }); setInstallReason(PackageManager.INSTALL_REASON_USER)
             if (Build.VERSION.SDK_INT >= 31) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
         val id = pi.createSession(params); val done = CompletableDeferred<Pair<Int, String?>>(); sessions[id] = done
         try {
             pi.openSession(id).use { session ->
-                session.openWrite("base.apk", 0, f.length()).use { out -> f.inputStream().use { it.copyTo(out) }; session.fsync(out) }
+                parts.forEachIndexed { i, part ->
+                    session.openWrite(if (i == 0) "base.apk" else "split$i.apk", 0, part.length()).use { out -> part.inputStream().use { it.copyTo(out) }; session.fsync(out) }
+                }
                 val i = Intent(ctx, InstallReceiver::class.java).setPackage(ctx.packageName)
                 session.commit(PendingIntent.getBroadcast(ctx, id, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE).intentSender)
             }
@@ -171,6 +179,7 @@ object AutoUpdate {
 
     /** Session results. A pending confirmation is abandoned: the file stays ready, and the user installs it with one tap from the notification. */
     fun onInstallResult(ctx: Context, i: Intent) {
+        if (com.orion.store.platform.SessionInstall.onResult(ctx, i)) return
         val id = i.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
         val status = i.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) runCatching { ctx.packageManager.packageInstaller.abandonSession(id) }

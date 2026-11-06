@@ -16,6 +16,9 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -26,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.Brush
@@ -87,8 +91,12 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     val fallback = app.latestVersion == "Unknown" || app.version == "View on GitHub"
     val hasTarget = (app.downloadUrl.isNotEmpty() && app.downloadUrl != "#") || app.variants.isNotEmpty() || app.availableVersions.isNotEmpty()
     val unavailable = ready == null && cleanup == null && !installed && !hasTarget && app.latestVersion == "Latest" && app.size == "Varies"
-    val lower = app.downloadUrl.lowercase()
-    val external = (lower.startsWith("http://") || lower.startsWith("https://")) && listOf(".apk", ".exe", ".zip", ".dmg").none(lower::endsWith) && "github.com" !in lower
+    val path = app.downloadUrl.lowercase().substringBefore('?').substringBefore('#')
+    val packaged = listOf(".apk", ".apks", ".xapk", ".apkm", ".zip", ".exe", ".dmg").any(path::endsWith)
+    val directHost = listOf("uptodown.com", "winudf.com", "apkpure.com", "apkmirror.com", "itch.io", "itch.zone").any { it in path }
+    // A known source already resolved a file. The link itself often does not end in .apk (APKMirror's download page is one of those).
+    val tracked = Orbit.owns(app.id) || app.repoUrl?.takeIf { it.isNotBlank() && it != "#" }?.let { Orbit.sourceOf(it) != OrbitSource.WEB } == true
+    val external = !tracked && !directHost && (path.startsWith("http://") || path.startsWith("https://")) && !packaged && "github.com" !in path
     val domain = if (external) runCatching { app.downloadUrl.toUri().host!!.replace("www.", "") }.getOrDefault("Source") else "External Source"
     val fav = app.id in d.favorites
 
@@ -143,9 +151,19 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     val notesTag = if (app.patches.isNotEmpty() || listOf(app.name, app.author, app.repoUrl, app.githubRepo, app.gitlabRepo).any { "morphe" in it.orEmpty().lowercase() }) "" else shown?.tag.orEmpty()
     // Fetched as the page opens, not when the row scrolls in; null while loading, NOTES_FAILED when the call failed
     val notes by produceState<String?>(null, app.id, notesTag) { value = if (notesTag.isEmpty()) null else fetchReleaseNotes(app, notesTag, s.githubToken) ?: NOTES_FAILED }
+    // Asked of the repo's host once per session: a fork shows where it came from
+    val fork by produceState<ForkInfo?>(null, app.id) { value = fetchForkOf(app, s.githubToken) }
+    // Anything that ends up as an APK on this phone can be read first: a downloaded file, the installed copy, or the direct link
+    val directApk = remember(app) { inspectUrl(app) }
+    val canInspect = android && (ready != null || installed || (!external && !fallback && !unavailable && directApk != null))
+    var inspecting by remember { mutableStateOf(false) }
     val from = remember(app.id) { vm.openFrom }
-    val list = rememberLazyListState()
-    val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 } }
+    // Keyed by app: the page stays composed between apps, and a shared state opened the next app at the last one's scroll position
+    val list = rememberSaveable(app.id, saver = LazyListState.Saver) { LazyListState() }; val media = rememberSaveable(app.id, saver = LazyListState.Saver) { LazyListState() }
+    val scrolled by remember(list, media) { derivedStateOf { list.firstVisibleItemIndex > 0 || media.firstVisibleItemIndex > 0 } }
+    // Medium and expanded windows: the actions float as a card; expanded ones split the page into an info pane and a media pane
+    val wc = LocalWidthClass.current
+    val wide = wc.wide; val twoPane = wc == WidthClass.EXPANDED
     Scaffold(
         containerColor = cs.surface,
         topBar = {
@@ -155,12 +173,16 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     IconToggleButton(fav, { vm.haptic(H.HEAVY); vm.upd { it.toggleFavorite(app.id) } }) {
                         Icon(if (fav) Sym.Favorite else Sym.FavoriteBorder, "Favorite", tint = if (fav) cs.primary else LocalContentColor.current)
                     }
-                    IconButton({ vm.haptic(H.SELECTION); vm.tracker.share(app.name, "Check out ${app.name} on Orion Store!", Share.webLink(app.id)) }) { Icon(Sym.Share, "Share") }
+                    IconButton({ vm.haptic(H.SELECTION); vm.tracker.share(app.name, "Check out ${app.name} on Orion Store!", if (Orbit.owns(app.id)) app.repoUrl.orEmpty() else Share.webLink(app.id)) }) { Icon(Sym.Share, "Share") }
                     Box {
                         IconButton({ more = true }) { Icon(Sym.MoreVert, "More options") }
                         DropdownMenu(more, { more = false }, shape = RoundedCornerShape(20.dp)) {
-                            DropdownMenuItem({ Text("Request app change") }, { more = false; vm.haptic(H.LIGHT); vm.changeRequest = true }, leadingIcon = { Icon(Sym.EditNote, null) })
-                            DropdownMenuItem({ Text("Report an issue") }, { more = false; vm.haptic(H.LIGHT); report() }, leadingIcon = { Icon(Sym.Flag, null) })
+                            // Orbit apps are the user's own, not the catalog's: no catalog corrections, and leaving Orbit is one tap
+                            if (Orbit.owns(app.id)) DropdownMenuItem({ Text("Remove from Orbit") }, { more = false; vm.orbitRemove(app.id); vm.selectedApp = null }, leadingIcon = { Icon(Sym.Orbit, null) })
+                            else {
+                                DropdownMenuItem({ Text("Request app change") }, { more = false; vm.haptic(H.LIGHT); vm.changeRequest = true }, leadingIcon = { Icon(Sym.EditNote, null) })
+                                DropdownMenuItem({ Text("Report an issue") }, { more = false; vm.haptic(H.LIGHT); report() }, leadingIcon = { Icon(Sym.Flag, null) })
+                            }
                             if (installed && android) DropdownMenuItem({ Text("Uninstall") }, { more = false; vm.uninstall(app) }, leadingIcon = { Icon(Sym.Delete, null) })
                             if (installed) {
                                 val managed = isManaged(app.id, s)
@@ -178,9 +200,12 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             )
         },
         bottomBar = {
-            Surface(color = cs.surfaceContainer, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
-                // Capped and centered: on tablets and landscape the actions would otherwise span the whole screen
-                Row(Modifier.fillMaxWidth().navigationBarsPadding().wrapContentWidth().widthIn(max = 560.dp).padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Phones: a sheet-like bar along the bottom edge. Tablets, foldables and TVs: a floating card the size of its buttons,
+            // so no full-width slab of color runs from one side of the screen to the other.
+            Box(Modifier.fillMaxWidth().then(if (wide) Modifier.navigationBarsPadding().padding(16.dp) else Modifier), contentAlignment = Alignment.Center) {
+            Surface(if (wide) Modifier.widthIn(max = 560.dp) else Modifier.fillMaxWidth(), color = if (wide) cs.surfaceContainerHigh else cs.surfaceContainer,
+                shape = if (wide) RoundedCornerShape(36.dp) else RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), shadowElevation = if (wide) 6.dp else 0.dp) {
+                Row(Modifier.fillMaxWidth().then(if (wide) Modifier.padding(10.dp) else Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp)), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val h = Modifier.heightIn(min = ButtonDefaults.MediumContainerHeight)
                     val side = Modifier.size(ButtonDefaults.MediumContainerHeight)
                     val big = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight)
@@ -241,13 +266,14 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     }
                 }
             }
+            }
         },
     ) { pad ->
-        LazyColumn(Modifier.fillMaxSize().readableWidth(), list, contentPadding = PaddingValues(bottom = pad.calculateBottomPadding() + 24.dp)) {
+        // Sections as list pieces, so phones stack them in one column and wide screens split them into two panes
+        fun LazyListScope.top() {
             item("head") {
-                val wash by animateColorAsState(iconColor(app)?.let { tonal(it).first } ?: cs.surfaceContainer, MaterialTheme.motionScheme.slowEffectsSpec(), label = "wash")
                 // The bar only holds actions on the right now, so the head tucks up right under it.
-                Row(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(wash, cs.surface))).padding(top = pad.calculateTopPadding())
+                Row(Modifier.fillMaxWidth().padding(top = pad.calculateTopPadding())
                     .padding(start = 20.dp, end = 20.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     AppIcon(app, 96.dp, state = true, from = from, target = true)
                     Spacer(Modifier.width(18.dp))
@@ -272,22 +298,37 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             }
             item("stats") {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth().height(IntrinsicSize.Min)) {
-                    @Composable fun Cell(value: @Composable () -> Unit, label: String) = Column(Modifier.weight(1f).padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) { value() }
-                        Text(label, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, maxLines = 1)
-                    }
+                    @Composable fun Cell(value: @Composable () -> Unit, label: String, labelColor: Color = cs.onSurfaceVariant, onClick: (() -> Unit)? = null) =
+                        Column(Modifier.weight(1f).then(if (onClick != null) Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = label, onClick = onClick) else Modifier)
+                            .padding(horizontal = 4.dp, vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) { value() }
+                            Text(label, style = MaterialTheme.typography.labelMedium, color = labelColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     val divider = @Composable { VerticalDivider(Modifier.padding(vertical = 8.dp), color = cs.outlineVariant) }
                     Cell({ Text(app.latestVersion.removePrefix("v"), style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis) }, "Version")
                     divider()
                     Cell({ Text(app.size, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1) }, "Size")
                     divider()
                     Cell({ Icon(when (app.platform) { Platform.ANDROID -> Sym.Android; Platform.TV -> Sym.Tv; else -> Sym.DesktopWindows }, null, Modifier.size(24.dp)) }, app.platform)
+                    // The package inspector, one tap from the stats: a tonal cookie that names what it found once it has looked
+                    if (canInspect) {
+                        divider()
+                        val r = InspectCache.reports[InspectCache.key(app)]
+                        Cell({
+                            Box(Modifier.size(28.dp).background(cs.secondaryContainer, MaterialShapes.Cookie6Sided.toShape()), contentAlignment = Alignment.Center) {
+                                Icon(Sym.Science, null, Modifier.size(16.dp), tint = cs.onSecondaryContainer)
+                            }
+                        }, r?.let { when (it.trackers.size) { 0 -> "No trackers"; 1 -> "1 tracker"; else -> "${it.trackers.size} trackers" } } ?: "Inspect", cs.primary) { vm.haptic(H.SELECTION); inspecting = true }
+                    }
                 }
             }
+        }
+        fun LazyListScope.media() {
             if (app.screenshots.isNotEmpty()) item("shots") {
                 val portrait = app.platform == Platform.ANDROID
+                // The wide pane has the room: screenshots grow instead of leaving the page half empty
                 LazyRow(Modifier.reveal(1).padding(top = 8.dp), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    itemsIndexed(app.screenshots) { i, u -> Shot(u, 320.dp, if (portrait) 340.dp else 200.dp, Modifier.reveal(i), portrait = portrait) { lightbox = i; vm.haptic(H.SELECTION) } }
+                    itemsIndexed(app.screenshots) { i, u -> Shot(u, if (twoPane) 520.dp else 320.dp, if (portrait) (if (twoPane) 460.dp else 340.dp) else (if (twoPane) 300.dp else 200.dp), Modifier.reveal(i), portrait = portrait) { lightbox = i; vm.haptic(H.SELECTION) } }
                 }
             }
             item("about") { Column(Modifier.reveal(2)) {
@@ -319,19 +360,31 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     }
                 }
             } }
+        }
+        fun LazyListScope.facts() {
             item("source") { Column(Modifier.reveal(4)) {
                 SectionTitle("Source & safety", Modifier.padding(top = 20.dp))
                 val repo = app.repoUrl?.takeIf { it.isNotBlank() && it != "#" }
-                val n = if (repo != null) 2 else 1
+                val f = fork
+                val n = 1 + (if (repo != null) 1 else 0) + (if (f != null) 1 else 0)
+                var at = 0
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                     repo?.let { r ->
                         val (mark, name, tint) = repoBrand(r)
-                        SegmentedListItem({ vm.haptic(H.SELECTION); vm.tracker.open(r) }, ListItemDefaults.segmentedShapes(0, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
+                        SegmentedListItem({ vm.haptic(H.SELECTION); vm.tracker.open(r) }, ListItemDefaults.segmentedShapes(at++, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
                             leadingContent = { Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { Icon(mark, null, Modifier.size(30.dp), tint = tint) } },
                             trailingContent = { Icon(Sym.OpenInNew, "Open $name") },
                             supportingContent = { Text(r.substringAfter("://").substringAfter('/').trimEnd('/'), maxLines = 1, overflow = TextOverflow.Ellipsis) }) { Text(name, style = MaterialTheme.typography.titleMedium) }
                     }
-                    SegmentedListItem({ vm.haptic(H.SELECTION); vm.vtTarget = app }, ListItemDefaults.segmentedShapes(n - 1, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
+                    // A fork names its upstream, right under its own repo
+                    f?.let {
+                        SegmentedListItem({ vm.haptic(H.SELECTION); vm.tracker.open(it.url) }, ListItemDefaults.segmentedShapes(at++, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
+                            leadingContent = { IconBox(Sym.AccountTree, cs.secondary) }, trailingContent = { Icon(Sym.OpenInNew, "Open the original project") },
+                            supportingContent = { Text(listOfNotNull(it.parent, it.stars?.let { n -> "${compactCount(n)} stars" }).joinToString(" · "), maxLines = 1, overflow = TextOverflow.Ellipsis) }) {
+                            Text("Forked from", style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                    SegmentedListItem({ vm.haptic(H.SELECTION); vm.vtTarget = app }, ListItemDefaults.segmentedShapes(at, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
                         leadingContent = { IconBox(Sym.Shield) }, trailingContent = { Icon(Sym.ChevronRight, null) },
                         supportingContent = { Text("Check the download against 70+ antivirus engines", maxLines = 1, overflow = TextOverflow.Ellipsis) }) { Text("Scan with VirusTotal", style = MaterialTheme.typography.titleMedium) }
                 }
@@ -363,12 +416,31 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                 }
             } }
         }
+        // The icon's color washes the top of the page from edge to edge, behind both panes, and scrolls away with the head
+        val wash by animateColorAsState(iconColor(app)?.let { tonal(it).first } ?: cs.surfaceContainer, MaterialTheme.motionScheme.slowEffectsSpec(), label = "wash")
+        val bottom = PaddingValues(bottom = pad.calculateBottomPadding() + 24.dp)
+        Box(Modifier.fillMaxSize()) {
+            // Height capped, so on big screens it stays a soft band instead of a billboard; it fades as either pane scrolls
+            Box(Modifier.fillMaxWidth().height(pad.calculateTopPadding() + 150.dp)
+                .graphicsLayer {
+                    fun gone(l: LazyListState) = if (l.firstVisibleItemIndex > 0) 1f else (l.firstVisibleItemScrollOffset / size.height).coerceIn(0f, 1f)
+                    val k = maxOf(gone(list), if (twoPane) gone(media) else 0f)
+                    if (twoPane) alpha = 1f - k else translationY = -k * size.height
+                }
+                .background(Brush.verticalGradient(listOf(wash, cs.surface))))
+            if (twoPane) Row(Modifier.fillMaxSize().wrapContentWidth().widthIn(max = 1280.dp)) {
+                LazyColumn(Modifier.fillMaxHeight().fillMaxWidth(.36f).widthIn(min = 340.dp, max = 460.dp), list, contentPadding = bottom) { top(); facts() }
+                LazyColumn(Modifier.weight(1f).fillMaxHeight(), media, contentPadding = PaddingValues(top = pad.calculateTopPadding(), bottom = bottom.calculateBottomPadding())) { media() }
+            } else LazyColumn(Modifier.fillMaxSize().readableWidth(), list, contentPadding = bottom) { top(); media(); facts() }
+        }
     }
 
     if (versions) OrionSheet({ versions = false }) {
         SheetTitle("Select version", Sym.History, "Choose your release channel")
-        Column(Modifier.navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
-            app.availableVersions.forEachIndexed { i, v ->
+        val versionCap = (app.availableVersions.size * 76).coerceAtMost((LocalConfiguration.current.screenHeightDp * 0.62f).toInt()).coerceAtLeast(88).dp
+        LazyColumn(Modifier.fillMaxWidth().height(versionCap).navigationBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+            items(app.availableVersions.size, key = { app.availableVersions[it].version + it }) { i ->
+                val v = app.availableVersions[i]
                 SegmentedListItem({ versions = false; target = v; proceed(v) }, ListItemDefaults.segmentedShapes(i, app.availableVersions.size), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh),
                     leadingContent = { IconBox(Sym.Layers, streamColor(v.type)) }, trailingContent = { Icon(Sym.ChevronRight, null) },
                     supportingContent = { Text(v.date) }) {
@@ -404,7 +476,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                 if (normalizeArch(raw) != Arch.Unknown) Tag("Your phone", cs.primary)
             }
         }
-        Column(Modifier.navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+        Column(Modifier.weight(1f, false).heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.5f).dp).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
             list2.forEachIndexed { i, (v, c) ->
                 val (compat, rec) = c
                 SegmentedListItem({ variants = false; action(v.url) }, ListItemDefaults.segmentedShapes(i, list2.size),
@@ -443,10 +515,12 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
         })
 
     if (shareSheet) ShareLinksSheet(vm, app) { shareSheet = false }
+    if (inspecting) InspectSheet(vm, app) { inspecting = false }
     lightbox?.let { Lightbox(app.screenshots, it) { lightbox = null } }
 }
 
 private const val NOTES_FAILED = "\u0000"
+
 
 /** The release notes of the version Download would fetch, folded into one row that shows at once; the notes fill in when they arrive. */
 @Composable

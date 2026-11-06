@@ -46,12 +46,20 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
+            android:resizeableActivity="true"
             tools:ignore="DiscouragedApi">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="orionstore" />
+            </intent-filter>
+            <!-- "Add to Obtainium" links (the apps directory, project READMEs) can open in Orion's Orbit -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="obtainium" android:host="app" />
             </intent-filter>
             <!-- Enables "App details in store" in system App info for apps Orion installed -->
             <intent-filter>
@@ -78,21 +86,83 @@
                 <data android:scheme="file" />
                 <data android:mimeType="application/vnd.android.package-archive" />
             </intent-filter>
-            <!-- File managers that send APKs as generic binaries -->
+            <!-- File managers send these as octet-stream or */*, and the filename lives in the content URI.
+                 A path is ignored unless a host is set. "*" matches every host, so the filename still counts. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" />
                 <data android:scheme="file" />
-                <data android:mimeType="application/octet-stream" />
                 <data android:host="*" />
-                <data android:pathPattern=".*\\.apk" />
-                <data android:pathPattern=".*\\..*\\.apk" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.xapk" />
+                <data android:pathPattern=".*\\..*\\.xapk" />
+                <data android:pathPattern=".*\\..*\\..*\\.xapk" />
+                <data android:pathPattern=".*\\.apkm" />
+                <data android:pathPattern=".*\\..*\\.apkm" />
+                <data android:pathPattern=".*\\..*\\..*\\.apkm" />
+                <data android:pathPattern=".*\\.apks" />
+                <data android:pathPattern=".*\\..*\\.apks" />
+                <data android:pathPattern=".*\\..*\\..*\\.apks" />
+                <data android:pathPattern=".*\\.zip" />
+                <data android:pathPattern=".*\\..*\\.zip" />
+                <data android:pathPattern=".*\\..*\\..*\\.zip" />
+                <data android:pathAdvancedPattern=".*\\.xapk" />
+                <data android:pathAdvancedPattern=".*\\.apkm" />
+                <data android:pathAdvancedPattern=".*\\.apks" />
+                <data android:pathAdvancedPattern=".*\\.zip" />
+                <data android:pathSuffix=".xapk" />
+                <data android:pathSuffix=".apkm" />
+                <data android:pathSuffix=".apks" />
+                <data android:pathSuffix=".zip" />
+            </intent-filter>
+            <!-- Same filenames when the file manager sends no type at all -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.xapk" />
+                <data android:pathPattern=".*\\..*\\.xapk" />
+                <data android:pathPattern=".*\\..*\\..*\\.xapk" />
+                <data android:pathPattern=".*\\.apkm" />
+                <data android:pathPattern=".*\\..*\\.apkm" />
+                <data android:pathPattern=".*\\..*\\..*\\.apkm" />
+                <data android:pathPattern=".*\\.apks" />
+                <data android:pathPattern=".*\\..*\\.apks" />
+                <data android:pathPattern=".*\\..*\\..*\\.apks" />
+                <data android:pathPattern=".*\\.zip" />
+                <data android:pathPattern=".*\\..*\\.zip" />
+                <data android:pathPattern=".*\\..*\\..*\\.zip" />
+                <data android:pathAdvancedPattern=".*\\.xapk" />
+                <data android:pathAdvancedPattern=".*\\.apkm" />
+                <data android:pathAdvancedPattern=".*\\.apks" />
+                <data android:pathAdvancedPattern=".*\\.zip" />
+                <data android:pathSuffix=".xapk" />
+                <data android:pathSuffix=".apkm" />
+                <data android:pathSuffix=".apks" />
+                <data android:pathSuffix=".zip" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/java-archive" />
+                <data android:mimeType="application/xapk" />
+                <data android:mimeType="application/vnd.apkm" />
+                <data android:mimeType="application/vnd.android.package-archive" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/vnd.android.package-archive" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/octet-stream" />
             </intent-filter>
         </activity>
         <!-- Launcher entries: the default keeps the old .MainActivity name so home screen icons survive updates; one alias is enabled at a time -->

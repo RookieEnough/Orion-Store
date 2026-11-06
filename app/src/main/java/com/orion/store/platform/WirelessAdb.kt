@@ -167,18 +167,21 @@ object WirelessAdb {
 
     /** [opts]: Beyond install picks; the shell user may pass every pm install switch, same as root and Shizuku. */
     suspend fun install(ctx: Context, f: File, opts: Collection<String>? = null) = withContext(Dispatchers.IO) {
-        val cmd = "pm install -r${opts?.let { com.orion.store.data.installArgs(it, Build.VERSION.SDK_INT, "") }.orEmpty()} -S ${f.length()}"
-        val pi = runCatching { ctx.packageManager.getPackageArchiveInfo(f.absolutePath, 0) }.getOrNull()
+        val parts = Bundles.parts(ctx, f)
+        if (parts.size > 1) { installMany(ctx, parts, opts); return@withContext }
+        val one = parts.firstOrNull() ?: f
+        val cmd = "pm install -r${opts?.let { com.orion.store.data.installArgs(it, Build.VERSION.SDK_INT, "") }.orEmpty()} -S ${one.length()}"
+        val pi = runCatching { ctx.packageManager.getPackageArchiveInfo(one.absolutePath, 0) }.getOrNull()
         val t0 = System.currentTimeMillis()
         connect(ctx)
         // adbd sometimes leaves the stream open after pm prints Success, so the reply never ends. The package itself says when it landed.
         val reply = CompletableDeferred<Result<String>>()
         scope.launch {
             reply.complete(runCatching {
-                try { exec(mgr(ctx), cmd, f) } catch (e: Exception) {
+                try { exec(mgr(ctx), cmd, one) } catch (e: Exception) {
                     if (reply.isCompleted) throw e
                     // Stale socket after a Wi-Fi drop or adbd restart: reconnect once
-                    runCatching { mgr(ctx).disconnect() }; connect(ctx); exec(mgr(ctx), cmd, f)
+                    runCatching { mgr(ctx).disconnect() }; connect(ctx); exec(mgr(ctx), cmd, one)
                 }
             })
         }
@@ -194,6 +197,24 @@ object WirelessAdb {
             reply.await().getOrThrow()
         } ?: if (landed()) "Success" else throw NativeError("Wireless debugging stopped answering. Try again.")
         if ("Success" !in out) throw NativeError(out.trim().ifEmpty { "INSTALL_FAILED" })
+    }
+
+    private suspend fun installMany(ctx: Context, files: List<File>, opts: Collection<String>?) {
+        connect(ctx)
+        val args = opts?.let { com.orion.store.data.installArgs(it, Build.VERSION.SDK_INT, "") }.orEmpty()
+        val created = exec(mgr(ctx), "pm install-create -r$args -S ${files.sumOf { it.length() }}")
+        val id = Regex("\\[(\\d+)]").find(created)?.groupValues?.get(1) ?: throw NativeError(created.trim().ifEmpty { "INSTALL_FAILED" })
+        try {
+            files.forEachIndexed { i, f ->
+                val wrote = exec(mgr(ctx), "pm install-write -S ${f.length()} $id ${if (i == 0) "base.apk" else "split$i.apk"} -", f)
+                if ("Failure" in wrote) throw NativeError(wrote.trim())
+            }
+            val done = exec(mgr(ctx), "pm install-commit $id")
+            if ("Success" !in done) throw NativeError(done.trim().ifEmpty { "INSTALL_FAILED" })
+        } catch (e: Exception) {
+            runCatching { exec(mgr(ctx), "pm install-abandon $id") }
+            throw e
+        }
     }
 
     /** Runs one shell command over ADB as the shell user, reconnecting once on a stale socket. A reply adbd never closes is cut off after [ms]. */

@@ -35,6 +35,29 @@ class LogicTest {
         assertEquals("Shell cannot change component state", Verifier.refusal("Error: Shell cannot change component state."))
     }
 
+    @Test fun verifierScope() {
+        val data = "Package [com.google.android.verifier]\n    codePath=/data/app/~~x/com.google.android.verifier-y"
+        val system = "Package [com.google.android.verifier]\n    codePath=/system/priv-app/Verifier"
+        val gone = "Unable to find package: com.google.android.verifier"
+        assertEquals(Verifier.Home.DATA, Verifier.home(data))
+        assertEquals(Verifier.Home.SYSTEM, Verifier.home(system))
+        assertEquals(Verifier.Home.NONE, Verifier.home(gone))
+        val dataSteps = Verifier.secureSteps(data, gone)
+        assertTrue(dataSteps.first().startsWith("cmd appops set ${Verifier.PKG}"))
+        assertTrue(dataSteps.contains(Verifier.DISABLE_CMD) && dataSteps.contains(Verifier.UNINSTALL_CMD))
+        assertTrue(Verifier.secureSteps(system, gone).none { it == Verifier.UNINSTALL_CMD })
+        val absent = Verifier.secureSteps(gone, gone)
+        assertTrue(absent.none { it.startsWith("pm ") || it.startsWith("cmd appops") })
+        assertEquals(3, absent.size)
+        (dataSteps + absent).forEach {
+            assertFalse(it.contains("adb shell"))
+            assertFalse(it.contains("safetycore"))
+            assertFalse(it.contains("set_sync_disabled"))
+        }
+        val files = Orbit.channelFiles("""<a href="https://cdn.example/files/App-1.2.apk">x</a>""")
+        assertEquals("App-1.2.apk", files.single().second)
+    }
+
     @Test fun apkFrameworksAndTrackers() {
         val flutter = listOf("lib/arm64-v8a/libflutter.so", "lib/arm64-v8a/libapp.so", "classes.dex")
         assertEquals(listOf("Flutter"), ApkInsights.frameworks(flutter, emptySet()))
@@ -261,5 +284,79 @@ class LogicTest {
         // No record: an exact catalog name still counts as that build
         assertFalse(hasAvailableUpdate(app, "20261020", "Beta"))
         assertTrue(hasAvailableUpdate(app, "1.4.0", "Stable"))
+    }
+
+    @Test fun readmeScreenshotsSkipBadgesAndResolvePaths() {
+        val md = """
+            <img src="fastlane/metadata/android/en-US/images/icon.png" alt="logo" width="96">
+            [![Build](https://github.com/o/r/actions/workflows/ci.yml/badge.svg)](x) ![Downloads](https://img.shields.io/github/downloads/o/r/total)
+            [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" height="80">](https://f-droid.org)
+            ![Home screen](./docs/home.png) ![](https://github.com/o/r/blob/main/art/settings.jpg)
+            <img src="docs/screenshot_player.webp">
+        """.trimIndent()
+        val raw = "https://raw.githubusercontent.com/o/r/main"
+        val imgs = readmeImages(md, raw)
+        assertEquals(listOf("$raw/docs/home.png", "$raw/docs/screenshot_player.webp", "$raw/art/settings.jpg"), pickScreenshots(imgs))
+        assertEquals("$raw/fastlane/metadata/android/en-US/images/icon.png", pickReadmeIcon(imgs))
+    }
+
+    @Test fun orbitReadsObtainiumAndSources() {
+        val extra = "{" + "\"apkFilterRegEx\": \"web-release\", \"includePrereleases\": true" + "}"
+        val export = kotlinx.serialization.json.buildJsonObject {
+            put("apps", kotlinx.serialization.json.JsonArray(listOf(kotlinx.serialization.json.buildJsonObject {
+                put("id", kotlinx.serialization.json.JsonPrimitive("app.organicmaps")); put("url", kotlinx.serialization.json.JsonPrimitive("https://github.com/organicmaps/organicmaps"))
+                put("name", kotlinx.serialization.json.JsonPrimitive("Organic Maps")); put("additionalSettings", kotlinx.serialization.json.JsonPrimitive(extra))
+            })))
+        }.toString()
+        val o = Orbit.parseImport(export, 0).single()
+        assertEquals("app.organicmaps", o.packageName); assertEquals("web-release", o.apkFilter); assertTrue(o.includePre)
+        val link = "obtainium://app/%7B%22id%22%3A%22com.example.app%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fexample%2Fapp%22%2C%22author%22%3A%22example%22%2C%22name%22%3A%22Example%22%7D"
+        assertEquals("https://github.com/example/app", Orbit.parseImport(link, 0).single().url)
+        assertEquals(OrbitSource.FDROID, Orbit.sourceOf("https://f-droid.org/en/packages/org.fossify.gallery/"))
+        assertEquals(OrbitSource.IZZY, Orbit.sourceOf("https://apt.izzysoft.de/fdroid/index/apk/com.foo.bar"))
+        assertEquals(OrbitSource.APK, Orbit.sourceOf("https://example.com/files/app-1.2.apk?x=1"))
+        assertEquals(OrbitSource.WEB, Orbit.sourceOf("https://example.com/download"))
+        assertEquals(OrbitSource.UPTODOWN, Orbit.sourceOf("https://facebook.en.uptodown.com/android"))
+        assertEquals(OrbitSource.APKMIRROR, Orbit.sourceOf("https://www.apkmirror.com/apk/google-inc/youtube/"))
+        assertEquals(OrbitSource.APK, Orbit.sourceOf("https://example.com/files/app.xapk"))
+        assertEquals(OrbitSource.APK, Orbit.sourceOf("https://example.com/files/app.apkm"))
+        assertEquals(OrbitSource.APKPURE, Orbit.sourceOf("https://apkpure.com/youtube/com.google.android.youtube"))
+        assertEquals("com.google.android.youtube", Orbit.apkPurePackage("https://apkpure.com/youtube/com.google.android.youtube"))
+        assertEquals(OrbitSource.APTOIDE, Orbit.sourceOf("https://youtube.en.aptoide.com/app"))
+        assertEquals(OrbitSource.SOURCEFORGE, Orbit.sourceOf("https://sourceforge.net/projects/example/files"))
+        assertEquals(OrbitSource.ITCH, Orbit.sourceOf("https://nkmusic.itch.io/bharat-apps-store"))
+        assertEquals(OrbitSource.FARSROID, Orbit.sourceOf("https://www.farsroid.com/example"))
+        assertEquals(OrbitSource.LITEAPKS, Orbit.sourceOf("https://liteapks.com/example"))
+        assertEquals(OrbitSource.APK4FREE, Orbit.sourceOf("https://apk4free.net/example"))
+        assertEquals(OrbitSource.COOLAPK, Orbit.sourceOf("https://www.coolapk.com/apk/com.example"))
+        assertEquals(OrbitSource.SOURCEHUT, Orbit.sourceOf("https://git.sr.ht/~user/app"))
+        val itch = """<div class="upload"><a data-upload_id="16053471" class="button download_btn">Download</a><strong title="Bharat_apps_store.apk" class="name">Bharat_apps_store.apk</strong> <span class="file_size"><span>31 MB</span></span></div>"""
+        val row = Orbit.itchUploads(itch).single()
+        assertEquals("Bharat_apps_store.apk", row.first)
+        assertEquals("16053471", row.second)
+        assertEquals(31L * (1L shl 20), row.third)
+        val mirror = """<span class="infoSlide-name">Version:</span><span class="infoSlide-value">1.9.44                    </span><span class="infoSlide-name">File size:</span><span class="infoSlide-value">31.94 MB</span>"""
+        assertEquals(Orbit.humanBytes("31.94 MB"), Orbit.apkMirrorVersionSizes(mirror)["1.9.44"])
+        assertEquals(Orbit.humanBytes("31.94 MB"), Orbit.apkMirrorSize(mirror))
+        assertEquals("Orbit can't maintain ReVanced apps. Follow Morphe instead.", Orbit.refused("https://github.com/revanced/revanced-manager"))
+        assertEquals("Orbit can't maintain Metrolist. Follow ArchiveTune or BiTChord instead.", Orbit.refused("https://github.com/mostafaalagamy/Metrolist", "Metrolist"))
+        assertEquals(null, Orbit.refused("https://github.com/MorpheApp/morphe", "Morphe"))
+        assertEquals(OrbitSource.JENKINS, Orbit.sourceOf("https://ci.example.com/job/myapp/"))
+        assertEquals(OrbitSource.TELEGRAM, Orbit.sourceOf("https://t.me/s/SomeChannel"))
+        assertEquals(OrbitSource.DISCORD, Orbit.sourceOf("https://discord.com/app"))
+        assertEquals(OrbitSource.DISCORD, Orbit.sourceOf("https://cdn.discordapp.com/attachments/1/2/app.apk"))
+        assertEquals(OrbitSource.FDROID, Orbit.sourceOf("https://mirror.example.org/packages/org.foo.bar"))
+        val bundle = Orbit.versionsOf(o.copy(apkFilter = ""), listOf(com.orion.store.data.CatalogProcessor.Release("1.4", "", false, "", listOf(Triple("app.xapk", "https://x/app.xapk", 9L), Triple("app.apkm", "https://x/app.apkm", 8L)))))
+        assertEquals(listOf("https://x/app.xapk", "https://x/app.apkm"), bundle.single().variants.map { it.url })
+        assertEquals(listOf("base.apk", "split_config.arm64_v8a.apk", "split_config.xxhdpi.apk"), com.orion.store.platform.Bundles.choose(
+            listOf("split_config.armeabi_v7a.apk", "split_config.arm64_v8a.apk", "split_config.hdpi.apk", "split_config.xxhdpi.apk", "base.apk"), listOf("arm64-v8a"), 480))
+        assertEquals(12L * (1L shl 20), Orbit.apkMirrorSize("File size: 12 MB"))
+        val tagged = Orbit.parseImport("""{"apps":[{"id":"com.foo","url":"https://github.com/a/b","name":"B","categories":["Tools"]}]}""", 0).single()
+        assertEquals(listOf("Tools"), tagged.tags)
+        val rel = listOf(CatalogProcessor.Release("v2.0-beta", "", true, "2026-10-02T00:00:00Z", listOf(Triple("app-2.0-web-release.apk", "u3", 1L))),
+            CatalogProcessor.Release("v1.9", "", false, "2026-09-01T00:00:00Z", listOf(Triple("app-1.9-web-release.apk", "u1", 1L), Triple("app-1.9-google-release.apk", "u2", 1L))))
+        val v = Orbit.versionsOf(o, rel)
+        assertEquals(listOf("2.0", "1.9"), v.map { it.version }); assertEquals(listOf("u1"), v[1].variants.map { it.url })
+        assertEquals(listOf("1.9"), Orbit.versionsOf(o.copy(includePre = false), rel).map { it.version })
     }
 }

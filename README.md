@@ -110,6 +110,10 @@ At a glance:
 - Native install, update, and security tooling
 - Skip Android's 24-hour unverified-app wait with built-in wireless install
 
+### Orbit and Obtainium
+
+Orbit follows an app from the page it is published on and installs the file that page offers. Following a source that way is the same idea as [Obtainium](https://github.com/ImranR98/Obtainium) by Imran Remtulla. Orion is a separate app. It does not include Obtainium's code. The Obtainium name is used so an Obtainium export, an `obtainium://` link, or the public Obtainium apps directory can be brought into Orbit.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
@@ -187,6 +191,20 @@ That design carries through the app. Orion tracks installed packages, surfaces u
       <strong>Palettes, your way</strong><br>
       Fourteen tuned palettes plus a palette maker: pick a seed color, a style and preview every tone in Light, Dusk, Dark and OLED before you save it.<br><br>
       <code>Material You</code> <code>Palette maker</code> <code>Four themes</code>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="assets/feature-orbit.svg" width="64" alt="Orbit icon"><br>
+      <strong>Orbit</strong><br>
+      Follow any app from the page it is published on. Paste a repo, a store page or a direct file, and Orion installs it and checks for updates the same way it does for the catalog.<br><br>
+      <code>Your sources</code> <code>Obtainium import</code> <code>Tokens</code>
+    </td>
+    <td width="50%" valign="top">
+      <img src="assets/feature-files.svg" width="64" alt="Installer files icon"><br>
+      <strong>Open the file you have</strong><br>
+      Install with Orion opens an APK, XAPK, APKM, APKS or a zip of APKs from a file manager. A bundle is read from the APKs inside it, and only the pieces for this phone are installed.<br><br>
+      <code>XAPK</code> <code>APKM</code> <code>APKS</code>
     </td>
   </tr>
 </table>
@@ -387,7 +405,7 @@ The project lives across a few public surfaces:
 
 ## Credits
 
-- **[Install with Options](https://github.com/zacharee/InstallWithOptions)** by Zachary Wander (MIT): Orion's "Beyond install" sheet is inspired by its set of install options. Orion's version is its own implementation on top of `pm install`.
+- **[Install with Options](https://github.com/zacharee/InstallWithOptions)** by Zachary Wander (MIT): Orion's "Install with options" sheet is inspired by its set of install options. Orion's version is its own implementation on top of `pm install`.
 - **[Dhizuku](https://github.com/iamr0s/Dhizuku)** and the **[Dhizuku API](https://github.com/iamr0s/Dhizuku-API)** by iamr0s (MIT): device owner installs and uninstalls.
 - **[Shizuku](https://github.com/RikkaApps/Shizuku)** by RikkaApps: silent installs and the Guardian tools.
 - **[Universal Android Debloater Next Generation](https://github.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation)**: the package notes and removal ratings behind Debloat.
@@ -395,5 +413,3 @@ The project lives across a few public surfaces:
 <p align="center">
   Made with 💜 by <strong>RookieZ</strong>
 </p>
-<!-- Orion Store community contributor note 💜 -->
-<!-- Orion Store community contributor note -->

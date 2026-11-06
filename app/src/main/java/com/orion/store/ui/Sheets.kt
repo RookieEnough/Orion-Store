@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -772,14 +773,17 @@ fun WelcomeSheet(vm: MainViewModel) = OrionSheet(vm::finishWelcome) {
 @Composable
 fun DevSheet(vm: MainViewModel, dev: String, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
     val d = LocalD.current; val cs = MaterialTheme.colorScheme; val ty = MaterialTheme.typography
-    val apps = remember(d.apps, d.importedApps, dev) {
-        (d.apps + d.importedApps).filter { it.author.trim().equals(dev.trim(), true) }.distinctBy { it.id }.sortedWith(compareBy(collator) { it.name })
+    val name = dev.trim()
+    val apps = remember(d.apps, d.importedApps, name) {
+        (d.apps + d.importedApps).filter { it.author.trim().equals(name, true) }.distinctBy { it.id }.sortedBy { it.name.lowercase() }
     }
-    LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 32.dp)) {
+    val letter = name.takeIf { it.isNotEmpty() }?.let { String(Character.toChars(it.codePointAt(0))) }.orEmpty().uppercase().ifBlank { "?" }
+    val cap = (LocalConfiguration.current.screenHeightDp * 0.72f).dp
+    LazyColumn(Modifier.fillMaxWidth().heightIn(max = cap), contentPadding = PaddingValues(bottom = 32.dp)) {
         item("dev") {
             Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                MorphBlob(listOf(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny), 0, 88.dp, cs.primaryContainer) {
-                    Text(dev.trim().take(1).uppercase(), style = ty.displaySmallEmphasized, color = cs.onPrimaryContainer)
+                Box(Modifier.size(88.dp).clip(RoundedCornerShape(28.dp)).background(cs.primaryContainer), contentAlignment = Alignment.Center) {
+                    Text(letter, style = ty.displaySmallEmphasized, color = cs.onPrimaryContainer)
                 }
                 Text(dev, Modifier.padding(top = 14.dp, start = 24.dp, end = 24.dp), style = ty.headlineSmallEmphasized, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text("${apps.size} app${if (apps.size == 1) "" else "s"}", style = ty.labelLarge, color = cs.onSurfaceVariant)

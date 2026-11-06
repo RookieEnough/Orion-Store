@@ -10,8 +10,35 @@ import android.content.pm.PackageManager
  *  OEMs that block the disable still allow. The globals turn off Play Protect's verify hooks without removing anything. */
 object Verifier {
     const val PKG = "com.google.android.verifier"
+    const val OVERLAY = "com.google.android.verifier.overlay"
 
     enum class State { ACTIVE, OFF, ABSENT }
+
+    /** Where the verifier package lives. NONE means this phone does not have it. DATA is a Play-installed copy. SYSTEM is baked into the ROM, so it is frozen, not removed. */
+    enum class Home { NONE, DATA, SYSTEM }
+
+    fun home(dumpsys: String): Home {
+        if (dumpsys.isBlank() || "Unable to find package" in dumpsys) return Home.NONE
+        val path = Regex("""codePath=(\S+)""").find(dumpsys)?.groupValues?.get(1).orEmpty()
+        if (path.isEmpty()) return if ("Package [" in dumpsys) Home.SYSTEM else Home.NONE
+        return if (path.startsWith("/data/")) Home.DATA else Home.SYSTEM
+    }
+
+    /** App ops that stop the verifier waking or starting at boot, even if another app flips it back on. Scoped to this package only. */
+    val QUIET = listOf("RUN_IN_BACKGROUND", "RUN_ANY_IN_BACKGROUND", "BOOT_COMPLETED").map { "cmd appops set $PKG $it ignore" }
+
+    /** Commands for one pass, in order. A missing package skips straight to the three verifier settings. Nothing here names another package, and every pm change stays on this user so Revert can undo it. */
+    fun secureSteps(pkgDump: String, overlayDump: String): List<String> {
+        val steps = ArrayList<String>()
+        when (home(pkgDump)) {
+            Home.NONE -> {}
+            Home.DATA -> { steps += QUIET; steps += DISABLE_CMD; steps += UNINSTALL_CMD }
+            Home.SYSTEM -> { steps += QUIET; steps += DISABLE_CMD }
+        }
+        if (home(overlayDump) != Home.NONE) steps += "pm disable-user --user 0 $OVERLAY"
+        steps += GLOBALS.map { (k, v) -> "settings put global $k $v" }
+        return steps
+    }
 
     /** Global verify hooks and the value that switches each off. Their old values are saved first so Revert puts them back. */
     val GLOBALS = listOf("package_verifier_user_consent" to "-1", "package_verifier_enable" to "0", "verifier_verify_adb_installs" to "0")

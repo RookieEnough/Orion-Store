@@ -92,7 +92,7 @@ class AiSession {
     fun send(vm: MainViewModel, text: String) {
         val q = text.trim(); if (q.isEmpty() || busy) return
         val s = vm.s; val p = OrionAi.provider(s.aiProvider); val local = p == AiProvider.LOCAL
-        val history = messages.filter { !it.error && it.raw.isNotBlank() }.takeLast(if (local) 4 else 10)
+        val history = messages.filter { !it.error && it.raw.isNotBlank() }.takeLast(if (local) 2 else 10)
         messages += AiMsg(true, q); val reply = AiMsg(false, ""); messages += reply; busy = true
         if (s.aiSounds) AiSound.send(); vm.haptic(H.LIGHT)
         job = vm.viewModelScope.launch {
@@ -102,12 +102,11 @@ class AiSession {
                 if (now != sig || system.isEmpty() || local != forLocal) { catalog = all; sig = now; forLocal = local; system = OrionAi.system(Device.isTv, all, GUIDE_TEXT, full = !local) }
                 // This message's local matches, plus what was already suggested so follow-ups like "something lighter" still have it
                 val earlier = history.flatMap { m -> m.apps.map { catalog.indexOf(it) } }.filter { it >= 0 }.takeLast(5)
-                val ids = (OrionAi.matches(catalog, q, if (local) 8 else 20) + earlier).distinct()
-                // What is on this phone, so it can skip installed apps and answer "do I have updates" style questions
+                val ids = (OrionAi.matches(catalog, q, if (local) 4 else 20) + earlier).distinct()
                 val up = vm.updates.map { it.id }.toSet()
-                val mine = catalog.withIndex().filter { it.value.id in s.installedVersions }.take(if (local) 12 else 60)
+                val mine = catalog.withIndex().filter { it.value.id in s.installedVersions }.take(if (local) 6 else 60)
                     .joinToString("; ") { (i, a) -> "$i ${a.name}" + if (a.id in up) " (update ready)" else "" }.ifEmpty { "none" }
-                val turns = history.map { OrionAi.Turn(it.user, it.raw) } + OrionAi.Turn(true, q + "\n\nOn this phone: $mine\n" + OrionAi.describe(catalog, ids, if (local) 60 else 110) +
+                val turns = history.map { OrionAi.Turn(it.user, it.raw) } + OrionAi.Turn(true, q + "\n\nOn this phone: $mine\n" + OrionAi.describe(catalog, ids, if (local) 24 else 110) +
                     if (local) OrionAi.guideMatches(GUIDE_TEXT, q, 3).joinToString("") { "\nOrion guide g$it ${GUIDE_TEXT[it].first}: ${GUIDE_TEXT[it].second}" } else "")
                 val show: (String) -> Unit = { t -> reply.text = OrionAi.parse(t).reply }
                 val raw = if (local) LocalLlm.chat(vm.getApplication(), LocalLlm.model(s.aiLocalModel) ?: throw AiError("Pick an on-device model in AI settings."), system, turns, show)
@@ -357,7 +356,8 @@ private fun AiAction(vm: MainViewModel, app: AppItem) {
 @Composable
 private fun AiInput(text: String, onText: (String) -> Unit, busy: Boolean, onStop: () -> Unit, onSend: () -> Unit) {
     val cs = MaterialTheme.colorScheme; val vm = LocalVm.current
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
+    // Lined up with the conversation column on tablets, instead of a text field running the whole width
+    Row(Modifier.readableWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
         BasicTextField(text, onText, Modifier.weight(1f).heightIn(min = 56.dp).clip(RoundedCornerShape(28.dp)).background(cs.surfaceContainerHigh).padding(horizontal = 20.dp, vertical = 16.dp),
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface), cursorBrush = SolidColor(cs.primary), maxLines = 5,
             keyboardOptions = KeyboardOptions(KeyboardCapitalization.Sentences, imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { if (!busy && text.isNotBlank()) onSend() }),
@@ -476,10 +476,30 @@ private fun LocalModels(picked: String, onPick: (String) -> Unit) {
     val dl by Downloads.state.collectAsState()
     var tick by remember { mutableIntStateOf(0) }
     val free = remember(dl, tick) { LocalLlm.freeMb() }
-    Text(if (LocalLlm.supported) "This phone: $ram GB of memory, ${"%.1f".format(free / 1000.0)} GB free. Models run offline once downloaded. Answers are quicker on bigger phones and simpler than cloud models."
+    Text(if (LocalLlm.supported) "This phone: $ram GB of memory, ${"%.1f".format(free / 1000.0)} GB free. Built-in models are the quickest. You can also import a .litertlm file or paste a Hugging Face link to one."
         else "On-device models need a 64-bit ARM phone. Pick a cloud provider instead.", style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
     if (!LocalLlm.supported) return
-    val order = remember(best) { listOf(best) + (LocalLlm.MODELS - best) }
+    var link by rememberSaveable { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    OutlinedTextField(link, { link = it }, Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(16.dp),
+        label = { Text("Hugging Face link") }, placeholder = { Text("https://huggingface.co/.../model.litertlm") },
+        trailingIcon = { IconButton({
+            runCatching { LocalLlm.downloadLink(ctx, link); link = ""; tick++; vm.haptic(H.MEDIUM) }.onFailure { vm.error(it.message ?: "That link is not a LiteRT model.") }
+        }, enabled = link.isNotBlank()) { Icon(Sym.Download, "Download model") } })
+    OutlinedButton({
+        scope.launch {
+            val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("*/*")
+            val (code, data) = com.orion.store.platform.ResultHost.run(intent)
+            val uri = data?.data?.takeIf { code == android.app.Activity.RESULT_OK } ?: return@launch
+            val name = ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }.orEmpty().ifBlank { "model.litertlm" }
+            runCatching {
+                ctx.contentResolver.openInputStream(uri)!!.use { LocalLlm.import(ctx, name, it) }
+            }.onSuccess { id -> onPick(id); tick++; vm.haptic(H.SUCCESS) }.onFailure { vm.error(it.message ?: "Could not import that file.") }
+        }
+    }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Icon(Sym.FileDownload, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Import from this phone") }
+    Text("The file has to be a LiteRT model, ending in .litertlm. GGUF models such as MiniCPM will not run in this engine.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+    val extra = remember(dl, tick) { LocalLlm.added() }
+    val order = remember(best, extra) { listOf(best) + (LocalLlm.MODELS - best) + extra }
     val engine = remember(dl, tick) { LocalLlm.engineReady(ctx) }
     if (!engine && dl[LocalLlm.ENGINE_FILE]?.status == DlStatus.RUNNING) Text("Getting the on-device engine first (${LocalLlm.ENGINE_MB} MB) · ${dl[LocalLlm.ENGINE_FILE]?.progress ?: 0}%",
         style = MaterialTheme.typography.labelMedium, color = cs.primary)
@@ -497,8 +517,9 @@ private fun LocalModels(picked: String, onPick: (String) -> Unit) {
                         Text(m.name, style = MaterialTheme.typography.titleMedium)
                     }
                     Text(if (m == best) "Best for this phone. ${m.blurb}" else m.blurb, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-                    Text((if (m.mb >= 1000) "%.1f GB".format(m.mb / 1000.0) else "${m.mb} MB") + " · for ${m.ramGb} GB+ phones" +
-                        if (m.ramGb > ram) " · may be too big here" else "", style = MaterialTheme.typography.labelMedium, color = if (m.ramGb > ram) cs.error else cs.primary)
+                    Text((if (m.mb >= 1000) "%.1f GB".format(m.mb / 1000.0) else "${m.mb} MB") +
+                        (if (m.ramGb == 0) "" else " · for ${m.ramGb} GB+ phones" + if (m.ramGb > ram) " · may be too big here" else ""),
+                        style = MaterialTheme.typography.labelMedium, color = if (m.ramGb > ram) cs.error else cs.primary)
                 }
                 when {
                     running -> IconButton({ LocalLlm.cancel(m); tick++ }) { Icon(Sym.Close, "Cancel download") }
