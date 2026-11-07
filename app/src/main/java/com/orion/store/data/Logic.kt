@@ -603,6 +603,14 @@ suspend fun githubAssetApiUrl(url: String, token: String, get: suspend (String, 
     }.getOrNull()
 }
 
+/** The token header a host takes for a release asset, or null when Orion holds no token for it. A release can list asset links on any host, so GitLab's token only goes to
+ *  gitlab.com and to GitLab hosts the user added to Orbit, and Codeberg's only to codeberg.org. GitHub is handled through its API instead (see [githubAssetApiUrl]). */
+fun assetTokenHeaders(host: String, tokens: HostTokens, orbitUrls: List<String>): Map<String, String>? = when {
+    host == "codeberg.org" && tokens.codeberg.isNotBlank() -> mapOf("Authorization" to "token ${tokens.codeberg}")
+    tokens.gitlab.isNotBlank() && (host == "gitlab.com" || orbitUrls.any { u -> parseRepoSource(u)?.let { it.provider == "gitlab" && it.domain == host } == true }) -> mapOf("PRIVATE-TOKEN" to tokens.gitlab)
+    else -> null
+}
+
 val ANDROID_META_PATHS = listOf("app/src/main/AndroidManifest.xml", "src/main/AndroidManifest.xml", "android/app/src/main/AndroidManifest.xml",
     "app/build.gradle", "app/build.gradle.kts", "android/app/build.gradle", "android/app/build.gradle.kts", "build.gradle", "build.gradle.kts")
 private val PACKAGE_PATTERNS = listOf("""applicationId\s*(?:=)?\s*["']([a-zA-Z0-9_.]+)["']""", """namespace\s*(?:=)?\s*["']([a-zA-Z0-9_.]+)["']""", """package\s*=\s*["']([a-zA-Z0-9_.]+)["']""").map(::Regex)
