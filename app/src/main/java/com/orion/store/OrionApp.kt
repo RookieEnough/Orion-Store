@@ -8,6 +8,7 @@ import coil3.memory.MemoryCache
 import coil3.request.crossfade
 import com.orion.store.data.Device
 import com.orion.store.data.Net
+import com.orion.store.data.orbitTokens
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.orion.store.ui.Store
 import java.util.concurrent.TimeUnit
@@ -18,6 +19,8 @@ class OrionApp : Application(), SingletonImageLoader.Factory {
         // Before anything can read them: after process death Android restores the activity with saved state, which skips
         // the code path that used to create them, and the first settings read on start crashed the launch
         Store.init(this); com.orion.store.platform.Downloads.attach(this)
+        com.orion.store.platform.Downloads.tokens = { Store.settings.value.orbitTokens() }
+        com.orion.store.platform.Downloads.orbitUrls = { Store.data.value.orbit.map { it.url } }
         Net.init(this)
         Device.isTv = getSystemService(android.app.UiModeManager::class.java)?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
             packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)

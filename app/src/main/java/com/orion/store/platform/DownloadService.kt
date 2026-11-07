@@ -13,7 +13,12 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.orion.store.data.HostTokens
 import com.orion.store.data.Net
+import com.orion.store.data.assetTokenHeaders
+import com.orion.store.data.githubAssetApiUrl
+import com.orion.store.data.githubAssetHeaders
+import com.orion.store.data.parseGithubAsset
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,6 +34,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.Interceptor
 import okhttp3.Protocol
 import okhttp3.Request
 import java.io.File
@@ -40,6 +47,17 @@ import java.util.concurrent.atomic.AtomicLong
 enum class DlStatus { RUNNING, SUCCESSFUL, FAILED }
 data class Dl(val fileName: String, val progress: Int = 0, val status: DlStatus = DlStatus.RUNNING)
 
+/** Credentials for one host. They are sent to that host only, on every hop: a redirect to a CDN or to another site never carries them. */
+class AssetAuth(val host: String, val headers: Map<String, String>)
+
+/** Network interceptor: a request tagged with [AssetAuth] loses its credential headers when it reaches any other host. OkHttp already drops `Authorization` on a redirect to another host, but not custom ones like `PRIVATE-TOKEN`. */
+class AssetAuthGuard : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
+        val r = chain.request(); val a = r.tag(AssetAuth::class.java)
+        return chain.proceed(if (a != null && r.url.host != a.host) r.newBuilder().removeHeader("Authorization").removeHeader("PRIVATE-TOKEN").build() else r)
+    }
+}
+
 /** Download engine ported from AppTrackerPlugin.DownloadTask: Range resume, 3 retries, html/4xx fail fast, .tmp then rename.
  *  Big files from servers that take ranges come down over [PARTS] connections at once: CDNs like GitHub's cap speed per connection. */
 object Downloads {
@@ -50,7 +68,7 @@ object Downloads {
     private lateinit var app: Context
     private var wake: PowerManager.WakeLock? = null
     private val client by lazy {
-        Net.client.newBuilder().callTimeout(0, TimeUnit.MILLISECONDS).connectTimeout(30, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+        Net.client.newBuilder().callTimeout(0, TimeUnit.MILLISECONDS).connectTimeout(30, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).addNetworkInterceptor(AssetAuthGuard()).build()
     }
     /** HTTP/2 would multiplex the parts onto one connection, which is exactly the cap being dodged. */
     private val h1 by lazy { client.newBuilder().protocols(listOf(Protocol.HTTP_1_1)).build() }
@@ -58,6 +76,10 @@ object Downloads {
     private const val MIN_SPLIT = 4L shl 20
     val state = MutableStateFlow<Map<String, Dl>>(emptyMap())
     private enum class R { OK, RETRY, FATAL }
+
+    /** The saved source tokens and the links in Orbit, set at startup: a private repository's release assets only download with them. */
+    @Volatile var tokens: () -> HostTokens = { HostTokens() }
+    @Volatile var orbitUrls: () -> List<String> = { emptyList() }
 
     /** For entry points that start without the store (the APK installer sheet): the folder only, no cleanup of other downloads. */
     fun attach(ctx: Context) { if (!::app.isInitialized) app = ctx.applicationContext }
@@ -106,12 +128,29 @@ object Downloads {
 
     private fun set(name: String, fn: (Dl) -> Dl) = state.update { m -> m[name]?.let { m + (name to fn(it)) } ?: m }
 
+    /** Public links go out untouched. A link that a saved token could open and that is refused (404, 401, 403 or a sign-in page) belongs to a private repository: GitLab and Codeberg take the
+     *  token on the link itself, GitHub answers 404 on the link and serves the same file from its API. */
+    private suspend fun target(url: String): Pair<String, AssetAuth?> {
+        val host = runCatching { url.toHttpUrl().host }.getOrNull() ?: return url to null
+        val direct = assetTokenHeaders(host, tokens(), orbitUrls())
+        val github = tokens().github.takeIf { it.isNotBlank() && parseGithubAsset(url) != null }
+        if (direct == null && github == null) return url to null
+        val refused = runCatching {
+            client.newCall(req(url).header("Range", "bytes=0-0").build()).execute().use { it.code in listOf(401, 403, 404) || it.body.contentType()?.toString()?.contains("text/html") == true }
+        }.getOrDefault(false)
+        if (!refused) return url to null
+        if (direct != null) return url to AssetAuth(host, direct)
+        val api = githubAssetApiUrl(url, github!!) { u, h -> Net.text(u, h) } ?: return url to null
+        return api to AssetAuth("api.github.com", githubAssetHeaders(github))
+    }
+
     private suspend fun run(url: String, name: String) {
         var result = R.RETRY
         try {
+            val (source, auth) = runCatching { target(url) }.getOrDefault(url to null)
             var tries = 0
             while (tries < 3 && name !in cancelled) {
-                result = runCatching { attempt(url, name) }.getOrDefault(R.RETRY)
+                result = runCatching { attempt(source, name, auth) }.getOrDefault(R.RETRY)
                 if (result != R.RETRY || name in cancelled) break
                 tries++; delay(tries * 2000L)
             }
@@ -124,11 +163,12 @@ object Downloads {
         }
     }
 
-    private fun req(url: String) = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Linux; Android 13) Chrome/110.0.0.0").header("Accept-Encoding", "identity")
+    private fun req(url: String, auth: AssetAuth? = null) = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Linux; Android 13) Chrome/110.0.0.0").header("Accept-Encoding", "identity")
+        .also { b -> if (auth != null && url.toHttpUrl().host == auth.host) { auth.headers.forEach { (k, v) -> b.header(k, v) }; b.tag(AssetAuth::class.java, auth) } }
 
     /** Null when the file is small or the server can't split it: the caller falls back to one stream. */
-    private suspend fun split(url: String, name: String, fin: File): R? {
-        val (real, total) = h1.newBuilder().readTimeout(12, TimeUnit.SECONDS).build().newCall(req(url).header("Range", "bytes=0-0").build()).also { calls[name] = it }.execute().use { r ->
+    private suspend fun split(url: String, name: String, fin: File, auth: AssetAuth?): R? {
+        val (real, total) = h1.newBuilder().readTimeout(12, TimeUnit.SECONDS).build().newCall(req(url, auth).header("Range", "bytes=0-0").build()).also { calls[name] = it }.execute().use { r ->
             if (r.code != 206 || r.body.contentType()?.toString()?.contains("text/html") == true) return null
             r.request.url.toString() to (r.header("Content-Range")?.substringAfter('/')?.toLongOrNull() ?: return null)
         }
@@ -151,7 +191,7 @@ object Downloads {
                     val end = if (i == PARTS - 1) total - 1 else (i + 1) * step - 1; var pos = i * step
                     repeat(3) { t ->
                         runCatching {
-                            h1.newCall(req(real).header("Range", "bytes=$pos-$end").build()).also { calls["$name#$i"] = it }.execute().use { r ->
+                            h1.newCall(req(real, auth).header("Range", "bytes=$pos-$end").build()).also { calls["$name#$i"] = it }.execute().use { r ->
                                 if (r.code != 206) return@async false
                                 RandomAccessFile(temp, "rw").use { out ->
                                     out.seek(pos); val buf = ByteArray(1 shl 16); val inp = r.body.byteStream()
@@ -178,12 +218,12 @@ object Downloads {
         fin.delete(); return if (temp.renameTo(fin)) R.OK else R.RETRY
     }
 
-    private suspend fun attempt(url: String, name: String): R {
+    private suspend fun attempt(url: String, name: String, auth: AssetAuth?): R {
         val temp = File(dir(), "$name.tmp"); val fin = File(dir(), name)
         var existing = if (temp.exists()) temp.length() else 0L
         // A probe that times out or breaks falls through to the plain stream instead of retrying the split forever
-        if (existing == 0L) runCatching { split(url, name, fin) }.getOrNull()?.let { return it }
-        val rb = req(url)
+        if (existing == 0L) runCatching { split(url, name, fin, auth) }.getOrNull()?.let { return it }
+        val rb = req(url, auth)
         if (existing > 0) rb.header("Range", "bytes=$existing-")
         val call = client.newCall(rb.build()).also { calls[name] = it }
         call.execute().use { r ->

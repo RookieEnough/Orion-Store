@@ -130,6 +130,56 @@ class LogicTest {
         assertTrue(optimizedImageUrl("https://raw.githubusercontent.com/o/r/main/s.png", null, 720).startsWith("https://wsrv.nl/?url="))
     }
 
+    @Test fun githubAssetLinks() {
+        assertEquals(GithubAsset("o", "r", "v1.0", "app-release.apk"), parseGithubAsset("https://github.com/o/r/releases/download/v1.0/app-release.apk"))
+        // Escapes decode, and a plus in a path stays a plus
+        assertEquals("a b+c.apk", parseGithubAsset("https://github.com/o/r/releases/download/t/a%20b+c.apk")?.name)
+        assertEquals("rel/1", parseGithubAsset("https://github.com/o/r/releases/download/rel%2F1/x.apk")?.tag)
+        // Not a release asset: another host, the release page, the repo itself
+        assertNull(parseGithubAsset("https://example.com/o/r/releases/download/v1/x.apk"))
+        assertNull(parseGithubAsset("https://github.com/o/r/releases/tag/v1"))
+        assertNull(parseGithubAsset("https://github.com/o/r"))
+        assertEquals("Bearer t", githubAssetHeaders("t")["Authorization"])
+        assertEquals("application/octet-stream", githubAssetHeaders("t")["Accept"])
+    }
+
+    @Test fun githubAssetApiLookup() = kotlinx.coroutines.runBlocking {
+        val release = """{"assets":[{"name":"a.apk","url":"https://api.github.com/repos/o/r/releases/assets/1"},{"name":"b.apk","url":"https://api.github.com/repos/o/r/releases/assets/2"}]}"""
+        val asked = mutableListOf<String>()
+        val get: suspend (String, Map<String, String>) -> String = { u, h -> asked += u; assertEquals("Bearer t", h["Authorization"]); release }
+        val link = "https://github.com/o/r/releases/download/v1/b.apk"
+        assertEquals("https://api.github.com/repos/o/r/releases/assets/2", githubAssetApiUrl(link, "t", get))
+        assertEquals(listOf("https://api.github.com/repos/o/r/releases/tags/v1"), asked)
+        // A tag with a slash keeps it in the API path
+        githubAssetApiUrl("https://github.com/o/r/releases/download/rel%2F1/b.apk", "t", get)
+        assertEquals("https://api.github.com/repos/o/r/releases/tags/rel/1", asked.last())
+        // Nothing to retry with: no token, not an asset link, a file the release does not list, or the API refusing
+        asked.clear()
+        assertNull(githubAssetApiUrl(link, "", get))
+        assertNull(githubAssetApiUrl("https://github.com/o/r", "t", get))
+        assertTrue(asked.isEmpty())
+        assertNull(githubAssetApiUrl("https://github.com/o/r/releases/download/v1/zzz.apk", "t", get))
+        assertNull(githubAssetApiUrl(link, "t") { _, _ -> throw HttpError(404, "") })
+    }
+
+    @Test fun assetTokens() {
+        val t = HostTokens(github = "gh", gitlab = "gl", codeberg = "cb")
+        val orbit = listOf("https://git.example-gitlab.org/g/app", "https://github.com/o/r")
+        assertEquals(mapOf("Authorization" to "token cb"), assetTokenHeaders("codeberg.org", t, orbit))
+        assertEquals(mapOf("PRIVATE-TOKEN" to "gl"), assetTokenHeaders("gitlab.com", t, orbit))
+        // A self-hosted GitLab gets the token only when the user added a link on that host to Orbit
+        assertEquals(mapOf("PRIVATE-TOKEN" to "gl"), assetTokenHeaders("git.example-gitlab.org", t, orbit))
+        assertNull(assetTokenHeaders("git.other-gitlab.org", t, orbit))
+        // Look-alike and unrelated hosts never get one, and GitHub goes through its API instead
+        assertNull(assetTokenHeaders("evilcodeberg.org", t, orbit))
+        assertNull(assetTokenHeaders("codeberg.org.evil.com", t, orbit))
+        assertNull(assetTokenHeaders("github.com", t, orbit))
+        assertNull(assetTokenHeaders("s3.amazonaws.com", t, orbit))
+        // No token saved, nothing to send
+        assertNull(assetTokenHeaders("codeberg.org", HostTokens(github = "gh"), orbit))
+        assertNull(assetTokenHeaders("gitlab.com", HostTokens(codeberg = "cb"), orbit))
+    }
+
     @Test fun repoParsing() {
         assertEquals(RepoSource("github", "o/app", "o", "app"), parseRepoSource("https://github.com/o/app.git"))
         assertEquals(RepoSource("github", "o/app", "o", "app"), parseRepoSource("https://github.com/o/app/tree/main/src"))

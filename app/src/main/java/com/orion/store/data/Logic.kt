@@ -576,6 +576,41 @@ fun parseRepoSource(repoUrl: String): RepoSource? = runCatching {
     }
 }.getOrNull()
 
+/** A GitHub release asset link, the shape of `browser_download_url`: github.com/owner/repo/releases/download/tag/file. */
+data class GithubAsset(val owner: String, val repo: String, val tag: String, val name: String)
+
+fun parseGithubAsset(url: String): GithubAsset? = runCatching {
+    val u = URI(url.trim()); if (u.scheme != "https" || u.host != "github.com") return null
+    val p = (u.rawPath ?: "").split('/').filter { it.isNotEmpty() }
+    if (p.size != 6 || p[2] != "releases" || p[3] != "download") return null
+    fun dec(s: String) = java.net.URLDecoder.decode(s.replace("+", "%2B"), "UTF-8")
+    GithubAsset(p[0], p[1], dec(p[4]), dec(p[5]))
+}.getOrNull()
+
+/** What a private repository's asset needs: the API URL answers with the file only when asked for octet-stream, and the token goes to GitHub alone. */
+fun githubAssetHeaders(token: String) = mapOf("Authorization" to "Bearer $token", "Accept" to "application/octet-stream")
+
+/** `browser_download_url` answers 404 for a private repository even with a token. The release lists the same file under an API URL, which does take it.
+ *  Null when the link is not a GitHub asset, there is no token, or the token cannot see the release (GitLab and Codeberg are not covered). */
+suspend fun githubAssetApiUrl(url: String, token: String, get: suspend (String, Map<String, String>) -> String): String? {
+    val a = parseGithubAsset(url)?.takeIf { token.isNotBlank() } ?: return null
+    return runCatching {
+        val api = "https://api.github.com/repos/${a.owner}/${a.repo}/releases/tags/${enc(a.tag).replace("%2F", "/")}"
+        val release = json.parseToJsonElement(get(api, mapOf("Authorization" to "Bearer $token", "Accept" to "application/vnd.github+json"))).jsonObject
+        release["assets"]?.jsonArray?.firstNotNullOfOrNull { e ->
+            e.jsonObject.takeIf { (it["name"] as? JsonPrimitive)?.contentOrNull == a.name }?.get("url")?.let { (it as? JsonPrimitive)?.contentOrNull }
+        }
+    }.getOrNull()
+}
+
+/** The token header a host takes for a release asset, or null when Orion holds no token for it. A release can list asset links on any host, so GitLab's token only goes to
+ *  gitlab.com and to GitLab hosts the user added to Orbit, and Codeberg's only to codeberg.org. GitHub is handled through its API instead (see [githubAssetApiUrl]). */
+fun assetTokenHeaders(host: String, tokens: HostTokens, orbitUrls: List<String>): Map<String, String>? = when {
+    host == "codeberg.org" && tokens.codeberg.isNotBlank() -> mapOf("Authorization" to "token ${tokens.codeberg}")
+    tokens.gitlab.isNotBlank() && (host == "gitlab.com" || orbitUrls.any { u -> parseRepoSource(u)?.let { it.provider == "gitlab" && it.domain == host } == true }) -> mapOf("PRIVATE-TOKEN" to tokens.gitlab)
+    else -> null
+}
+
 val ANDROID_META_PATHS = listOf("app/src/main/AndroidManifest.xml", "src/main/AndroidManifest.xml", "android/app/src/main/AndroidManifest.xml",
     "app/build.gradle", "app/build.gradle.kts", "android/app/build.gradle", "android/app/build.gradle.kts", "build.gradle", "build.gradle.kts")
 private val PACKAGE_PATTERNS = listOf("""applicationId\s*(?:=)?\s*["']([a-zA-Z0-9_.]+)["']""", """namespace\s*(?:=)?\s*["']([a-zA-Z0-9_.]+)["']""", """package\s*=\s*["']([a-zA-Z0-9_.]+)["']""").map(::Regex)
