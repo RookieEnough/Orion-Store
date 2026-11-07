@@ -18,6 +18,7 @@ class OrionApp : Application(), SingletonImageLoader.Factory {
         // Before anything can read them: after process death Android restores the activity with saved state, which skips
         // the code path that used to create them, and the first settings read on start crashed the launch
         Store.init(this); com.orion.store.platform.Downloads.attach(this)
+        com.orion.store.platform.Downloads.githubToken = { Store.settings.value.githubToken }
         Net.init(this)
         Device.isTv = getSystemService(android.app.UiModeManager::class.java)?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
             packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)

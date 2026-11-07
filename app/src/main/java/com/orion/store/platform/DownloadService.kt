@@ -14,6 +14,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.orion.store.data.Net
+import com.orion.store.data.githubAssetApiUrl
+import com.orion.store.data.githubAssetHeaders
+import com.orion.store.data.parseGithubAsset
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -58,6 +61,9 @@ object Downloads {
     private const val MIN_SPLIT = 4L shl 20
     val state = MutableStateFlow<Map<String, Dl>>(emptyMap())
     private enum class R { OK, RETRY, FATAL }
+
+    /** The saved GitHub token, set at startup: a private repository's release assets only download with it. */
+    @Volatile var githubToken: () -> String = { "" }
 
     /** For entry points that start without the store (the APK installer sheet): the folder only, no cleanup of other downloads. */
     fun attach(ctx: Context) { if (!::app.isInitialized) app = ctx.applicationContext }
@@ -106,12 +112,23 @@ object Downloads {
 
     private fun set(name: String, fn: (Dl) -> Dl) = state.update { m -> m[name]?.let { m + (name to fn(it)) } ?: m }
 
+    /** Public links go out untouched. A GitHub release asset that answers 404 while a token is saved is a private repository's: the same file is asked from the API with the token. */
+    private suspend fun target(url: String): Pair<String, Map<String, String>> {
+        val token = githubToken()
+        if (token.isBlank() || parseGithubAsset(url) == null) return url to emptyMap()
+        val code = runCatching { client.newCall(req(url).header("Range", "bytes=0-0").build()).execute().use { it.code } }.getOrNull()
+        if (code != 404) return url to emptyMap()
+        val api = githubAssetApiUrl(url, token) { u, h -> Net.text(u, h) } ?: return url to emptyMap()
+        return api to githubAssetHeaders(token)
+    }
+
     private suspend fun run(url: String, name: String) {
         var result = R.RETRY
         try {
+            val (source, hdr) = runCatching { target(url) }.getOrDefault(url to emptyMap())
             var tries = 0
             while (tries < 3 && name !in cancelled) {
-                result = runCatching { attempt(url, name) }.getOrDefault(R.RETRY)
+                result = runCatching { attempt(source, name, hdr) }.getOrDefault(R.RETRY)
                 if (result != R.RETRY || name in cancelled) break
                 tries++; delay(tries * 2000L)
             }
@@ -124,11 +141,12 @@ object Downloads {
         }
     }
 
-    private fun req(url: String) = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Linux; Android 13) Chrome/110.0.0.0").header("Accept-Encoding", "identity")
+    private fun req(url: String, hdr: Map<String, String> = emptyMap()) = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Linux; Android 13) Chrome/110.0.0.0").header("Accept-Encoding", "identity")
+        .also { b -> hdr.forEach { (k, v) -> b.header(k, v) } }
 
     /** Null when the file is small or the server can't split it: the caller falls back to one stream. */
-    private suspend fun split(url: String, name: String, fin: File): R? {
-        val (real, total) = h1.newBuilder().readTimeout(12, TimeUnit.SECONDS).build().newCall(req(url).header("Range", "bytes=0-0").build()).also { calls[name] = it }.execute().use { r ->
+    private suspend fun split(url: String, name: String, fin: File, hdr: Map<String, String>): R? {
+        val (real, total) = h1.newBuilder().readTimeout(12, TimeUnit.SECONDS).build().newCall(req(url, hdr).header("Range", "bytes=0-0").build()).also { calls[name] = it }.execute().use { r ->
             if (r.code != 206 || r.body.contentType()?.toString()?.contains("text/html") == true) return null
             r.request.url.toString() to (r.header("Content-Range")?.substringAfter('/')?.toLongOrNull() ?: return null)
         }
@@ -178,12 +196,12 @@ object Downloads {
         fin.delete(); return if (temp.renameTo(fin)) R.OK else R.RETRY
     }
 
-    private suspend fun attempt(url: String, name: String): R {
+    private suspend fun attempt(url: String, name: String, hdr: Map<String, String>): R {
         val temp = File(dir(), "$name.tmp"); val fin = File(dir(), name)
         var existing = if (temp.exists()) temp.length() else 0L
         // A probe that times out or breaks falls through to the plain stream instead of retrying the split forever
-        if (existing == 0L) runCatching { split(url, name, fin) }.getOrNull()?.let { return it }
-        val rb = req(url)
+        if (existing == 0L) runCatching { split(url, name, fin, hdr) }.getOrNull()?.let { return it }
+        val rb = req(url, hdr)
         if (existing > 0) rb.header("Range", "bytes=$existing-")
         val call = client.newCall(rb.build()).also { calls[name] = it }
         call.execute().use { r ->

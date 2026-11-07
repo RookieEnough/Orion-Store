@@ -130,6 +130,38 @@ class LogicTest {
         assertTrue(optimizedImageUrl("https://raw.githubusercontent.com/o/r/main/s.png", null, 720).startsWith("https://wsrv.nl/?url="))
     }
 
+    @Test fun githubAssetLinks() {
+        assertEquals(GithubAsset("o", "r", "v1.0", "app-release.apk"), parseGithubAsset("https://github.com/o/r/releases/download/v1.0/app-release.apk"))
+        // Escapes decode, and a plus in a path stays a plus
+        assertEquals("a b+c.apk", parseGithubAsset("https://github.com/o/r/releases/download/t/a%20b+c.apk")?.name)
+        assertEquals("rel/1", parseGithubAsset("https://github.com/o/r/releases/download/rel%2F1/x.apk")?.tag)
+        // Not a release asset: another host, the release page, the repo itself
+        assertNull(parseGithubAsset("https://example.com/o/r/releases/download/v1/x.apk"))
+        assertNull(parseGithubAsset("https://github.com/o/r/releases/tag/v1"))
+        assertNull(parseGithubAsset("https://github.com/o/r"))
+        assertEquals("Bearer t", githubAssetHeaders("t")["Authorization"])
+        assertEquals("application/octet-stream", githubAssetHeaders("t")["Accept"])
+    }
+
+    @Test fun githubAssetApiLookup() = kotlinx.coroutines.runBlocking {
+        val release = """{"assets":[{"name":"a.apk","url":"https://api.github.com/repos/o/r/releases/assets/1"},{"name":"b.apk","url":"https://api.github.com/repos/o/r/releases/assets/2"}]}"""
+        val asked = mutableListOf<String>()
+        val get: suspend (String, Map<String, String>) -> String = { u, h -> asked += u; assertEquals("Bearer t", h["Authorization"]); release }
+        val link = "https://github.com/o/r/releases/download/v1/b.apk"
+        assertEquals("https://api.github.com/repos/o/r/releases/assets/2", githubAssetApiUrl(link, "t", get))
+        assertEquals(listOf("https://api.github.com/repos/o/r/releases/tags/v1"), asked)
+        // A tag with a slash keeps it in the API path
+        githubAssetApiUrl("https://github.com/o/r/releases/download/rel%2F1/b.apk", "t", get)
+        assertEquals("https://api.github.com/repos/o/r/releases/tags/rel/1", asked.last())
+        // Nothing to retry with: no token, not an asset link, a file the release does not list, or the API refusing
+        asked.clear()
+        assertNull(githubAssetApiUrl(link, "", get))
+        assertNull(githubAssetApiUrl("https://github.com/o/r", "t", get))
+        assertTrue(asked.isEmpty())
+        assertNull(githubAssetApiUrl("https://github.com/o/r/releases/download/v1/zzz.apk", "t", get))
+        assertNull(githubAssetApiUrl(link, "t") { _, _ -> throw HttpError(404, "") })
+    }
+
     @Test fun repoParsing() {
         assertEquals(RepoSource("github", "o/app", "o", "app"), parseRepoSource("https://github.com/o/app.git"))
         assertEquals(RepoSource("github", "o/app", "o", "app"), parseRepoSource("https://github.com/o/app/tree/main/src"))
