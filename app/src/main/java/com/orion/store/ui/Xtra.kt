@@ -1,6 +1,13 @@
 package com.orion.store.ui
 
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.LinkAnnotation
 import android.Manifest
+import android.content.Context
 import androidx.annotation.StringRes
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,6 +24,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -90,9 +98,9 @@ fun SheetToastHost(t: SheetToast) {
 }
 
 @Composable
-fun ConfirmDialog(msg: String?, confirm: String = "Confirm", onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    if (msg != null) AlertDialog(onDismiss, confirmButton = { TextButton({ onDismiss(); onConfirm() }) { Text(confirm) } },
-        dismissButton = { TextButton(onDismiss) { Text("Cancel") } }, icon = { Icon(Sym.WarningAmber, null) }, text = { Text(msg) })
+fun ConfirmDialog(msg: String?, confirm: String? = null, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    if (msg != null) AlertDialog(onDismiss, confirmButton = { TextButton({ onConfirm(); onDismiss() }) { Text(confirm ?: stringResource(R.string.common_confirm)) } },
+        dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.common_cancel)) } }, icon = { Icon(Sym.WarningAmber, null) }, text = { Text(msg) })
 }
 
 @Composable
@@ -106,7 +114,7 @@ fun Tag(text: String, c: Color, icon: ImageVector? = null) = Surface(shape = Pil
 @Composable
 fun Blob(icon: ImageVector, c: Color, size: Int = 44, shape: RoundedPolygon = MaterialShapes.Cookie6Sided) {
     val (bg, fg) = tonal(c)
-    Box(Modifier.size(size.dp).clip(shape.toShape()).background(bg), contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size((size * .5f).dp), tint = fg) }
+    Box(Modifier.size(size.dp).background(bg, shape.toShape()), contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size((size * .5f).dp), tint = fg) }
 }
 
 @Composable
@@ -119,16 +127,19 @@ fun PkgIcon(tracker: AppTracker, pkg: String, size: Int = 44) {
 
 private val LOADING_TEXTS = listOf(R.string.xtra_waking_up_the_hamsters, R.string.xtra_consulting_the_oracle, R.string.xtra_decrypting_matrix_code, R.string.xtra_bribing_the_cpu, R.string.xtra_sweeping_for_bugs,
     R.string.xtra_loading_magic_spells, R.string.xtra_summoning_daemons, R.string.xtra_calculating_pi, R.string.xtra_charging_flux_capacitor, R.string.xtra_reticulating_splines, R.string.xtra_checking_gravity_settings, R.string.xtra_polishing_pixels)
-private const val UAD_URL = "https://raw.githubusercontent.com/0x192/universal-android-debloater/main/resources/assets/uad_lists.json"
+// UAD-ng: the maintained fork. The original 0x192 list stopped updating and rated many services too eagerly (Bluetooth MIDI as Recommended).
+private const val UAD_URL = "https://raw.githubusercontent.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation/main/resources/assets/uad_lists.json"
+
+private data class Uad(val removal: String, val description: String, val list: String)
 
 private data class Risk(val label: String, val color: Color)
 
-private fun debloatRisk(removal: String?) = when (removal?.lowercase()) {
-    "recommended" -> Risk("Recommended", Safe); "advanced" -> Risk("Advanced", Yellow); "expert" -> Risk("Expert", Orange)
-    "unsafe" -> Risk("Unsafe", Red); "untested" -> Risk("Untested", Purple); else -> Risk("Unknown", Gray)
+private fun debloatRisk(ctx: Context, removal: String?) = when (removal?.lowercase()) {
+    "recommended" -> Risk(ctx.getString(R.string.xtra_recommended), Safe); "advanced" -> Risk(ctx.getString(R.string.xtra_advanced), Yellow); "expert" -> Risk(ctx.getString(R.string.xtra_expert), Orange)
+    "unsafe" -> Risk(ctx.getString(R.string.xtra_unsafe), Red); "untested" -> Risk(ctx.getString(R.string.xtra_untested), Purple); else -> Risk(ctx.getString(R.string.common_unknown), Gray)
 }
 
-private fun riskLevel(n: Int) = when { n >= 3 -> Risk("CRITICAL", Red); n >= 1 -> Risk("WARNING", Yellow); else -> Risk("SAFE", Safe) }
+private fun riskLevel(ctx: Context, n: Int) = when { n >= 3 -> Risk(ctx.getString(R.string.xtra_critical), Red); n >= 1 -> Risk(ctx.getString(R.string.xtra_warning), Yellow); else -> Risk(ctx.getString(R.string.xtra_safe), Safe) }
 
 private fun permIcon(p: String) = when {
     "CAMERA" in p -> Sym.PhotoCamera; "RECORD_AUDIO" in p -> Sym.Mic; "LOCATION" in p -> Sym.LocationOn
@@ -138,11 +149,15 @@ private fun permIcon(p: String) = when {
 /** JS String.replace with a string pattern only hits the first occurrence. */
 fun cleanPermName(p: String) = p.replaceFirst("android.permission.", "").replaceFirst("ACCESS_", "").replaceFirst("READ_", "").replaceFirst("WRITE_", "").replaceFirst("_", " ")
 
-/** uad_lists.json is an array of {id, removal}; newer forks ship an object keyed by package, both accepted. */
-private fun parseUad(raw: String): Map<String, String> = when (val e = json.parseToJsonElement(raw)) {
-    is JsonArray -> e.mapNotNull { it as? JsonObject }.mapNotNull { o -> o["id"]?.jsonPrimitive?.contentOrNull?.let { it to (o["removal"]?.jsonPrimitive?.contentOrNull ?: "") } }.toMap()
-    is JsonObject -> e.mapValues { (it.value as? JsonObject)?.get("removal")?.jsonPrimitive?.contentOrNull ?: "" }
-    else -> emptyMap()
+/** uad_lists.json is an array of {id, removal, ...} in the original list and an object keyed by package in UAD-ng; both accepted. */
+private fun parseUad(raw: String): Map<String, Uad> {
+    fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.contentOrNull.orEmpty()
+    fun uad(o: JsonObject) = Uad(o.str("removal"), o.str("description").trim(), o.str("list"))
+    return when (val e = json.parseToJsonElement(raw)) {
+        is JsonArray -> e.mapNotNull { it as? JsonObject }.mapNotNull { o -> o.str("id").takeIf { it.isNotEmpty() }?.let { it to uad(o) } }.toMap()
+        is JsonObject -> e.mapNotNull { (k, v) -> (v as? JsonObject)?.let { k to uad(it) } }.toMap()
+        else -> emptyMap()
+    }
 }
 
 @Composable
@@ -155,10 +170,11 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
     var tab by rememberSaveable { mutableStateOf("permissions") }
     var apps by remember { mutableStateOf(emptyList<RiskyApp>()) }; var sysApps by remember { mutableStateOf(emptyList<SysApp>()) }
     var dCache by remember { mutableStateOf<List<RiskyApp>?>(null) }; var sCache by remember { mutableStateOf<List<SysApp>?>(null) }
-    var accepted by remember { mutableStateOf(false) }; var loading by remember { mutableStateOf(true) }; var msgIdx by remember { mutableIntStateOf(0) }
-    var error by remember { mutableStateOf("") }; var expanded by remember { mutableStateOf<String?>(null) }; var processing by remember { mutableStateOf<String?>(null) }
+    var accepted by remember { mutableStateOf(vm.flag("debloat") != null) }; var loading by remember { mutableStateOf(true) }; var msgIdx by remember { mutableIntStateOf(0) }
+    var error by remember { mutableStateOf("") }; var processing by remember { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }; var filter by rememberSaveable { mutableStateOf("all") }
-    var uad by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var uad by remember { mutableStateOf<Map<String, Uad>>(emptyMap()) }; var info by remember { mutableStateOf<SysApp?>(null) }
+    var permApp by remember { mutableStateOf<String?>(null) }; var surgeApp by remember { mutableStateOf<RiskyApp?>(null) }
     var confirm by remember { mutableStateOf<Pair<String, suspend () -> Unit>?>(null) }
     fun ask(msg: String, action: suspend () -> Unit) { confirm = msg to action }
 
@@ -169,14 +185,14 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
     }
     suspend fun fetchSystemApps() {
         loading = true
-        try { tracker.systemApps().sortedWith(compareBy<SysApp> { it.isInstalled }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }).filter { it.isSystem }.let { sysApps = it; sCache = it } }
+        try { tracker.systemApps().sortedWith(compareBy<SysApp> { it.isInstalled }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }).let { sysApps = it; sCache = it } }
         catch (e: Exception) { error = e.message ?: ctx.getString(R.string.xtra_failed_to_fetch_system_apps) } finally { loading = false }
     }
 
     LaunchedEffect(tab, accepted) {
         if (tab == "debloater") {
             if (uad.isEmpty()) launch { runCatching { parseUad(Net.text(UAD_URL)) }.onSuccess { uad = it }.onFailure { toast.show(loadDbFailMsg, true) } }
-            if (accepted) sCache?.let { sysApps = it; loading = false } ?: fetchSystemApps()
+            sCache?.let { sysApps = it; loading = false } ?: fetchSystemApps()
         } else dCache?.let { apps = it; loading = false } ?: fetchApps()
     }
     LaunchedEffect(loading) { while (loading) { delay(1500); msgIdx = (msgIdx + 1) % LOADING_TEXTS.size } }
@@ -195,13 +211,13 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
         catch (e: Exception) { toast.show(e.message ?: ctx.getString(R.string.xtra_extraction_failed), true) } finally { processing = null }
     }
 
-    fun toggle(a: SysApp) {
-        val warn = when (debloatRisk(uad[a.packageName]).label) { "Unsafe" -> ctx.getString(R.string.xtra_danger_critical_system_app_bootloop_likely); "Expert", "Advanced" -> ctx.getString(R.string.xtra_caution_may_break_features); else -> "" }
-        ask((ctx.getString(R.string.xtra_text, if (a.isInstalled) "Uninstall" else "Restore") + " ${a.name}? $warn").trim()) {
-            processing = a.packageName
-            try { tracker.toggleSystemApp(a.packageName, !a.isInstalled); toast.show(if (a.isInstalled) ctx.getString(R.string.xtra_uninstalled_user_0) else "Restored"); sCache = null; delay(800); fetchSystemApps() }
-            catch (e: Exception) { toast.show(e.message ?: ctx.getString(R.string.xtra_operation_failed), true) } finally { processing = null }
-        }
+    // The info dialog is the confirmation: it shows what the app does and how risky removing it is
+    fun toggle(a: SysApp) = scope.launch {
+        processing = a.packageName
+        try {
+            tracker.requestElevated(); tracker.toggleSystemApp(a.packageName, !a.isInstalled); vm.haptic(H.SUCCESS)
+            toast.show(if (a.isInstalled) ctx.getString(R.string.xtra_app_removed, a.name) else ctx.getString(R.string.xtra_app_restored, a.name)); sCache = null; delay(800); fetchSystemApps()
+        } catch (e: Exception) { vm.haptic(H.ERROR); toast.show(e.message ?: ctx.getString(R.string.xtra_operation_failed), true) } finally { processing = null }
     }
 
     val cs = MaterialTheme.colorScheme; val ty = MaterialTheme.typography
@@ -209,169 +225,206 @@ fun GuardianSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
     LaunchedEffect(Unit) { while (true) { delay(2000); shizuku = tracker.elevatedReady() } }
     data class Mode(val id: String, val label: String, val icon: ImageVector, @StringRes val blurb: Int, val shape: RoundedPolygon)
     val modes = listOf(
-        Mode("permissions", "Perms", Sym.Security, R.string.xtra_spot_and_revoke_risky_permissions, MaterialShapes.Cookie9Sided),
-        Mode("surgeon", "Surgeon", Sym.MedicalServices, R.string.xtra_pull_the_apk_out_of_any, MaterialShapes.Clover4Leaf),
-        Mode("debloater", "Debloat", Sym.DeleteSweep, R.string.xtra_remove_system_apps_reversibly, MaterialShapes.SoftBurst),
+        Mode("permissions", stringResource(R.string.xtra_perms), Sym.Security, R.string.xtra_spot_and_revoke_risky_permissions, MaterialShapes.Cookie9Sided),
+        Mode("surgeon", stringResource(R.string.xtra_surgeon), Sym.MedicalServices, R.string.xtra_pull_the_apk_out_of_any, MaterialShapes.Clover4Leaf),
+        Mode("debloater", stringResource(R.string.xtra_debloat), Sym.DeleteSweep, R.string.xtra_remove_apps_you_never_use_reversibly, MaterialShapes.SoftBurst),
     )
     val mi = modes.indexOfFirst { it.id == tab }.coerceAtLeast(0); val mode = modes[mi]
 
-    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        MorphBlob(modes.map { it.shape }, mi, 60.dp, cs.primaryContainer) { Icon(mode.icon, null, Modifier.size(28.dp), tint = cs.onPrimaryContainer) }
-        Column(Modifier.weight(1f).padding(start = 16.dp)) {
-            Text("Guardian", style = ty.headlineMediumEmphasized)
-            val fx = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-            AnimatedContent(mode.blurb, transitionSpec = { fadeIn(fx) togetherWith fadeOut(fx) }, label = "blurb") {
-                Text(stringResource(it), style = ty.bodyMedium, color = cs.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        Surface(shape = Pill, color = if (shizuku) cs.tertiaryContainer else cs.errorContainer, contentColor = if (shizuku) cs.onTertiaryContainer else cs.onErrorContainer) {
-            Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(LocalContentColor.current)); Spacer(Modifier.width(6.dp))
-                Text(if (tracker.root) "Root" else if (shizuku) stringResource(R.string.xtra_shizuku_on) else stringResource(R.string.xtra_shizuku_off), style = ty.labelMedium)
-            }
-        }
-    }
     SheetToastHost(toast)
-    // Connected button group: the three tools are one exclusive choice
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
-        modes.forEachIndexed { i, m ->
-            ToggleButton(tab == m.id, { vm.haptic(H.SELECTION); tab = m.id; expanded = null; error = "" }, Modifier.weight(1f).semantics { role = Role.RadioButton },
-                shapes = when (i) { 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes(); modes.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes(); else -> ButtonGroupDefaults.connectedMiddleButtonShapes() }) {
-                Icon(m.icon, null, Modifier.size(ToggleButtonDefaults.IconSize)); Spacer(Modifier.width(8.dp)); Text(m.label, maxLines = 1)
-            }
-        }
-    }
-    TextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp), singleLine = true, shape = Pill,
-        placeholder = { Text(if (tab == "debloater") stringResource(R.string.xtra_search_system_apps) else stringResource(R.string.xtra_search_apps_or_packages)) }, leadingIcon = { Icon(Sym.Search, null) },
-        trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Sym.Close, "Clear") } },
-        colors = TextFieldDefaults.colors(focusedContainerColor = cs.surfaceContainerHigh, unfocusedContainerColor = cs.surfaceContainerHigh,
-            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
-    if (tab != "debloater") Row(Modifier.padding(horizontal = 16.dp).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("all" to "All", "user" to "User", "system" to "System").forEach { (id, label) -> Choice(filter == id, label) { filter = id } }
-    }
-
     val q = query.trim().lowercase()
-    fun match(name: String, pkg: String, sys: Boolean) = (tab == "debloater" || filter == "all" || (filter == "system") == sys) && (q.isEmpty() || name.lowercase().contains(q) || pkg.lowercase().contains(q))
+    fun match(name: String, pkg: String, sys: Boolean) = (filter == "all" || (filter == "system") == sys) && (q.isEmpty() || name.lowercase().contains(q) || pkg.lowercase().contains(q))
+    val perms = apps.filter { it.permissions.isNotEmpty() && match(it.name, it.packageName, it.isSystem) }
+    val surgeon = apps.filter { match(it.name, it.packageName, it.isSystem) }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    val bloat = sysApps.filter { match(it.name, it.packageName, it.isSystem) }
+    val count = when (tab) { "permissions" -> perms.size; "surgeon" -> surgeon.size; else -> bloat.size }
 
-    @Composable
-    fun Stats(vararg items: Triple<Int, String, Color>) = Row(Modifier.padding(horizontal = 16.dp).padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.forEach { (n, label, c) ->
-            val (bg, fg) = tonal(c)
-            Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(bg).padding(horizontal = 14.dp, vertical = 10.dp)) {
-                Text("$n", style = ty.titleLargeEmphasized, color = fg); Text(label, style = ty.labelMedium, color = fg.copy(.8f), maxLines = 1)
+    // One scrolling list, controls included: nothing is pinned, so nothing clips while the apps scroll
+    LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 32.dp)) {
+        item("head") {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                MorphBlob(modes.map { it.shape }, mi, 48.dp, cs.primaryContainer) { Icon(mode.icon, null, Modifier.size(24.dp), tint = cs.onPrimaryContainer) }
+                Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                    Text("Guardian", style = ty.headlineSmallEmphasized)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(6.dp).clip(CircleShape).background(if (shizuku) Safe else cs.error)); Spacer(Modifier.width(6.dp))
+                        Text(if (tracker.root) stringResource(R.string.xtra_root) else if (shizuku) stringResource(R.string.xtra_shizuku_on) else stringResource(R.string.xtra_shizuku_off), style = ty.labelMedium, color = cs.onSurfaceVariant)
+                    }
+                }
             }
         }
-    }
-    if (!loading && error.isEmpty()) when {
-        tab == "permissions" -> apps.filter { it.permissions.isNotEmpty() }.let { l ->
-            Stats(Triple(l.count { it.permissions.size >= 3 }, "Critical", Red), Triple(l.count { it.permissions.size in 1..2 }, "Warning", Yellow), Triple(l.size, "Flagged", Blue))
+        item("modes") {
+            // Connected button group: the three tools are one exclusive choice
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+                modes.forEachIndexed { i, m ->
+                    ToggleButton(tab == m.id, { vm.haptic(H.SELECTION); tab = m.id; error = "" }, Modifier.weight(1f).semantics { role = Role.RadioButton },
+                        shapes = when (i) { 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes(); modes.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes(); else -> ButtonGroupDefaults.connectedMiddleButtonShapes() }) {
+                        Icon(m.icon, null, Modifier.size(ToggleButtonDefaults.IconSize)); Spacer(Modifier.width(8.dp)); Text(m.label, maxLines = 1)
+                    }
+                }
+            }
         }
-        tab == "surgeon" -> Stats(Triple(apps.size, "Apps", Blue), Triple(apps.count { !it.isSystem }, "User", Safe), Triple(apps.count { it.isSystem }, "System", Gray))
-        accepted -> Stats(Triple(sysApps.size, stringResource(R.string.xtra_system_apps), Blue), Triple(sysApps.count { !it.isInstalled }, "Removed", Red),
-            Triple(sysApps.count { it.isInstalled && debloatRisk(uad[it.packageName]).label == "Recommended" }, stringResource(R.string.xtra_safe_to_cut), Safe))
-    }
-
-    Box(Modifier.weight(1f).fillMaxWidth()) {
+        item("search") {
+            TextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp), singleLine = true, shape = Pill,
+                placeholder = { Text(stringResource(R.string.xtra_search_apps_or_packages)) }, leadingIcon = { Icon(Sym.Search, null) },
+                trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Sym.Close, stringResource(R.string.common_clear)) } },
+                colors = TextFieldDefaults.colors(focusedContainerColor = cs.surfaceContainerHigh, unfocusedContainerColor = cs.surfaceContainerHigh,
+                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
+        }
+        item("filters") {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                listOf("all" to stringResource(R.string.myapps_select_all), "user" to stringResource(R.string.common_user), "system" to stringResource(R.string.common_system)).forEach { (id, label) -> Choice(filter == id, label) { filter = id } }
+                if (!loading && error.isEmpty()) Text(when (tab) { "permissions" -> stringResource(R.string.xtra_flagged_count, count); else -> stringResource(R.string.xtra_apps_count, count) },
+                    Modifier.padding(start = 8.dp), style = ty.labelLarge, color = cs.onSurfaceVariant)
+            }
+        }
         when {
-            tab == "debloater" && !accepted -> Column(Modifier.align(Alignment.Center).verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                var k by remember { mutableIntStateOf(0) }
-                LaunchedEffect(Unit) { while (true) { delay(1800); k++ } }
-                MorphBlob(listOf(MaterialShapes.Burst, MaterialShapes.SoftBurst), k, 120.dp, cs.errorContainer) { Icon(Sym.Warning, null, Modifier.size(52.dp), tint = cs.onErrorContainer) }
-                Text(stringResource(R.string.xtra_nuclear_zone), style = ty.displaySmallEmphasized, modifier = Modifier.padding(top = 20.dp))
-                Text(stringResource(R.string.xtra_critical_warning), style = ty.titleMediumEmphasized, color = cs.error, modifier = Modifier.padding(top = 4.dp))
-                Text(stringResource(R.string.xtra_uninstalling_system_apps_can_brick_your), textAlign = TextAlign.Center,
-                    style = ty.bodyLarge, color = cs.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp).widthIn(max = 420.dp))
-                val h = ButtonDefaults.MediumContainerHeight
-                Button({ scope.launch { try { tracker.requestElevated(); shizuku = true; accepted = true } catch (_: Exception) { toast.show(shizukuDeniedMsg, true) } } },
-                    modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).heightIn(min = h), shapes = ButtonDefaults.shapesFor(h), contentPadding = ButtonDefaults.contentPaddingFor(h),
-                    colors = ButtonDefaults.buttonColors(cs.error, cs.onError)) {
-                    Icon(Sym.GppMaybe, null, Modifier.size(ButtonDefaults.iconSizeFor(h))); Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(h)))
-                    Text(stringResource(R.string.xtra_i_accept_the_risk), style = ButtonDefaults.textStyleFor(h))
-                }
-            }
-            loading -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                ContainedLoadingIndicator(Modifier.size(80.dp))
-                AnimatedContent(LOADING_TEXTS[msgIdx], transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "load") {
-                    Text(stringResource(it), style = ty.titleSmallEmphasized, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
-                }
-            }
-            error.isNotEmpty() -> EmptyState(Sym.ErrorOutline, stringResource(R.string.xtra_scan_failed), error, Modifier.align(Alignment.Center))
-            tab == "debloater" -> {
-                val list = sysApps.filter { match(it.name, it.packageName, it.isSystem) }
-                if (list.isEmpty()) EmptyState(Sym.SearchOff, stringResource(R.string.xtra_no_signals_found), modifier = Modifier.align(Alignment.Center))
-                else LazyColumn(contentPadding = PaddingValues(16.dp)) {
-                    itemsIndexed(list, key = { _, a -> a.packageName }) { i, a ->
-                        val r = debloatRisk(uad[a.packageName])
-                        GroupItem(i, list.size, Modifier.animateItem()) {
-                            Row(Modifier.padding(14.dp).alpha(if (a.isInstalled) 1f else .6f), verticalAlignment = Alignment.CenterVertically) {
-                                PkgIcon(tracker, a.packageName, 44)
-                                Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-                                    Text(a.name, style = ty.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(a.packageName, Modifier.clickable { copy(a.packageName) }, style = ty.labelSmall, fontFamily = FontFamily.Monospace,
-                                        color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { Tag(r.label, r.color); if (!a.isInstalled) Tag("Removed", Gray) }
-                                }
-                                if (processing == a.packageName) LoadingIndicator(Modifier.size(40.dp))
-                                else if (a.isInstalled) FilledTonalIconButton({ toggle(a) }, enabled = processing == null, shapes = IconButtonDefaults.shapes(),
-                                    colors = IconButtonDefaults.filledTonalIconButtonColors(cs.errorContainer, cs.onErrorContainer)) { Icon(Sym.DeleteForever, "Uninstall") }
-                                else FilledTonalIconButton({ toggle(a) }, enabled = processing == null, shapes = IconButtonDefaults.shapes()) { Icon(Sym.Restore, "Restore") }
-                            }
-                        }
+            loading -> item("loading") {
+                Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    ContainedLoadingIndicator(Modifier.size(64.dp))
+                    AnimatedContent(LOADING_TEXTS[msgIdx], transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "load") {
+                        Text(stringResource(it), style = ty.titleSmallEmphasized, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
                     }
                 }
             }
-            else -> {
-                val list = (if (tab == "permissions") apps.filter { it.permissions.isNotEmpty() } else apps).filter { match(it.name, it.packageName, it.isSystem) }
-                if (list.isEmpty()) EmptyState(Sym.SearchOff, stringResource(R.string.xtra_no_signals_found), modifier = Modifier.align(Alignment.Center))
-                else LazyColumn(contentPadding = PaddingValues(16.dp)) {
-                    itemsIndexed(list, key = { _, a -> a.packageName }) { i, a ->
-                        val open = tab == "permissions" && expanded == a.packageName; val r = riskLevel(a.permissions.size)
-                        GroupItem(i, list.size, Modifier.animateItem(), selected = open,
-                            onClick = if (tab == "permissions") ({ vm.haptic(H.LIGHT); expanded = if (open) null else a.packageName }) else null) {
-                            Column {
-                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    PkgIcon(tracker, a.packageName, 44)
-                                    Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(a.name, Modifier.weight(1f, false), style = ty.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            if (a.isSystem) { Spacer(Modifier.width(6.dp)); Tag("SYS", Gray) }
-                                        }
-                                        Text(a.packageName, Modifier.clickable { copy(a.packageName) }, style = ty.labelSmall, fontFamily = FontFamily.Monospace,
-                                            color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
-                                    if (tab == "permissions") {
-                                        // Risk reads from the shape as well as the hue: calm circle, wary cookie, critical burst
-                                        val (bg, fg) = tonal(r.color)
-                                        Box(Modifier.size(44.dp).clip((when (r.label) { "CRITICAL" -> MaterialShapes.Burst; "WARNING" -> MaterialShapes.Cookie6Sided; else -> MaterialShapes.Circle }).toShape()).background(bg),
-                                            contentAlignment = Alignment.Center) { Text("${a.permissions.size}", style = ty.titleMediumEmphasized, color = fg) }
-                                    }
-                                    else if (processing == a.packageName) LoadingIndicator(Modifier.size(40.dp))
-                                    else FilledTonalIconButton({ extract(a.packageName) }, enabled = processing == null, shapes = IconButtonDefaults.shapes()) { Icon(Sym.Unarchive, stringResource(R.string.xtra_extract_apk)) }
-                                }
-                                AnimatedVisibility(open, enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) + fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec()),
-                                    exit = shrinkVertically(MaterialTheme.motionScheme.fastSpatialSpec()) + fadeOut(MaterialTheme.motionScheme.fastEffectsSpec())) {
-                                    Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        a.permissions.forEachIndexed { j, p ->
-                                            Row(Modifier.fillMaxWidth().clip(colShape(j, a.permissions.size)).background(cs.surfaceContainerLowest).padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-                                                verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(permIcon(p), null, Modifier.size(20.dp), tint = r.color)
-                                                Text(cleanPermName(p), Modifier.weight(1f).padding(horizontal = 12.dp), style = ty.labelLarge, fontFamily = FontFamily.Monospace)
-                                                if (processing == a.packageName) LoadingIndicator(Modifier.size(32.dp))
-                                                else FilledTonalButton({ revoke(a.packageName, p) }, enabled = processing == null, shapes = ButtonDefaults.shapes(),
-                                                    contentPadding = ButtonDefaults.ExtraSmallContentPadding, modifier = Modifier.heightIn(min = ButtonDefaults.ExtraSmallContainerHeight),
-                                                    colors = ButtonDefaults.filledTonalButtonColors(cs.errorContainer, cs.onErrorContainer)) { Text("Revoke", style = ty.labelLarge) }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+            error.isNotEmpty() -> item("error") { EmptyState(Sym.ErrorOutline, stringResource(R.string.xtra_scan_failed), error, Modifier.padding(top = 32.dp)) }
+            count == 0 -> item("empty") { EmptyState(Sym.SearchOff, if (tab == "permissions" && q.isEmpty()) stringResource(R.string.xtra_nothing_risky_here) else stringResource(R.string.xtra_no_apps_found), modifier = Modifier.padding(top = 32.dp)) }
+            tab == "debloater" -> itemsIndexed(bloat, key = { _, a -> "d-" + a.packageName }) { i, a ->
+                val r = debloatRisk(ctx, uad[a.packageName]?.removal)
+                GuardRow(tracker, a.packageName, a.name, i, bloat.size, Modifier.animateItem(), dim = !a.isInstalled, busy = processing == a.packageName, dot = r.color,
+                    sub = if (a.isInstalled) r.label else stringResource(R.string.xtra_removed)) { vm.haptic(H.LIGHT); info = a }
+            }
+            tab == "permissions" -> itemsIndexed(perms, key = { _, a -> "p-" + a.packageName }) { i, a ->
+                val n = a.permissions.size
+                GuardRow(tracker, a.packageName, a.name, i, perms.size, Modifier.animateItem(), busy = processing == a.packageName, dot = riskLevel(ctx, n).color,
+                    sub = stringResource(if (n == 1) R.string.xtra_risky_permission else R.string.xtra_risky_permissions, n)) { vm.haptic(H.LIGHT); permApp = a.packageName }
+            }
+            else -> itemsIndexed(surgeon, key = { _, a -> "s-" + a.packageName }) { i, a ->
+                GuardRow(tracker, a.packageName, a.name, i, surgeon.size, Modifier.animateItem(), busy = processing == a.packageName,
+                    sub = if (a.isSystem) stringResource(R.string.xtra_system_app) else a.packageName) { vm.haptic(H.LIGHT); surgeApp = a }
+            }
+        }
+    }
+    permApp?.let { pkg ->
+        val a = apps.firstOrNull { it.packageName == pkg }
+        if (a == null || a.permissions.isEmpty()) { permApp = null; return@let }
+        AlertDialog({ permApp = null }, icon = { PkgIcon(tracker, a.packageName, 48) }, title = { Text(a.name, textAlign = TextAlign.Center) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(stringResource(R.string.xtra_allowed_to_use), Modifier.padding(bottom = 6.dp), style = ty.labelLarge, color = cs.onSurfaceVariant)
+                    a.permissions.forEach { p ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(permIcon(p), null, Modifier.size(20.dp), tint = cs.onSurfaceVariant)
+                            Text(cleanPermName(p).lowercase().replaceFirstChar { it.uppercase() }, Modifier.weight(1f).padding(horizontal = 12.dp), style = ty.bodyMedium)
+                            if (processing == a.packageName) LoadingIndicator(Modifier.size(28.dp))
+                            else TextButton({ revoke(a.packageName, p) }, enabled = processing == null, colors = ButtonDefaults.textButtonColors(contentColor = cs.error)) { Text(stringResource(R.string.xtra_revoke)) }
                         }
+                    }
+                }
+            },
+            confirmButton = { TextButton({ permApp = null }) { Text(stringResource(R.string.xtra_done)) } })
+    }
+    surgeApp?.let { a ->
+        AlertDialog({ surgeApp = null }, icon = { PkgIcon(tracker, a.packageName, 48) }, title = { Text(a.name, textAlign = TextAlign.Center) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.xtra_saves_this_apps_apk_to_your_downloads), style = ty.bodyMedium)
+                    Text(a.packageName, Modifier.clickable { copy(a.packageName) }, style = ty.labelSmall, fontFamily = FontFamily.Monospace, color = cs.onSurfaceVariant)
+                }
+            },
+            confirmButton = { TextButton({ surgeApp = null; extract(a.packageName) }, enabled = processing == null) { Text(stringResource(R.string.xtra_extract_apk)) } },
+            dismissButton = { TextButton({ surgeApp = null }) { Text(stringResource(R.string.xtra_close)) } })
+    }
+    ConfirmDialog(confirm?.first, null, { confirm?.second?.let { a -> scope.launch { a() } } }) { confirm = null }
+    if (tab == "debloater" && !accepted) AlertDialog({ tab = "permissions" }, icon = { Icon(Sym.WarningAmber, null) }, title = { Text(stringResource(R.string.xtra_careful_with_system_apps)) },
+        text = { Text(stringResource(R.string.xtra_some_keep_your_phone_running_removing_the)) },
+        confirmButton = { TextButton({ accepted = true; vm.setFlag("debloat", "1") }) { Text(stringResource(R.string.xtra_i_understand)) } },
+        dismissButton = { TextButton({ tab = "permissions" }) { Text(stringResource(R.string.xtra_back)) } })
+    info?.let { a ->
+        val u = uad[a.packageName]; val r = debloatRisk(ctx, u?.removal)
+        AlertDialog({ info = null }, icon = { PkgIcon(tracker, a.packageName, 48) }, title = { Text(a.name, textAlign = TextAlign.Center) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Tag(r.label, r.color); u?.list?.takeIf { it.isNotEmpty() }?.let { Tag(it, Gray) }; if (!a.isSystem) Tag(stringResource(R.string.xtra_user_app), Gray)
+                    }
+                    u?.description?.takeIf { it.isNotEmpty() }?.let { UadNotes(it) } ?: Text(stringResource(R.string.xtra_no_notes_for_this_app_yet_if_you), style = ty.bodyMedium)
+                    Text(a.packageName, Modifier.clickable { copy(a.packageName) }, style = ty.labelSmall, fontFamily = FontFamily.Monospace, color = cs.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                TextButton({ info = null; toggle(a) }, enabled = processing == null,
+                    colors = if (a.isInstalled) ButtonDefaults.textButtonColors(contentColor = cs.error) else ButtonDefaults.textButtonColors()) { Text(if (a.isInstalled) stringResource(R.string.xtra_remove) else stringResource(R.string.xtra_restore)) }
+            },
+            dismissButton = { TextButton({ info = null }) { Text(stringResource(R.string.xtra_close)) } })
+    }
+}
+
+private val URL_RE = Regex("""https?://[^\s)\]>]+""")
+private fun site(u: String) = runCatching { java.net.URI(u).host.removePrefix("www.") }.getOrNull() ?: u
+
+/** UAD notes made readable: a short first line becomes the heading, every other line its own paragraph with in-line links shortened to their
+ *  site and tappable, and lines that are only a link gathered at the bottom as source rows. */
+@Composable
+private fun UadNotes(text: String) {
+    val cs = MaterialTheme.colorScheme; val ty = MaterialTheme.typography; val open = LocalUriHandler.current
+    val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    val (sources, notes) = lines.partition { URL_RE.containsMatchIn(it) && URL_RE.replace(it, "").trim().trimEnd(':', '.').lowercase() in setOf("", "see", "source", "more info", "more") }
+    val head = notes.firstOrNull()?.takeIf { notes.size > 1 && it.length <= 48 && !it.endsWith('.') }
+    val link = TextLinkStyles(SpanStyle(color = cs.primary, fontWeight = FontWeight.SemiBold, textDecoration = TextDecoration.Underline))
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        head?.let { Text(it, style = ty.titleSmall, fontWeight = FontWeight.Bold) }
+        (if (head != null) notes.drop(1) else notes).forEach { l ->
+            Text(buildAnnotatedString {
+                var at = 0
+                URL_RE.findAll(l).forEach { m ->
+                    append(l.substring(at, m.range.first))
+                    withLink(LinkAnnotation.Url(m.value, link)) { append(site(m.value)) }
+                    at = m.range.last + 1
+                }
+                append(l.substring(at))
+            }, style = ty.bodyMedium, color = cs.onSurfaceVariant)
+        }
+        val urls = sources.flatMap { URL_RE.findAll(it).map { m -> m.value }.toList() }.distinct()
+        if (urls.isNotEmpty()) {
+            Text(stringResource(R.string.xtra_sources), Modifier.padding(top = 4.dp), style = ty.labelLarge, color = cs.primary)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                urls.forEachIndexed { i, u ->
+                    val shape = RoundedCornerShape(if (i == 0) 16.dp else 4.dp, if (i == 0) 16.dp else 4.dp, if (i == urls.lastIndex) 16.dp else 4.dp, if (i == urls.lastIndex) 16.dp else 4.dp)
+                    Row(Modifier.fillMaxWidth().clip(shape).background(cs.surfaceContainerHighest).clickable { runCatching { open.openUri(u) } }.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Sym.Link, null, Modifier.size(18.dp), tint = cs.primary); Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(site(u), style = ty.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(u.substringAfter("://").substringAfter('/', ""), style = ty.bodySmall, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Icon(Sym.OpenInNew, stringResource(R.string.myapps_open), Modifier.size(16.dp), tint = cs.onSurfaceVariant)
                     }
                 }
             }
         }
     }
-    ConfirmDialog(confirm?.first, "Confirm", { confirm?.second?.let { a -> scope.launch { a() } } }) { confirm = null }
+}
+
+/** One app in a Guardian list: icon, name, and a status line with an optional colored dot. Tapping opens its details. */
+@Composable
+private fun GuardRow(tracker: AppTracker, pkg: String, name: String, i: Int, n: Int, modifier: Modifier, sub: String, dim: Boolean = false, busy: Boolean = false,
+                     dot: Color? = null, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme; val ty = MaterialTheme.typography
+    GroupItem(i, n, modifier.padding(horizontal = 16.dp), onClick = onClick) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp).alpha(if (dim) .55f else 1f), verticalAlignment = Alignment.CenterVertically) {
+            PkgIcon(tracker, pkg, 40)
+            Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+                Text(name, style = ty.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    dot?.let { Box(Modifier.size(6.dp).clip(CircleShape).background(it)); Spacer(Modifier.width(6.dp)) }
+                    Text(sub, style = ty.labelMedium, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (busy) LoadingIndicator(Modifier.size(32.dp))
+        }
+    }
 }
 
 // ---------------- Sentinel (SentinelModal + workers/sentinel.worker.ts) ----------------
@@ -389,12 +442,12 @@ data class Threat(val path: String, val hash: String, val threat: String)
 
 /** Worker port: the 16 hash shards live in filesDir/sentinel instead of CacheStorage. */
 // Note: parsed shards stay in memory for the sheet's lifetime, stream per bucket if the DB outgrows RAM
-class SentinelDb(dir: File) {
+class SentinelDb(dir: File, private val unknownThreat: String = "Unknown Threat") {
     private val root = File(dir, "sentinel").apply { mkdirs() }
     private val maps = HashMap<String, Map<String, String>>()
     private fun shard(b: String) = File(root, "shard_$b.json")
     private fun load(b: String) = maps.getOrPut(b) {
-        runCatching { json.parseToJsonElement(shard(b).readText()).jsonArray.associate { val o = it.jsonObject; o["h"]!!.jsonPrimitive.content to (o["n"]?.jsonPrimitive?.contentOrNull ?: "Unknown Threat") } }.getOrDefault(emptyMap())
+        runCatching { json.parseToJsonElement(shard(b).readText()).jsonArray.associate { val o = it.jsonObject; o["h"]!!.jsonPrimitive.content to (o["n"]?.jsonPrimitive?.contentOrNull ?: unknownThreat) } }.getOrDefault(emptyMap())
     }
     fun ready() = BUCKETS.all { shard(it).exists() }
     fun count() = BUCKETS.sumOf { load(it).size } + KNOWN_THREATS.size
@@ -408,21 +461,21 @@ class SentinelDb(dir: File) {
 
 private data class Info(val text: String, val color: Color, @StringRes val desc: Int, val icon: ImageVector)
 
-private fun encryptionInfo(t: String) = t.uppercase().let {
+private fun encryptionInfo(ctx: Context, t: String) = t.uppercase().let {
     when {
-        "WPA3" in it -> Info("Secure", Safe, R.string.xtra_latest_security_standard, Sym.EnhancedEncryption)
-        "WPA2" in it -> Info("Good", Blue, R.string.xtra_industry_standard_protection, Sym.Lock)
-        "WPA" in it -> Info("Weak", Caution, R.string.xtra_outdated_and_vulnerable, Sym.LockOpen)
-        "WEP" in it -> Info("Insecure", Red, R.string.xtra_easily_compromised, Sym.NoEncryption)
-        "OPEN" in it -> Info("Open", Red, R.string.xtra_no_encryption_high_risk, Sym.LockOpen)
-        else -> Info("Unknown", Gray, R.string.xtra_could_not_determine_status, Sym.HelpOutline)
+        "WPA3" in it -> Info(ctx.getString(R.string.xtra_secure), Safe, R.string.xtra_latest_security_standard, Sym.EnhancedEncryption)
+        "WPA2" in it -> Info(ctx.getString(R.string.xtra_good), Blue, R.string.xtra_industry_standard_protection, Sym.Lock)
+        "WPA" in it -> Info(ctx.getString(R.string.xtra_weak), Caution, R.string.xtra_outdated_and_vulnerable, Sym.LockOpen)
+        "WEP" in it -> Info(ctx.getString(R.string.xtra_insecure), Red, R.string.xtra_easily_compromised, Sym.NoEncryption)
+        "OPEN" in it -> Info(ctx.getString(R.string.myapps_open), Red, R.string.xtra_no_encryption_high_risk, Sym.LockOpen)
+        else -> Info(ctx.getString(R.string.common_unknown), Gray, R.string.xtra_could_not_determine_status, Sym.HelpOutline)
     }
 }
 
-private fun dnsInfo(servers: List<String>) = when {
-    servers.isEmpty() -> Info("Unknown", Gray, R.string.xtra_no_dns_servers_detected, Sym.Dns)
-    servers.any { it in TRUSTED_DNS } -> Info("Trusted", Safe, R.string.xtra_using_a_known_secure_dns, Sym.VerifiedUser)
-    else -> Info("Unknown", Caution, R.string.xtra_using_default_or_isp_dns, Sym.Dns)
+private fun dnsInfo(ctx: Context, servers: List<String>) = when {
+    servers.isEmpty() -> Info(ctx.getString(R.string.common_unknown), Gray, R.string.xtra_no_dns_servers_detected, Sym.Dns)
+    servers.any { it in TRUSTED_DNS } -> Info(ctx.getString(R.string.xtra_trusted), Safe, R.string.xtra_using_a_known_secure_dns, Sym.VerifiedUser)
+    else -> Info(ctx.getString(R.string.common_unknown), Caution, R.string.xtra_using_default_or_isp_dns, Sym.Dns)
 }
 
 @Composable
@@ -496,10 +549,11 @@ fun SentinelSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
     val initScannerMsg = stringResource(R.string.xtra_initializing_scanner)
     val searchingFilesMsg = stringResource(R.string.xtra_searching_for_files)
     val finalizingMsg = stringResource(R.string.xtra_finalizing_results)
-    val db = remember { SentinelDb(ctx.filesDir) }
+    val rapidLabel = stringResource(R.string.xtra_rapid); val deepLabel = stringResource(R.string.xtra_deep); val finalizingShortMsg = stringResource(R.string.xtra_finalizing); val unknownThreatMsg = stringResource(R.string.xtra_unknown_threat)
+    val db = remember { SentinelDb(ctx.filesDir, unknownThreatMsg) }
     var view by remember { mutableStateOf("permissions") }; var perm by remember { mutableStateOf(tracker.permissionStatus()) }
     var dbStatus by remember { mutableStateOf("checking") }; var dbProgress by remember { mutableFloatStateOf(0f) }; var sigs by remember { mutableIntStateOf(0) }
-    var scanType by remember { mutableStateOf("Deep") }; var progress by remember { mutableFloatStateOf(0f) }; var current by remember { mutableStateOf("") }
+    var scanType by remember { mutableStateOf(deepLabel) }; var progress by remember { mutableFloatStateOf(0f) }; var current by remember { mutableStateOf("") }
     var threats by remember { mutableStateOf(emptyList<Threat>()) }; var rapid by remember { mutableStateOf(emptyList<Pair<String, String>>()) }
     var net by remember { mutableStateOf<NetSecurity?>(null) }; var netScanning by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf<String?>(null) }; var job by remember { mutableStateOf<Job?>(null) }
@@ -524,17 +578,17 @@ fun SentinelSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
         progress = 100f; delay(500); threats = t; rapid = r; vm.haptic(if (t.isEmpty() && r.isEmpty()) H.SUCCESS else H.ERROR); view = "results"
     }
     fun rapidScan() {
-        reset(); scanType = "Rapid"; current = gettingAppsMsg
+        reset(); scanType = rapidLabel; current = gettingAppsMsg
         job = scope.launch {
             try {
                 val apps = withContext(Dispatchers.IO) { tracker.installedPackages() }
                 apps.forEachIndexed { i, (n, _) -> current = n; progress = i * 100f / apps.size; delay(50) }
-                current = "Finalizing..."; finish(emptyList(), apps.filter { it.second.lowercase() in KNOWN_BAD_PACKAGES })
+                current = finalizingShortMsg; finish(emptyList(), apps.filter { it.second.lowercase() in KNOWN_BAD_PACKAGES })
             } catch (e: CancellationException) { throw e } catch (_: Exception) { view = "results" }
         }
     }
     fun deepScan() {
-        reset(); scanType = "Deep"; current = initScannerMsg
+        reset(); scanType = deepLabel; current = initScannerMsg
         job = scope.launch {
             val ticker = launch { var p = 0; while (p < 95) { delay(400); p++; progress = p.toFloat() } }
             val names = Channel<String>(64, BufferOverflow.DROP_OLDEST)
@@ -632,7 +686,7 @@ fun SentinelSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
                             rapid.forEachIndexed { i, (n, p) -> Item("app-$i", n, null, listOf(stringResource(R.string.xtra_package_name) to p), stringResource(R.string.xtra_copy_package_name), p) }
                         }
                     }
-                    Button({ view = "main" }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) { Text("Return") }
+                    Button({ view = "main" }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.common_return)) }
                 }
                 else -> when {
                     netScanning -> {
@@ -644,21 +698,21 @@ fun SentinelSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
                         hero(Sym.WifiOff, Red, MaterialShapes.Cookie9Sided)
                         Text(stringResource(R.string.xtra_scan_failed_2), style = MaterialTheme.typography.headlineSmallEmphasized)
                         Text(stringResource(R.string.xtra_could_not_retrieve_network_information), color = c.onSurfaceVariant)
-                        Button({ netScan() }, shapes = ButtonDefaults.shapes()) { Icon(Sym.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Rescan") }
+                        Button({ netScan() }, shapes = ButtonDefaults.shapes()) { Icon(Sym.Refresh, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.xtra_rescan)) }
                     }
                     else -> {
-                        val n = net!!; val enc = encryptionInfo(n.encryptionType); val dns = dnsInfo(n.dnsServers); val adb = n.adbEnabled || n.adbWifiEnabled
+                        val n = net!!; val enc = encryptionInfo(ctx, n.encryptionType); val dns = dnsInfo(ctx, n.dnsServers); val adb = n.adbEnabled || n.adbWifiEnabled
                         hero(Sym.Shield, Blue, MaterialShapes.Cookie12Sided)
                         Text(stringResource(R.string.xtra_connection_security), style = MaterialTheme.typography.headlineSmallEmphasized)
                         Text(stringResource(R.string.xtra_live_analysis_of_your_current_network), color = c.onSurfaceVariant)
-                        SecurityCard("Encryption", stringResource(enc.desc), enc.text, enc.color, enc.icon)
+                        SecurityCard(stringResource(R.string.xtra_encryption), stringResource(enc.desc), enc.text, enc.color, enc.icon)
                         SecurityCard(stringResource(R.string.xtra_dns_integrity), stringResource(dns.desc), dns.text, dns.color, dns.icon)
-                        SecurityCard(stringResource(R.string.xtra_captive_portal), if (n.isCaptivePortal) stringResource(R.string.xtra_web_login_page_detected) else stringResource(R.string.xtra_direct_network_access), if (n.isCaptivePortal) "Active" else "None",
+                        SecurityCard(stringResource(R.string.xtra_captive_portal), if (n.isCaptivePortal) stringResource(R.string.xtra_web_login_page_detected) else stringResource(R.string.xtra_direct_network_access), if (n.isCaptivePortal) stringResource(R.string.xtra_active) else stringResource(R.string.xtra_none),
                             if (n.isCaptivePortal) Caution else Safe, if (n.isCaptivePortal) Sym.Login else Sym.Lan)
-                        SecurityCard(stringResource(R.string.xtra_adb_watchdog), stringResource(R.string.xtra_developer_bridge_status), if (adb) "Active" else "Inactive", if (adb) Red else Safe, Sym.Terminal)
-                        SecurityCard(stringResource(R.string.xtra_proxy_check), stringResource(R.string.xtra_detects_traffic_redirection), if (n.hasProxy) "Active" else "Inactive", if (n.hasProxy) Red else Safe, Sym.AccountTree)
-                        SecurityCard(stringResource(R.string.xtra_vpn_status), stringResource(R.string.xtra_checks_for_active_vpn_tunnel), if (n.isVpnActive) "Active" else "Inactive", if (n.isVpnActive) Blue else Safe, Sym.VpnLock)
-                        Button({ view = "main" }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) { Text("Return") }
+                        SecurityCard(stringResource(R.string.xtra_adb_watchdog), stringResource(R.string.xtra_developer_bridge_status), if (adb) stringResource(R.string.xtra_active) else stringResource(R.string.xtra_inactive), if (adb) Red else Safe, Sym.Terminal)
+                        SecurityCard(stringResource(R.string.xtra_proxy_check), stringResource(R.string.xtra_detects_traffic_redirection), if (n.hasProxy) stringResource(R.string.xtra_active) else stringResource(R.string.xtra_inactive), if (n.hasProxy) Red else Safe, Sym.AccountTree)
+                        SecurityCard(stringResource(R.string.xtra_vpn_status), stringResource(R.string.xtra_checks_for_active_vpn_tunnel), if (n.isVpnActive) stringResource(R.string.xtra_active) else stringResource(R.string.xtra_inactive), if (n.isVpnActive) Blue else Safe, Sym.VpnLock)
+                        Button({ view = "main" }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.common_return)) }
                     }
                 }
             }

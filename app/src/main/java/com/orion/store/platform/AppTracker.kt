@@ -3,6 +3,7 @@ package com.orion.store.platform
 import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -22,7 +23,9 @@ import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import com.orion.store.R
+import com.orion.store.data.Clash
 import com.orion.store.data.Net
+import com.orion.store.data.installArgs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -51,7 +54,7 @@ data class NetSecurity(
     val isCaptivePortal: Boolean = false, val isHiddenSsid: Boolean = false, val encryptionType: String = "UNKNOWN", val dnsServers: List<String> = emptyList(),
 )
 
-/** Bridges activity-result launches (installer, document picker) from non-UI code. Set by MainActivity. */
+/** Bridges activity-result launches (installer, document picker) from non-UI code. Set by OrionActivity. */
 object ResultHost {
     var launch: ((Intent, (Int, Intent?) -> Unit) -> Unit)? = null
     suspend fun run(i: Intent): Pair<Int, Intent?> = suspendCancellableCoroutine { c ->
@@ -70,7 +73,7 @@ private val DANGEROUS = setOf(
 )
 
 /** Native port of AppTrackerPlugin.java. Download engine lives in [Downloads]. */
-class AppTracker(private val ctx: Context) {
+class AppTracker(val ctx: Context) {
     private val pm = ctx.packageManager
     private val GRANTED = PackageManager.PERMISSION_GRANTED
 
@@ -78,14 +81,25 @@ class AppTracker(private val ctx: Context) {
         val p = pm.getPackageInfo(pkg, 0); PkgInfo(true, p.versionName.orEmpty(), PackageInfoCompat.getLongVersionCode(p))
     } catch (_: PackageManager.NameNotFoundException) { PkgInfo(false) }
 
+    @Suppress("DEPRECATION")
+    fun installerOf(pkg: String): String = runCatching {
+        if (Build.VERSION.SDK_INT >= 30) pm.getInstallSourceInfo(pkg).installingPackageName else pm.getInstallerPackageName(pkg)
+    }.getOrNull().orEmpty()
+
+    fun labelOf(pkg: String): String = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+
     /** Big lookups read one package list instead of a getPackageInfo binder call (plus a NameNotFound exception) per candidate:
      *  a catalog sync probes about 12 package-name variants per app, which used to be ~12k IPCs on every boot. */
     fun appInfos(pkgs: Collection<String>): Map<String, PkgInfo> {
         if (pkgs.size <= 24) return pkgs.associateWith(::appInfo)
-        // Some OEM builds throw on the full list (oversized binder reply); fall back to per-package lookups instead of crashing the sync.
-        val all = runCatching { pm.getInstalledPackages(0).associateBy { it.packageName } }.getOrElse { return pkgs.associateWith(::appInfo) }
-        return pkgs.associateWith { p -> all[p]?.let { PkgInfo(true, it.versionName.orEmpty(), PackageInfoCompat.getLongVersionCode(it)) } ?: PkgInfo(false) }
+        val all = installedInfos() ?: return pkgs.associateWith(::appInfo)
+        return pkgs.associateWith { all[it] ?: PkgInfo(false) }
     }
+
+    /** Every installed package in one call. Some OEM builds throw on the full list (oversized binder reply): null, so callers fall back to per-package lookups. */
+    fun installedInfos(): Map<String, PkgInfo>? = runCatching {
+        pm.getInstalledPackages(0).associate { it.packageName to PkgInfo(true, it.versionName.orEmpty(), PackageInfoCompat.getLongVersionCode(it)) }
+    }.getOrNull()
 
     fun installedPackages(): List<Pair<String, String>> =
         pm.getInstalledPackages(PackageManager.GET_META_DATA).map { (it.applicationInfo?.loadLabel(pm)?.toString() ?: it.packageName) to it.packageName }
@@ -120,7 +134,26 @@ class AppTracker(private val ctx: Context) {
             !pm.getPackageArchiveInfo(f.absolutePath, 0)?.packageName.isNullOrEmpty()
     }.getOrDefault(false)
 
-    fun archivePackage(f: File): String? = runCatching { pm.getPackageArchiveInfo(f.absolutePath, 0)?.packageName }.getOrNull()
+    @Suppress("DEPRECATION")
+    private fun signers(pi: PackageInfo): Set<String> = if (Build.VERSION.SDK_INT >= 28)
+        pi.signingInfo?.let { if (it.hasMultipleSigners()) it.apkContentsSigners else it.signingCertificateHistory }.orEmpty().map { it.toCharsString() }.toSet()
+    else pi.signatures.orEmpty().map { it.toCharsString() }.toSet()
+
+    /** The APK's package and why Android will refuse it, or null when nothing on the phone (any profile, kept data, system image) has a different signer.
+     *  Signer histories overlapping means a key rotation, which Android accepts. */
+    @Suppress("DEPRECATION")
+    fun clash(f: File): Pair<String, Clash>? = runCatching {
+        val flag = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+        val apkFile = if (isValidApk(f)) f else Bundles.parts(ctx, f).firstOrNull() ?: return null
+        val apk = pm.getPackageArchiveInfo(apkFile.absolutePath, flag) ?: return null
+        val cur = runCatching { pm.getPackageInfo(apk.packageName, flag or PackageManager.MATCH_UNINSTALLED_PACKAGES) }.getOrNull() ?: return null
+        val a = signers(apk); val b = signers(cur)
+        if (a.isEmpty() || b.isEmpty() || a.any { it in b }) return null
+        val ai = cur.applicationInfo
+        apk.packageName to when { ai != null && isSys(ai) -> Clash.SYSTEM; ai != null && ai.flags and ApplicationInfo.FLAG_INSTALLED == 0 -> Clash.HIDDEN; else -> Clash.INSTALLED }
+    }.getOrNull()
+
+    fun archivePackage(f: File): String? = (if (isValidApk(f)) f else Bundles.parts(ctx, f).firstOrNull())?.let { runCatching { pm.getPackageArchiveInfo(it.absolutePath, 0)?.packageName }.getOrNull() }
 
     private fun isSys(ai: ApplicationInfo) = ai.flags and ApplicationInfo.FLAG_SYSTEM != 0
 
@@ -128,10 +161,16 @@ class AppTracker(private val ctx: Context) {
         val f = Downloads.file(fileName) ?: throw NativeError("INVALID_FILE_NAME")
         repeat(5) { if (!f.exists() || f.length() == 0L) delay(200) }
         if (!f.exists()) throw NativeError("FILE_MISSING")
-        if (!withContext(Dispatchers.IO) { isValidApk(f) }) { f.delete(); throw NativeError("CORRUPT_APK") }
+        val parts = withContext(Dispatchers.IO) { Bundles.parts(ctx, f) }
+        if (parts.isEmpty()) { f.delete(); throw NativeError("CORRUPT_APK") }
+        if (parts.size > 1 || parts[0] != f) {
+            val (status, msg) = SessionInstall.commit(ctx, parts, archivePackage(parts[0]), ask = true)
+            if (status != android.content.pm.PackageInstaller.STATUS_SUCCESS) throw NativeError(msg ?: "INSTALL_FAILED")
+            return
+        }
         val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f)
         val base = Intent(Intent.ACTION_VIEW).setDataAndType(uri, APK_MIME).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).putExtra(Intent.EXTRA_RETURN_RESULT, true)
-        val handlers = pm.queryIntentActivities(base, PackageManager.MATCH_DEFAULT_ONLY).map { it.activityInfo }
+        val handlers = pm.queryIntentActivities(base, PackageManager.MATCH_DEFAULT_ONLY).map { it.activityInfo }.filter { it.packageName != ctx.packageName }
         if (handlers.isEmpty()) throw NativeError("NO_INSTALLER")
         val pick = when (pref) {
             "chooser" -> null
@@ -139,7 +178,9 @@ class AppTracker(private val ctx: Context) {
             else -> handlers.firstOrNull { isSys(it.applicationInfo) && "packageinstaller" in it.packageName }
                 ?: handlers.firstOrNull { "packageinstaller" in it.packageName } ?: handlers.firstOrNull { isSys(it.applicationInfo) }
         }
+        // Orion is an installer too now: never offer itself for the store's own installs
         val intent = pick?.let { Intent(base).setClassName(it.packageName, it.name) } ?: Intent.createChooser(base, ctx.getString(R.string.apptracker_install_app))
+            .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(android.content.ComponentName(ctx, com.orion.store.ui.ApkInstallActivity::class.java)))
         when (ResultHost.run(intent).first) {
             Activity.RESULT_OK -> Unit
             Activity.RESULT_CANCELED -> throw NativeError("INSTALL_CANCELED")
@@ -194,6 +235,14 @@ class AppTracker(private val ctx: Context) {
 
     private fun Process.err() = errorStream.bufferedReader().readText()
 
+    /** Runs one shell command through the elevated shell (root or Shizuku) and returns its output; throws on a non-zero exit. */
+    suspend fun runPrivileged(cmd: String): String = withContext(Dispatchers.IO) {
+        requireShizuku()
+        val p = sh(cmd); val out = p.inputStream.bufferedReader().readText(); val code = p.waitFor()
+        if (code != 0) throw NativeError("${out.trim()} ${p.err()}".trim().ifEmpty { ctx.getString(R.string.apptracker_command_failed_code, code) })
+        out
+    }
+
     private fun requireShizuku() {
         if (root) return
         if (!shizukuRunning()) throw NativeError(ctx.getString(R.string.apptracker_shizuku_not_running))
@@ -201,18 +250,51 @@ class AppTracker(private val ctx: Context) {
     }
 
     /** Streams the APK into `pm install`. Root also records Orion as the installer, so Android's "App details in store" and update ownership point here. */
-    suspend fun installShizuku(fileName: String, lock: Boolean = false) = withContext(Dispatchers.IO) {
-        val f = resolve(fileName)
+    suspend fun installShizuku(fileName: String, lock: Boolean = false, opts: Collection<String> = emptyList()) = withContext(Dispatchers.IO) {
+        val raw = resolve(fileName)
+        val parts = Bundles.parts(ctx, raw)
+        if (parts.isEmpty()) throw NativeError("CORRUPT_APK")
+        if (parts.size > 1) { installMany(parts, opts); return@withContext }
+        val f = parts[0]
+        // A process the background updater started gets Shizuku's binder a moment after launch
+        if (!root) for (i in 0 until 30) { if (shizukuRunning()) break; delay(100) }
         requireShizuku()
         val owner = if (root) " -i ${ctx.packageName}" + if (lock && Build.VERSION.SDK_INT >= 34) " --update-ownership" else "" else ""
-        fun attempt(flags: String) = sh("pm install -r --restrict-permissions$flags -S ${f.length()}").let { p ->
+        val args = installArgs(opts, Build.VERSION.SDK_INT, owner)
+        fun attempt(flags: String) = sh("pm install -r$flags -S ${f.length()}").let { p ->
             p.outputStream.use { o -> f.inputStream().use { it.copyTo(o) } }
-            p.waitFor() to p.err()
+            // pm prints "Failure [INSTALL_FAILED_...]" on stdout, the part that says why
+            val out = p.inputStream.bufferedReader().readText(); val code = p.waitFor()
+            (if (code == 0 && "Failure" in out) 1 else code) to "${out.trim()} ${p.err()}".trim()
         }
-        var (code, err) = attempt(owner)
+        var (code, err) = attempt(args)
         // Some ROMs ship a pm without --update-ownership: install anyway rather than fail the update
-        if (code != 0 && "update-ownership" in err) attempt(owner.replace(" --update-ownership", "")).let { code = it.first; err = it.second }
+        if (code != 0 && "update-ownership" in err) attempt(args.replace(" --update-ownership", "")).let { code = it.first; err = it.second }
         if (code != 0) throw NativeError(ctx.getString(R.string.apptracker_install_failed_code, code, err))
+    }
+
+    /** Split bundles: pm install-create, then one stdin write per APK, then commit. */
+    private fun installMany(files: List<File>, opts: Collection<String>) {
+        val owner = if (root) " -i ${ctx.packageName}" + if (Build.VERSION.SDK_INT >= 34) "" else "" else ""
+        val args = installArgs(opts, Build.VERSION.SDK_INT, owner)
+        val created = sh("pm install-create -r$args -S ${files.sumOf { it.length() }}")
+        val cout = created.inputStream.bufferedReader().readText(); val ccode = created.waitFor()
+        val id = Regex("\\[(\\d+)]").find(cout)?.groupValues?.get(1)
+        if (ccode != 0 || id == null) throw NativeError(cout.trim().ifEmpty { "INSTALL_FAILED" })
+        try {
+            files.forEachIndexed { i, f ->
+                val p = sh("pm install-write -S ${f.length()} $id ${if (i == 0) "base.apk" else "split$i.apk"} -")
+                p.outputStream.use { o -> f.inputStream().use { it.copyTo(o) } }
+                val out = p.inputStream.bufferedReader().readText(); val code = p.waitFor()
+                if (code != 0 || "Failure" in out) throw NativeError(out.trim().ifEmpty { "INSTALL_FAILED" })
+            }
+            val p = sh("pm install-commit $id")
+            val out = p.inputStream.bufferedReader().readText(); val code = p.waitFor()
+            if (code != 0 || "Failure" in out) throw NativeError(out.trim().ifEmpty { "INSTALL_FAILED" })
+        } catch (e: Exception) {
+            runCatching { sh("pm install-abandon $id").waitFor() }
+            throw e
+        }
     }
 
     /** Root: reinstalls an app's own APKs with Orion as installer. Same signature and version, so data stays; Orion then owns its updates. */
@@ -228,7 +310,7 @@ class AppTracker(private val ctx: Context) {
         runCatching {
             if (isSys(pm.getApplicationInfo(p, 0))) return@runCatching null
             val by = if (Build.VERSION.SDK_INT >= 30) pm.getInstallSourceInfo(p).installingPackageName else pm.getInstallerPackageName(p)
-            if (by == ctx.packageName) null else p to (by?.let { runCatching { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() }.getOrDefault(it) } ?: "Sideloaded")
+            if (by == ctx.packageName) null else p to (by?.let { runCatching { pm.getApplicationLabel(pm.getApplicationInfo(it, 0)).toString() }.getOrDefault(it) } ?: ctx.getString(R.string.apptracker_sideloaded))
         }.getOrNull()
     }.toMap()
 
@@ -237,21 +319,27 @@ class AppTracker(private val ctx: Context) {
         requireShizuku(); val p = sh("pm trim-caches 1024G"); if (p.waitFor() != 0) throw NativeError(ctx.getString(R.string.apptracker_trim_failed, p.err()))
     }
 
-    // Sentinel
+    /** Every installed package with its info. One list call can fail on OEM builds with many apps (oversized binder reply),
+     *  so that falls back to the light app list plus one lookup per package. */
+    @Suppress("DEPRECATION")
+    private fun packages(flags: Int): List<PackageInfo> = runCatching { pm.getInstalledPackages(flags) }.getOrNull()?.takeIf { it.isNotEmpty() }
+        ?: pm.getInstalledApplications(flags and PackageManager.MATCH_UNINSTALLED_PACKAGES).mapNotNull { runCatching { pm.getPackageInfo(it.packageName, flags) }.getOrNull() }
+
+    /** Every installed app with its granted dangerous permissions (empty when none): Perms shows the flagged ones, Surgeon all of them. */
     suspend fun riskyApps(): List<RiskyApp> = withContext(Dispatchers.IO) {
-        pm.getInstalledPackages(PackageManager.GET_PERMISSIONS).mapNotNull { pi ->
-            val req = pi.requestedPermissions ?: return@mapNotNull null; val fl = pi.requestedPermissionsFlags ?: return@mapNotNull null
+        packages(PackageManager.GET_PERMISSIONS).mapNotNull { pi ->
             val ai = pi.applicationInfo ?: return@mapNotNull null
-            val perms = req.indices.filter { fl[it] and PackageInfo.REQUESTED_PERMISSION_GRANTED != 0 && req[it] in DANGEROUS }.map { req[it] }
-            perms.takeIf { it.isNotEmpty() }?.let { RiskyApp(ai.loadLabel(pm).toString(), pi.packageName, isSys(ai), it) }
+            val req = pi.requestedPermissions.orEmpty(); val fl = pi.requestedPermissionsFlags ?: IntArray(0)
+            val perms = req.indices.filter { it < fl.size && fl[it] and PackageInfo.REQUESTED_PERMISSION_GRANTED != 0 && req[it] in DANGEROUS }.map { req[it] }
+            RiskyApp(runCatching { ai.loadLabel(pm).toString() }.getOrDefault(pi.packageName), pi.packageName, isSys(ai), perms)
         }
     }
 
+    /** Every app on the phone, removed-for-this-user ones included, for Debloat. */
     @Suppress("DEPRECATION")
     suspend fun systemApps(): List<SysApp> = withContext(Dispatchers.IO) {
-        pm.getInstalledPackages(PackageManager.GET_META_DATA or PackageManager.MATCH_UNINSTALLED_PACKAGES).filter { it.packageName != ctx.packageName }.mapNotNull { p ->
-            val ai = p.applicationInfo ?: return@mapNotNull null
-            SysApp(p.packageName, runCatching { pm.getApplicationLabel(ai).toString() }.getOrDefault(p.packageName),
+        pm.getInstalledApplications(PackageManager.MATCH_UNINSTALLED_PACKAGES).filter { it.packageName != ctx.packageName }.map { ai ->
+            SysApp(ai.packageName, runCatching { pm.getApplicationLabel(ai).toString() }.getOrDefault(ai.packageName),
                 ai.flags and ApplicationInfo.FLAG_INSTALLED != 0, ai.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0)
         }
     }
@@ -259,7 +347,9 @@ class AppTracker(private val ctx: Context) {
     suspend fun toggleSystemApp(pkg: String, enable: Boolean) = withContext(Dispatchers.IO) {
         requireShizuku()
         val p = sh(if (enable) "cmd package install-existing $pkg" else "pm uninstall -k --user 0 $pkg")
-        val exit = p.waitFor(); if (exit != 0) throw NativeError(ctx.getString(R.string.apptracker_operation_failed_code, exit, p.err()))
+        // pm reports "Failure [...]" on stdout, and some ROMs still exit 0
+        val out = p.inputStream.bufferedReader().readText(); val exit = p.waitFor()
+        if (exit != 0 || "Failure" in out) throw NativeError(ctx.getString(R.string.apptracker_operation_failed_code, exit, "${out.trim()} ${p.err()}".trim()))
     }
 
     suspend fun revokePermission(pkg: String, perm: String) = withContext(Dispatchers.IO) {
@@ -378,7 +468,7 @@ class AppTracker(private val ctx: Context) {
     suspend fun saveFile(content: String, fileName: String) {
         val i = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/octet-stream").putExtra(Intent.EXTRA_TITLE, fileName)
         val (code, data) = ResultHost.run(i)
-        val uri: Uri = data?.data?.takeIf { code == Activity.RESULT_OK } ?: throw NativeError("Cancelled")
+        val uri: Uri = data?.data?.takeIf { code == Activity.RESULT_OK } ?: throw NativeError(ctx.getString(R.string.apptracker_cancelled))
         withContext(Dispatchers.IO) { (ctx.contentResolver.openOutputStream(uri) ?: throw NativeError(ctx.getString(R.string.apptracker_stream_error))).use { it.write(content.toByteArray()) } }
     }
 
@@ -398,6 +488,29 @@ class AppTracker(private val ctx: Context) {
 
     fun launch(pkg: String) = ctx.startActivity((pm.getLaunchIntentForPackage(pkg) ?: pm.getLeanbackLaunchIntentForPackage(pkg) ?: throw NativeError(ctx.getString(R.string.apptracker_app_not_found))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     fun uninstall(pkg: String) = ctx.startActivity(Intent(Intent.ACTION_DELETE, "package:$pkg".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+
+    /** Android's own uninstall prompt, returning once the user answered it. */
+    suspend fun uninstallPrompt(pkg: String) {
+        val i = Intent(Intent.ACTION_DELETE, "package:$pkg".toUri()).putExtra(Intent.EXTRA_RETURN_RESULT, true)
+        if (ResultHost.launch == null) uninstall(pkg) else ResultHost.run(i)
+    }
+
+    /** Root or Shizuku: removes the app without a system prompt (Orion asks first). */
+    suspend fun uninstallSilent(pkg: String) = withContext(Dispatchers.IO) {
+        if (!pkg.matches(Regex("[A-Za-z0-9_.]+"))) throw NativeError(ctx.getString(R.string.apptracker_invalid_package_name))
+        requireShizuku()
+        val p = sh("pm uninstall $pkg"); val out = p.inputStream.bufferedReader().readText(); val code = p.waitFor()
+        if (code != 0 || "Success" !in out) throw NativeError(ctx.getString(R.string.apptracker_uninstall_failed, "${out.trim()} ${p.err()}".trim()))
+    }
+    /** Turns on the launcher alias for icon [id] (see APP_ICONS) before turning the others off, so the app never drops off the launcher. */
+    fun setLauncherIcon(id: String) {
+        fun alias(v: String) = ComponentName(ctx.packageName, "com.orion.store." + if (v == "default") "MainActivity" else "Icon" + v.replaceFirstChar { it.uppercase() })
+        val ids = com.orion.store.data.APP_ICONS.map { it.id }
+        (listOf(id) + (ids - id)).forEach { v ->
+            pm.setComponentEnabledSetting(alias(v), if (v == id) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        }
+    }
+
     fun open(url: String) = runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
 
     @Suppress("DEPRECATION")

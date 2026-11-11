@@ -8,7 +8,8 @@ val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; explicitNu
 object Platform { const val ANDROID = "Android"; const val PC = "PC"; const val TV = "TV" }
 
 /** What this device runs, read once at process start before any screen or background job asks. */
-object Device { @Volatile var isTv = false }
+/** [lowEnd]: a low-RAM phone, under 4 GB, where Orion starts in Lite performance mode. */
+object Device { @Volatile var isTv = false; @Volatile var lowEnd = false }
 
 /** Android apps install everywhere; TV apps install natively too when Orion runs on a TV (beta). */
 fun AppItem.installsHere() = platform == Platform.ANDROID || (platform == Platform.TV && Device.isTv)
@@ -18,13 +19,14 @@ enum class SortOption(val label: String) {
     NAME_DESC("Name (Z-A)"), SIZE_ASC("Size (Smallest)"), SIZE_DESC("Size (Largest)")
 }
 
-enum class Tab(val platform: String?) { ANDROID(Platform.ANDROID), PC(Platform.PC), TV(Platform.TV), MYAPPS(null), ABOUT(null), UPDATES(null) }
+enum class Tab(val platform: String?) { ANDROID(Platform.ANDROID), PC(Platform.PC), TV(Platform.TV), ORBIT(null), MYAPPS(null), ABOUT(null), UPDATES(null) }
 
 val STREAMS = listOf("Stable", "Beta", "Alpha", "Nightly")
 
 @Serializable data class AppVariant(val arch: String = "", val url: String = "", val size: Long? = null)
 
-@Serializable data class VersionOption(val type: String = "Stable", val version: String = "", val date: String = "", val variants: List<AppVariant> = emptyList())
+/** [tag]: the release tag it came from, used to fetch its release notes. */
+@Serializable data class VersionOption(val type: String = "Stable", val version: String = "", val date: String = "", val variants: List<AppVariant> = emptyList(), val tag: String = "")
 
 @Serializable data class AppItem(
     val id: String = "",
@@ -51,6 +53,8 @@ val STREAMS = listOf("Stable", "Beta", "Alpha", "Nightly")
     val screenshots: List<String> = emptyList(),
     val officialSite: String? = null,
     val patches: List<String> = emptyList(),
+    /** GitHub stars from the data branch's stars.json, null when unknown. */
+    val stars: Int? = null,
 )
 
 @Serializable data class SocialLinks(val github: String = "", val x: String = "", val discord: String = "", val coffee: String = "")
@@ -91,7 +95,7 @@ val STREAMS = listOf("Stable", "Beta", "Alpha", "Nightly")
 data class BundleItem(val id: String, val title: String, val description: String, val appIds: List<String>, val apps: List<AppItem> = emptyList(), val color: String? = null, val badge: String? = null, val icon: String? = null, val monogram: String? = null)
 data class CategoryCard(val id: String, val label: String, val icon: String, val count: Int, val accent: String, val gradient: List<String>)
 
-enum class CollectionType { HERO, SWIMLANE, BUNDLE, RECOMMENDATION_BUNDLES, CATEGORY_CARDS, SORTED_GRID }
+enum class CollectionType { HERO, SWIMLANE, BUNDLE, RECOMMENDATION_BUNDLES, CATEGORY_CARDS, SORTED_GRID, RANKED }
 
 data class StoreCollection(
     val id: String, val title: String, val type: CollectionType, val subtitle: String? = null, val filter: String? = null,
@@ -104,14 +108,16 @@ object Defaults {
     const val NETWORK_TIMEOUT_MS = 8000L
     const val RELEASES_API = "https://api.github.com/repos/RookieEnough/Orion-Store/releases?per_page=8"
     const val MIRROR_JSON = "https://raw.githubusercontent.com/RookieEnough/Orion-Data/data/mirror.json"
+    /** owner/repo (lowercase) to GitHub stars, built by the mirror workflow so the app never spends API calls on it. */
+    const val STARS_JSON = "https://raw.githubusercontent.com/RookieEnough/Orion-Data/data/stars.json"
+    /** GitHub first, then two CDNs that serve the same files for networks blocking raw.githubusercontent.com. */
     val CONFIG_URLS = listOf(
         "https://raw.githubusercontent.com/RookieEnough/Orion-Data/main/config.json",
-        "https://gitlab.com/RookieEnough/Orion-Data/-/raw/main/config.json",
-        "https://codeberg.org/RookieEnough/Orion-Data/raw/branch/main/config.json",
         "https://cdn.jsdelivr.net/gh/RookieEnough/Orion-Data@main/config.json",
+        "https://raw.githack.com/RookieEnough/Orion-Data/main/config.json",
     )
     val APPS_URLS = CONFIG_URLS.map { it.replace("config.json", "apps.json") }
-    val MIRROR_LABELS = listOf("GitHub", "GitLab", "Codeberg", "JSDelivr")
+    val MIRROR_LABELS = listOf("GitHub", "JSDelivr", "GitHack")
     val MICROG_DEPENDENT_APPS = setOf("youtube-revanced", "yt-music-revanced", "google-photos-revanced")
     const val MICROG_INFO_URL = "https://github.com/microg/GmsCore/wiki"
     val DEV_SOCIALS = SocialLinks("https://github.com/RookieEnough", "https://x.com/_Rookie_Z", "https://discord.com/invite/CrM6y4ujnq", "https://www.buymeacoffee.com/rookiez")

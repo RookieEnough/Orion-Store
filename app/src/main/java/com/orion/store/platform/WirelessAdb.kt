@@ -26,6 +26,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -106,6 +108,8 @@ object WirelessAdb {
     private fun global(ctx: Context, key: String) = runCatching { Settings.Global.getInt(ctx.contentResolver, key, 0) == 1 }.getOrDefault(false)
     fun devOptions(ctx: Context) = global(ctx, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED)
     fun wirelessOn(ctx: Context) = global(ctx, ADB_WIFI)
+    /** Orion has reached adbd before (pairing done), so connecting is worth a try. */
+    fun paired(ctx: Context) = prefs(ctx).getInt("port", 0) > 0
     private fun canToggle(ctx: Context) = ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
 
     private fun aboutPhoneIntent(): Intent = Intent(Settings.ACTION_DEVICE_INFO_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -130,11 +134,23 @@ object WirelessAdb {
             val last = prefs(ctx).getInt("port", 0)
             if (last <= 0 || !tryConnect(mg, last)) {
                 if (!onWifi(ctx)) throw NativeError(ctx.getString(R.string.wirelessadb_connect_to_wi_fi_to_install))
-                if (canToggle(ctx) && !wirelessOn(ctx)) runCatching { Settings.Global.putInt(ctx.contentResolver, ADB_WIFI, 1) }
-                val port = discover(ctx, AdbMdns.SERVICE_TYPE_TLS_CONNECT, 15_000)
-                    ?: throw NativeError(ctx.getString(R.string.wirelessadb_wireless_debugging_is_off_turn_it))
-                if (!tryConnect(mg, port)) throw NativeError(ctx.getString(R.string.wirelessadb_wireless_debugging_refused_orion_run_the))
-                prefs(ctx).edit { putInt("port", port) }
+                val cr = ctx.contentResolver; val toggle = canToggle(ctx)
+                // Like Shizuku: with WRITE_SECURE_SETTINGS, Orion brings back Developer options and Wireless debugging itself, and turns off
+                // the 7-day authorization timeout that would otherwise make Android forget the pairing
+                if (toggle) runCatching {
+                    if (!devOptions(ctx)) Settings.Global.putInt(cr, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 1)
+                    Settings.Global.putLong(cr, "adb_allowed_connection_time", 0)
+                    if (!wirelessOn(ctx)) Settings.Global.putInt(cr, ADB_WIFI, 1)
+                }
+                var port = discover(ctx, AdbMdns.SERVICE_TYPE_TLS_CONNECT, 15_000)
+                // On but silent (Wi-Fi changed, adbd stuck): restart Wireless debugging once
+                if (port == null && toggle) {
+                    runCatching { Settings.Global.putInt(cr, ADB_WIFI, 0); delay(1500); Settings.Global.putInt(cr, ADB_WIFI, 1) }
+                    port = discover(ctx, AdbMdns.SERVICE_TYPE_TLS_CONNECT, 15_000)
+                }
+                val found = port ?: throw NativeError(if (toggle) ctx.getString(R.string.wirelessadb_didnt_start_on_this_wifi) else ctx.getString(R.string.wirelessadb_wireless_debugging_is_off_turn_it))
+                if (!tryConnect(mg, found)) throw NativeError(ctx.getString(R.string.wirelessadb_wireless_debugging_refused_orion_run_the))
+                prefs(ctx).edit { putInt("port", found) }
             }
             if (!canToggle(ctx)) runCatching { exec(mg, "pm grant ${ctx.packageName} ${Manifest.permission.WRITE_SECURE_SETTINGS}") }
         }
@@ -149,14 +165,70 @@ object WirelessAdb {
         s.openInputStream().bufferedReader().readText()
     }
 
-    suspend fun install(ctx: Context, f: File) = withContext(Dispatchers.IO) {
-        val cmd = "pm install -r -S ${f.length()}"
+    /** [opts]: Beyond install picks; the shell user may pass every pm install switch, same as root and Shizuku. */
+    suspend fun install(ctx: Context, f: File, opts: Collection<String>? = null) = withContext(Dispatchers.IO) {
+        val parts = Bundles.parts(ctx, f)
+        if (parts.size > 1) { installMany(ctx, parts, opts); return@withContext }
+        val one = parts.firstOrNull() ?: f
+        val cmd = "pm install -r${opts?.let { com.orion.store.data.installArgs(it, Build.VERSION.SDK_INT, "") }.orEmpty()} -S ${one.length()}"
+        val pi = runCatching { ctx.packageManager.getPackageArchiveInfo(one.absolutePath, 0) }.getOrNull()
+        val t0 = System.currentTimeMillis()
         connect(ctx)
-        val out = try { exec(mgr(ctx), cmd, f) } catch (_: Exception) {
-            // Stale socket after a Wi-Fi drop or adbd restart: reconnect once
-            runCatching { mgr(ctx).disconnect() }; connect(ctx); exec(mgr(ctx), cmd, f)
+        // adbd sometimes leaves the stream open after pm prints Success, so the reply never ends. The package itself says when it landed.
+        val reply = CompletableDeferred<Result<String>>()
+        scope.launch {
+            reply.complete(runCatching {
+                try { exec(mgr(ctx), cmd, one) } catch (e: Exception) {
+                    if (reply.isCompleted) throw e
+                    // Stale socket after a Wi-Fi drop or adbd restart: reconnect once
+                    runCatching { mgr(ctx).disconnect() }; connect(ctx); exec(mgr(ctx), cmd, one)
+                }
+            })
         }
+        fun landed() = pi != null && runCatching {
+            val p = ctx.packageManager.getPackageInfo(pi.packageName, 0)
+            p.lastUpdateTime >= t0 - 2000 && androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(p) == androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(pi)
+        }.getOrDefault(false)
+        val out = withTimeoutOrNull(5 * 60_000L) {
+            while (!reply.isCompleted) {
+                delay(700)
+                if (landed()) { reply.complete(Result.success("Success")); runCatching { mgr(ctx).disconnect() } } // frees the hung stream; the next call reconnects on the saved port
+            }
+            reply.await().getOrThrow()
+        } ?: if (landed()) "Success" else throw NativeError(ctx.getString(R.string.wirelessadb_wireless_debugging_stopped_answering_try))
         if ("Success" !in out) throw NativeError(out.trim().ifEmpty { "INSTALL_FAILED" })
+    }
+
+    private suspend fun installMany(ctx: Context, files: List<File>, opts: Collection<String>?) {
+        connect(ctx)
+        val args = opts?.let { com.orion.store.data.installArgs(it, Build.VERSION.SDK_INT, "") }.orEmpty()
+        val created = exec(mgr(ctx), "pm install-create -r$args -S ${files.sumOf { it.length() }}")
+        val id = Regex("\\[(\\d+)]").find(created)?.groupValues?.get(1) ?: throw NativeError(created.trim().ifEmpty { "INSTALL_FAILED" })
+        try {
+            files.forEachIndexed { i, f ->
+                val wrote = exec(mgr(ctx), "pm install-write -S ${f.length()} $id ${if (i == 0) "base.apk" else "split$i.apk"} -", f)
+                if ("Failure" in wrote) throw NativeError(wrote.trim())
+            }
+            val done = exec(mgr(ctx), "pm install-commit $id")
+            if ("Success" !in done) throw NativeError(done.trim().ifEmpty { "INSTALL_FAILED" })
+        } catch (e: Exception) {
+            runCatching { exec(mgr(ctx), "pm install-abandon $id") }
+            throw e
+        }
+    }
+
+    /** Runs one shell command over ADB as the shell user, reconnecting once on a stale socket. A reply adbd never closes is cut off after [ms]. */
+    suspend fun shell(ctx: Context, cmd: String, ms: Long = 20_000): String = withContext(Dispatchers.IO) {
+        connect(ctx)
+        val reply = scope.async {
+            runCatching {
+                try { exec(mgr(ctx), cmd) } catch (_: Exception) {
+                    runCatching { mgr(ctx).disconnect() }; connect(ctx); exec(mgr(ctx), cmd)
+                }
+            }
+        }
+        withTimeoutOrNull(ms) { reply.await() }?.getOrThrow()
+            ?: run { runCatching { mgr(ctx).disconnect() }; throw NativeError(ctx.getString(R.string.wirelessadb_wireless_debugging_stopped_answering_try)) }
     }
 
     // ---------------- Guided setup ----------------

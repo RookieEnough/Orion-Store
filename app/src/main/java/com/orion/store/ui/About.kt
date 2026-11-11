@@ -89,6 +89,7 @@ val BADGES: Map<String, Pair<ImageVector, Color>> = mapOf(
     "Dino Legend" to (Sym.LocalFireDepartment to Color(0xFFF97316)),
     "Merge Tamer" to (Sym.CallMerge to Color(0xFF14B8A6)), "Spaghetti Slayer" to (Sym.RamenDining to Color(0xFFF59E0B)),
     "Sudo Sovereign" to (Sym.Crown to Color(0xFFE11D48)),
+    "Icon Collector" to (Sym.Palette to Color(0xFF8B5CF6)), "Dock Master" to (Sym.ViewAgenda to Color(0xFF22C55E)),
     "Bronze Wings" to (Sym.MilitaryTech to Color(0xFFC07A3E)), "Silver Wings" to (Sym.MilitaryTech to Color(0xFF8F979F)), "Gold Wings" to (Sym.MilitaryTech to Color(0xFFE0A526)),
 )
 
@@ -104,11 +105,11 @@ fun BadgeChip(id: String, onClick: () -> Unit) {
 /** Developer coin: flips to the Hall of Fame; a burst halo turns behind it and showcased badges orbit around. */
 @Composable
 private fun DevCoin(vm: MainViewModel, profile: DevProfile, slots: List<String>, flipped: Boolean, onTap: () -> Unit) {
-    val cs = MaterialTheme.colorScheme; val still = LocalS.current.disableAnimations
+    val cs = MaterialTheme.colorScheme; val still = LocalS.current.calm
     val rot by animateFloatAsState(if (flipped) 180f else 0f, MaterialTheme.motionScheme.slowSpatialSpec(), label = "flip")
     val spin by rememberInfiniteTransition(label = "halo").animateFloat(0f, if (still) 0f else 360f, infiniteRepeatable(tween(30_000, easing = LinearEasing)), label = "s")
     Box(Modifier.size(260.dp, 200.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(176.dp).graphicsLayer { rotationZ = spin }.clip(MaterialShapes.SoftBurst.toShape()).background(cs.primary.copy(.28f)))
+        Box(Modifier.size(176.dp).graphicsLayer { rotationZ = spin }.background(cs.primary.copy(.28f), MaterialShapes.SoftBurst.toShape()))
         slots.forEachIndexed { i, id ->
             val (ic, c) = BADGES[id] ?: return@forEachIndexed
             val (bg, fg) = tonal(c)
@@ -149,7 +150,9 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
     val ads = s.adWatchCount
     val (rankLabel, rankIcon) = QUEST_BOSSES.lastOrNull { ads >= it.lvl }?.let { stringResource(R.string.about_rank, it.rank) to (BADGES[it.badge]?.first ?: Sym.Shield) } ?: (stringResource(R.string.about_start_your_journey) to Sym.RocketLaunch)
     val slots = s.showcasedBadges.take(3)
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
+    // Groups cap at a card's width; centred, so on tablets they line up under the coin instead of hugging the left edge
+    val wide = LocalWidthClass.current.wide
+    LazyColumn(Modifier.fillMaxSize().adaptiveContentWidth(if (wide) 1040.dp else 840.dp), contentPadding = padding, horizontalAlignment = Alignment.CenterHorizontally) {
         item("header") { Header(vm) }
         item("hero") {
             Column(Modifier.fillMaxWidth().padding(top = 8.dp).reveal(0), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -166,10 +169,10 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                 if (slots.size < 3) AssistChip({ vm.profileClick("badges", slots.size) }, { Text(stringResource(R.string.about_add_badge)) }, leadingIcon = { Icon(Sym.Add, null, Modifier.size(AssistChipDefaults.IconSize)) }, shape = Pill)
             }
         }
-        item("connect") { Group("Connect", Modifier.reveal(2)) {
+        val connect = @Composable { m: Modifier -> Group(stringResource(R.string.guide_connect), m.reveal(2)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 listOf(Triple(Sym.BrandGitHub, "GitHub", Gray) to socials.github, Triple(Sym.BrandX, "X", Color(0xFF64748B)) to socials.x, Triple(Sym.BrandDiscord, "Discord", Color(0xFF5865F2)) to socials.discord,
-                    Triple(Sym.Public, "Website", Color(0xFF6366F1)) to ORION_SITE)
+                    Triple(Sym.Public, stringResource(R.string.about_website), Color(0xFF6366F1)) to ORION_SITE)
                     .forEachIndexed { i, (spec, url) ->
                         val (bg, fg) = tonal(spec.third)
                         val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -183,14 +186,14 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                     }
             }
         } }
-        item("support") { Group(stringResource(R.string.about_support_orion), Modifier.reveal(3)) {
+        val support = @Composable { m: Modifier -> Group(stringResource(R.string.about_support_orion), m.reveal(3)) {
             val next = QUEST_BOSSES.firstOrNull { ads < it.lvl }?.let { it.lvl to it.rank }
             val (bg, fg) = tonal(Fuchsia)
             var shown by remember { mutableStateOf(false) }; LaunchedEffect(Unit) { shown = true }
             val prog by animateFloatAsState(if (!shown) 0f else next?.let { ads / it.first.toFloat() } ?: 1f, MaterialTheme.motionScheme.slowSpatialSpec(), label = "rank")
             Column(Modifier.fillMaxWidth().springClick(RoundedCornerShape(28.dp)) { vm.haptic(H.LIGHT); vm.open(Overlay.AD_DONATION) }.background(bg).padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(52.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(fg.copy(.14f)), contentAlignment = Alignment.Center) { Icon(rankIcon, null, tint = fg) }
+                    Box(Modifier.size(52.dp).background(fg.copy(.14f), MaterialShapes.Cookie9Sided.toShape()), contentAlignment = Alignment.Center) { Icon(rankIcon, null, tint = fg) }
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(stringResource(R.string.about_fuel_the_code), style = MaterialTheme.typography.titleLargeEmphasized, color = fg)
@@ -212,9 +215,9 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                 Icon(Sym.ChevronRight, null)
             }
         } }
-        item("help") { Group("Help", Modifier.reveal(4)) {
+        val help = @Composable { m: Modifier -> Group(stringResource(R.string.about_help), m.reveal(4)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(Triple(Sym.HelpOutline, "FAQs", stringResource(R.string.about_secrets_safety)) to { vm.open(Overlay.FAQ) }, Triple(Sym.NewReleases, stringResource(R.string.about_what_s_new), stringResource(R.string.about_release_notes)) to { vm.open(Overlay.RELEASE_NOTES) })
+                listOf(Triple(Sym.HelpOutline, stringResource(R.string.guide_faqs), stringResource(R.string.about_secrets_safety)) to { vm.open(Overlay.FAQ) }, Triple(Sym.NewReleases, stringResource(R.string.about_what_s_new), stringResource(R.string.about_release_notes)) to { vm.open(Overlay.RELEASE_NOTES) })
                     .forEach { (spec, go) ->
                         Column(Modifier.weight(1f).springClick(RoundedCornerShape(28.dp)) { vm.haptic(H.LIGHT); go() }.background(cs.surfaceContainerHigh).padding(18.dp)) {
                             TonalIcon(spec.first, cs.primary)
@@ -224,6 +227,13 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                     }
             }
         } }
+        // Phones stack the groups; medium and expanded windows set them side by side in an adaptive grid of cards
+        if (!wide) { item("connect") { connect(Modifier) }; item("support") { support(Modifier) }; item("help") { help(Modifier) } }
+        else item("groups") {
+            FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp), maxItemsInEachRow = 2, verticalArrangement = Arrangement.Top) {
+                support(Modifier.weight(1f)); connect(Modifier.weight(1f)); help(Modifier.weight(1f)); Spacer(Modifier.weight(1f))
+            }
+        }
         item("footer") {
             Column(Modifier.fillMaxWidth().padding(top = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -232,7 +242,7 @@ fun AboutTab(vm: MainViewModel, padding: PaddingValues) {
                     Surface(shape = Pill, color = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text(stringResource(R.string.about_re_native), Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLargeEmphasized) }
                     val c = if (s.useRemoteJson) Safe else Caution
                     Surface(shape = Pill, color = tonal(c).first, contentColor = tonal(c).second) {
-                        Text(stringResource(R.string.about_source, if (s.useRemoteJson) "Remote" else "Local"), Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge)
+                        Text(stringResource(R.string.about_source, if (s.useRemoteJson) stringResource(R.string.about_remote) else stringResource(R.string.about_local)), Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge)
                     }
                 }
                 Text(stringResource(R.string.about_made_with_for_geeks), Modifier.padding(top = 12.dp).clip(Pill).clickable { vm.profileClick() }.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -257,6 +267,7 @@ private fun Group(title: String, modifier: Modifier = Modifier, content: @Compos
 fun DevTools(vm: MainViewModel) {
     val s = LocalS.current; val d = LocalD.current; val clip = LocalClipboardManager.current; val ctx = LocalContext.current
     val scope = rememberCoroutineScope(); var nuke by remember { mutableStateOf(false) }
+    val checkingMsg = stringResource(R.string.about_checking); val unknownMsg = stringResource(R.string.common_unknown)
     val onNuke = { nuke = true }
     var editing by remember { mutableStateOf(false) }; var draft by remember { mutableStateOf("") }; var show by remember { mutableStateOf(false) }
     var rate by remember { mutableStateOf<Triple<Int, Int, Long>?>(null) }
@@ -278,14 +289,14 @@ fun DevTools(vm: MainViewModel) {
                         Text(stringResource(R.string.about_github_access), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         Text(stringResource(R.string.about_unlock_5000_requests_hr_authenticated), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    TextButton({ editing = !editing; draft = s.githubToken }) { Text(if (editing) "Cancel" else stringResource(R.string.about_edit_token)) }
+                    TextButton({ editing = !editing; draft = s.githubToken }) { Text(if (editing) stringResource(R.string.common_cancel) else stringResource(R.string.about_edit_token)) }
                 }
                 if (editing) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(draft, { draft = it }, Modifier.weight(1f), placeholder = { Text("ghp_...") }, singleLine = true, shape = RoundedCornerShape(16.dp),
                         visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { save(draft) }),
                         trailingIcon = { IconButton({ show = !show }) { Icon(if (show) Sym.VisibilityOff else Sym.Visibility, if (show) stringResource(R.string.about_hide_token) else stringResource(R.string.about_show_token)) } })
-                    Button({ save(draft) }, shapes = ButtonDefaults.shapes()) { Text("Save") }
+                    Button({ save(draft) }, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.common_save)) }
                 } else Row(Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(if (s.githubToken.isNotEmpty()) Safe else MaterialTheme.colorScheme.error))
                     Text(if (s.githubToken.isEmpty()) stringResource(R.string.about_no_token_set_rate_limited) else if (show) s.githubToken else "••••••••••••${s.githubToken.takeLast(4)}",
@@ -311,7 +322,7 @@ fun DevTools(vm: MainViewModel) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row { Text(stringResource(R.string.about_github_api_quota), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); Text("$rem/$limit", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) }
                     LinearProgressIndicator({ if (limit > 0) rem / limit.toFloat() else 0f }, Modifier.fillMaxWidth(), color = if (rem < limit * .2f) MaterialTheme.colorScheme.error else Safe)
-                    Row { Text(if (s.githubToken.isNotEmpty()) "Authenticated" else stringResource(R.string.about_public_ip), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+                    Row { Text(if (s.githubToken.isNotEmpty()) stringResource(R.string.about_authenticated) else stringResource(R.string.about_public_ip), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
                         Text(stringResource(R.string.about_resets, SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(reset * 1000))), style = MaterialTheme.typography.labelSmall) }
                 }
             }
@@ -320,7 +331,7 @@ fun DevTools(vm: MainViewModel) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(pkg, { pkg = it }, Modifier.weight(1f), placeholder = { Text("com.example.app") }, singleLine = true, shape = RoundedCornerShape(16.dp))
             FilledIconButton({
-                if (pkg.isNotEmpty()) { pkgResult = "Checking..."; scope.launch {
+                if (pkg.isNotEmpty()) { pkgResult = checkingMsg; scope.launch {
                     pkgResult = runCatching { withContext(Dispatchers.IO) { vm.tracker.appInfo(pkg.trim()) }.let { "{\n  \"installed\": ${it.installed},\n  \"version\": ${it.version?.let { v -> "\"$v\"" }},\n  \"versionCode\": ${it.versionCode}\n}" } }.getOrElse { ctx.getString(R.string.about_error, it.message) }
                 } }
             }, shapes = IconButtonDefaults.shapes()) { Icon(Sym.Search, stringResource(R.string.about_check_package)) }
@@ -334,7 +345,7 @@ fun DevTools(vm: MainViewModel) {
         Row(Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.about_active_mirror), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(vm.mirrorSource.ifEmpty { "Unknown" }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(vm.mirrorSource.ifEmpty { unknownMsg }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             }
             FilledTonalButton({ vm.set { it.copy(useRemoteJson = !it.useRemoteJson) } }, shapes = ButtonDefaults.shapes()) { Text(if (s.useRemoteJson) stringResource(R.string.about_remote_mode) else stringResource(R.string.about_local_mode)) }
         }
@@ -349,7 +360,7 @@ fun DevTools(vm: MainViewModel) {
             nuke = false; vm.set { Settings() }; vm.upd { DataState() }
             scope.launch { delay(700); ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.let { ctx.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) }; exitProcess(0) }
         }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.error)) { Text(stringResource(R.string.about_wipe_restart)) } },
-        dismissButton = { TextButton({ nuke = false }) { Text("Cancel") } })
+        dismissButton = { TextButton({ nuke = false }) { Text(stringResource(R.string.common_cancel)) } })
 }
 
 @Composable
@@ -384,7 +395,7 @@ fun DonationSheet(vm: MainViewModel, donation: DonationConfig, onDismiss: () -> 
                             r.open?.let { Button({ vm.haptic(H.SELECTION); vm.tracker.open(if (r.value.startsWith("http://") || r.value.startsWith("https://")) r.value else "https://${r.value}") }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                                 Icon(Sym.OpenInNew, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(it) } }
                             r.copy?.let { FilledTonalButton({ clip.setText(AnnotatedString(r.value)); copied = r.key; vm.haptic(H.SUCCESS); scope.launch { delay(2000); copied = null } }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
-                                Icon(if (copied == r.key) Sym.Check else Sym.ContentCopy, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(if (copied == r.key) "Copied" else it) } }
+                                Icon(if (copied == r.key) Sym.Check else Sym.ContentCopy, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(if (copied == r.key) stringResource(R.string.about_copied) else it) } }
                         }
                     }
                 }
@@ -413,7 +424,7 @@ fun LeaderboardSheet(vm: MainViewModel, onDismiss: () -> Unit, onSubmit: () -> U
                 error -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Sym.WifiOff, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.error)
                     Text(stringResource(R.string.about_signal_lost), Modifier.padding(8.dp), style = MaterialTheme.typography.titleMedium)
-                    FilledTonalButton({ nonce++ }) { Text("Reconnect") }
+                    FilledTonalButton({ nonce++ }) { Text(stringResource(R.string.about_reconnect)) }
                 }
                 list == null -> ContainedLoadingIndicator()
                 list.isEmpty() -> Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -429,7 +440,8 @@ fun LeaderboardSheet(vm: MainViewModel, onDismiss: () -> Unit, onSubmit: () -> U
                             .then(if (rank != null) Modifier.border(1.dp, rank, RoundedCornerShape(20.dp)) else Modifier).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("${i + 1}", Modifier.width(28.dp), textAlign = TextAlign.Center, style = if (i < 3) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Black, color = if (i < 3) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(.5f))
-                            AsyncImage(pngAvatar(e.avatar_url), e.username, Modifier.padding(horizontal = 10.dp).size(48.dp).clip(CircleShape).border(2.dp, if (i == 0) Color(0xFFFACC15) else MaterialTheme.colorScheme.surface, CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest))
+                            // Only the built-in avatars render: the list is public data, and one entry was pushed with an outside image
+                            AsyncImage(pngAvatar(e.avatar_url.takeIf { u -> CHARACTERS.any { it.url == u } } ?: CHARACTERS[0].url), e.username, Modifier.padding(horizontal = 10.dp).size(48.dp).clip(CircleShape).border(2.dp, if (i == 0) Color(0xFFFACC15) else MaterialTheme.colorScheme.surface, CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest))
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(e.username, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, false))
@@ -488,6 +500,17 @@ fun leaderboardSignature(data: Map<String, Any>): String =
     MessageDigest.getInstance("SHA-256").digest((data.keys.sorted().joinToString("|") { "$it:${data[it]}" } + "ORION_OMEGA_PROTOCOL_X9_SECURE_HASH_V1").toByteArray())
         .joinToString("") { "%02x".format(it) }
 
+/** Signs and posts one leaderboard entry; (HTTP code, body). Used by the Fame Gate and the daily background refresh. */
+suspend fun postLeaderboard(s: Settings, xp: Long, name: String, avatarUrl: String, now: Long): Pair<Int, String> {
+    val payload = linkedMapOf<String, Any>("username" to name, "avatarUrl" to avatarUrl, "xp" to xp, "level" to Xp.level(xp), "adWatchCount" to s.adWatchCount,
+        "submissionCount" to s.submissionCount, "changeRequestCount" to s.changeRequestCount, "timestamp" to now)
+    val body = buildJsonObject {
+        putJsonObject("data") { payload.forEach { (k, v) -> if (v is String) put(k, v) else put(k, (v as Number).toLong()) } }
+        put("signature", leaderboardSignature(payload))
+    }.toString()
+    return Net.postJson(WORKER_URL, body)
+}
+
 @Composable
 fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
     val s = LocalS.current; val scope = rememberCoroutineScope(); val saved = s.userProfile; val ctx = LocalContext.current
@@ -511,16 +534,10 @@ fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
     }
     suspend fun network() {
         val now = System.currentTimeMillis()
-        val payload = linkedMapOf<String, Any>("username" to name.trim(), "avatarUrl" to char.url, "xp" to xp, "level" to level, "adWatchCount" to s.adWatchCount,
-            "submissionCount" to s.submissionCount, "changeRequestCount" to s.changeRequestCount, "timestamp" to now)
-        val body = buildJsonObject {
-            putJsonObject("data") { payload.forEach { (k, v) -> if (v is String) put(k, v) else put(k, (v as Number).toLong()) } }
-            put("signature", leaderboardSignature(payload))
-        }.toString()
-        runCatching { Net.postJson(WORKER_URL, body) }.onFailure { status = "error"; err = it.message ?: ctx.getString(R.string.about_unknown_error) }.onSuccess { (code, res) ->
+        runCatching { postLeaderboard(s, xp, name.trim(), char.url, now) }.onFailure { status = "error"; err = it.message ?: ctx.getString(R.string.about_unknown_error) }.onSuccess { (code, res) ->
             if (code !in 200..299) { status = "error"; err = if (code == 429) ctx.getString(R.string.about_whoa_you_can_only_join_once) else runCatching { json.parseToJsonElement(res).jsonObject["error"]!!.jsonPrimitive.content }.getOrDefault(ctx.getString(R.string.about_portal_connection_failed)); return }
             status = "success"
-            vm.set { it.registerSubmission(now).copy(lastLeaderboardSubmissionTime = now).withProfile(UserProfile(name.trim(), char.id, char.url), now) }
+            vm.set { it.registerSubmission(now).copy(lastLeaderboardSubmissionTime = now, leaderboardXp = xp).withProfile(UserProfile(name.trim(), char.id, char.url), now) }
         }
     }
     fun submit(sim: Boolean) {
@@ -540,7 +557,7 @@ fun LeaderboardSubmitSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                 when (st) {
                     "idle" -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            listOf("Level" to "$level", "XP" to "$xp").forEach { (k, v) ->
+                            listOf(stringResource(R.string.about_level) to "$level", "XP" to "$xp").forEach { (k, v) ->
                                 Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(k.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(v, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
                                 }

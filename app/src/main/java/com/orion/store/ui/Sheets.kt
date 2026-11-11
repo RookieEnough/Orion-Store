@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -112,9 +113,9 @@ fun AppPickerList(pool: List<AppItem>, platform: String, modifier: Modifier = Mo
             OutlinedTextField(q, { q = it; limit = 20 }, Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.sheets_search_apps, platform)) }, singleLine = true, shape = RoundedCornerShape(28.dp),
                 leadingIcon = { Icon(Sym.Search, null) },
                 trailingIcon = { if (q.isNotEmpty()) IconButton({ q = ""; limit = 20 }) { Icon(Sym.Close, stringResource(R.string.guide_clear_search)) } })
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().bleed(16.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (listOf("All" to pool.size) + cats.toList()).forEach { (k, n) ->
-                    FilterChip(cat == k, { cat = k; limit = 20 }, { Text("$k ($n)") }, leadingIcon = if (cat == k) ({ Icon(Sym.Check, null, Modifier.size(18.dp)) }) else null)
+                    FilterChip(cat == k, { cat = k; limit = 20 }, { Text(if (k == "All") "${stringResource(R.string.myapps_select_all)} ($n)" else "$k ($n)") }, leadingIcon = if (cat == k) ({ Icon(Sym.Check, null, Modifier.size(18.dp)) }) else null)
                 }
             }
             Text(status?.invoke(shown.size, filtered.size) ?: stringResource(R.string.sheets_showing, shown.size, filtered.size), Modifier.padding(start = 4.dp, bottom = 8.dp), style = ty.labelMedium, color = cs.onSurfaceVariant)
@@ -145,7 +146,7 @@ fun NoticeSheet(vm: MainViewModel, onDismiss: () -> Unit) {
     OrionSheet(onDismiss) {
         val close = LocalSheetClose.current
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
-            Lead(n.title, n.message, "Notice", center = true) { Blob(Sym.Campaign, cs.primary, 80, MaterialShapes.Sunny) }
+            Lead(n.title, n.message, stringResource(R.string.sheets_notice), center = true) { Blob(Sym.Campaign, cs.primary, 80, MaterialShapes.Sunny) }
             Spacer(Modifier.height(16.dp))
             CtaButton(stringResource(R.string.root_got_it), close, icon = Sym.Check)
         }
@@ -158,7 +159,7 @@ fun NoticeSheet(vm: MainViewModel, onDismiss: () -> Unit) {
 fun FaqSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
     val faqs = vm.config?.faqs?.takeIf { it.isNotEmpty() } ?: Defaults.FAQS
     var open by rememberSaveable { mutableIntStateOf(-1) }
-    SheetTitle("FAQs", Sym.HelpOutline, stringResource(R.string.sheets_common_questions_secrets))
+    SheetTitle(stringResource(R.string.guide_faqs), Sym.HelpOutline, stringResource(R.string.sheets_common_questions_secrets))
     LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp)) {
         itemsIndexed(faqs) { i, f ->
             val on = open == i
@@ -221,7 +222,7 @@ private fun ReleaseCard(vm: MainViewModel, r: Release, latest: Boolean, expanded
         Column(Modifier.fillMaxWidth().animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()).padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("v${r.version}", Modifier.weight(1f), style = ty.titleLargeEmphasized)
-                if (installed) Tag("Installed", if (latest) cs.primary else Safe) else if (latest) Tag("Latest", cs.primary)
+                if (installed) Tag(stringResource(R.string.sheets_installed), if (latest) cs.primary else Safe) else if (latest) Tag(stringResource(R.string.sheets_latest), cs.primary)
             }
             if (r.name.isNotEmpty()) Text(r.name, style = ty.titleMedium, fontWeight = FontWeight.SemiBold)
             val count = r.sections.sumOf { it.items.size }
@@ -313,15 +314,15 @@ private fun ModernUiSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                 0 -> {
                     CtaButton(stringResource(R.string.sheets_enable_now), now, icon = Sym.Bolt)
                     CtaButton(stringResource(R.string.sheets_how_to_enable), { step = 1; vm.haptic(H.SELECTION) }, icon = Sym.Lightbulb, tonal = true)
-                    TextButton(close, Modifier.fillMaxWidth()) { Text("Skip") }
+                    TextButton(close, Modifier.fillMaxWidth()) { Text(stringResource(R.string.sheets_skip)) }
                 }
                 UI_STEPS.lastIndex -> {
                     CtaButton(stringResource(R.string.sheets_enable_now), now, icon = Sym.Bolt)
                     CtaButton(stringResource(R.string.sheets_open_settings), { settings = true; close() }, icon = Sym.Settings, tonal = true)
                 }
                 else -> {
-                    CtaButton("Next", { step++; vm.haptic(H.SELECTION) }, icon = Sym.ArrowForward)
-                    TextButton(close, Modifier.fillMaxWidth()) { Text("Skip") }
+                    CtaButton(stringResource(R.string.sheets_next), { step++; vm.haptic(H.SELECTION) }, icon = Sym.ArrowForward)
+                    TextButton(close, Modifier.fillMaxWidth()) { Text(stringResource(R.string.sheets_skip)) }
                 }
             }
         }
@@ -335,7 +336,7 @@ private fun TourSheet(vm: MainViewModel, onDismiss: () -> Unit) {
         val close = LocalSheetClose.current
         StepHero(TOUR_STEPS, step, TOUR_STEPS.indices)
         Column(Modifier.fillMaxWidth().padding(24.dp)) {
-            CtaButton(if (step == TOUR_STEPS.lastIndex) stringResource(R.string.sheets_got_it) else "Next", {
+            CtaButton(if (step == TOUR_STEPS.lastIndex) stringResource(R.string.sheets_got_it) else stringResource(R.string.sheets_next), {
                 vm.haptic(H.SELECTION)
                 when (step) {
                     0 -> { vm.tab = Tab.ABOUT; step = 1 }
@@ -361,7 +362,7 @@ fun BundlePreviewSheet(vm: MainViewModel, b: BundleItem, onDismiss: () -> Unit) 
     val first = remember { apps.firstOrNull()?.id }
     var picking by rememberSaveable { mutableStateOf(false) }; var ask by remember { mutableStateOf<String?>(null) }
     val deleteBundleMsg = stringResource(R.string.sheets_delete_this_bundle)
-    ConfirmDialog(ask, "Delete", onConfirm = {
+    ConfirmDialog(ask, stringResource(R.string.sheets_delete), onConfirm = {
         vm.set { st -> st.resetBundle(b.id).copy(customBundles = st.customBundles.filterNot { it.id == b.id }) }; vm.haptic(H.WARNING); close()
     }, onDismiss = { ask = null })
     AnimatedContent(picking, label = "bundle") { pick ->
@@ -374,7 +375,7 @@ fun BundlePreviewSheet(vm: MainViewModel, b: BundleItem, onDismiss: () -> Unit) 
         } else LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
             item {
                 Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(64.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(cs.tertiaryContainer), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(64.dp).background(cs.tertiaryContainer, MaterialShapes.Cookie9Sided.toShape()), contentAlignment = Alignment.Center) {
                         if (b.icon != null) Icon(faIcon(b.icon), null, Modifier.size(30.dp), tint = cs.onTertiaryContainer)
                         else Text((b.monogram ?: b.title).take(2).uppercase(), style = ty.titleLarge, fontWeight = FontWeight.Black, color = cs.onTertiaryContainer)
                     }
@@ -387,16 +388,16 @@ fun BundlePreviewSheet(vm: MainViewModel, b: BundleItem, onDismiss: () -> Unit) 
                 }
                 if (b.description.isNotBlank()) Text(b.description, Modifier.padding(horizontal = 8.dp), style = ty.bodyMedium, color = cs.onSurfaceVariant)
                 Spacer(Modifier.height(16.dp))
-                CtaButton("Download", { vm.bundleDownload(b) }, icon = Sym.Download, enabled = apps.isNotEmpty())
+                CtaButton(stringResource(R.string.sheets_download), { vm.bundleDownload(b) }, icon = Sym.Download, enabled = apps.isNotEmpty())
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton({ picking = true }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                         Icon(Sym.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.sheets_add_app))
                     }
                     if (customized) FilledTonalButton({ vm.set { it.resetBundle(b.id) }; vm.haptic(H.MEDIUM) }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
-                        Icon(Sym.RestartAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Reset")
+                        Icon(Sym.RestartAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.sheets_reset))
                     }
                     if (local) OutlinedButton({ ask = deleteBundleMsg }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes(), colors = ButtonDefaults.outlinedButtonColors(contentColor = cs.error)) {
-                        Icon(Sym.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Delete")
+                        Icon(Sym.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.sheets_delete))
                     }
                 }
             }
@@ -422,8 +423,8 @@ private fun BundleRow(vm: MainViewModel, a: AppItem, shape: Shape, extra: Boolea
             supportingContent = {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(a.category, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, false))
-                    if (installed) Tag("Installed", Safe)
-                    if (extra) Tag("Added", cs.tertiary)
+                    if (installed) Tag(stringResource(R.string.sheets_installed), Safe)
+                    if (extra) Tag(stringResource(R.string.sheets_added), cs.tertiary)
                 }
             },
             leadingContent = { AppIcon(a, 44.dp) }, trailingContent = { Icon(Sym.ChevronRight, null) },
@@ -443,12 +444,12 @@ private val VT_TIPS = listOf(R.string.sheets_tip_scan_only_apps_you_plan, R.stri
     R.string.sheets_fun_fact_1_4_detections_on, R.string.sheets_pro_move_open_the_full_virustotal)
 private const val VT_KEY_TUTORIAL = "https://www.youtube.com/shorts/Ynqw4dgH5ko"
 
-private data class VtRisk(val label: String, val color: Color, val icon: ImageVector, @StringRes val note: Int)
+private data class VtRisk(@StringRes val labelRes: Int, val color: Color, val icon: ImageVector, @StringRes val note: Int)
 private fun risk(flagged: Int) = when {
-    flagged == 0 -> VtRisk("Clean", Safe, Sym.VerifiedUser, R.string.sheets_0_detections_this_is_the_best)
-    flagged == 1 -> VtRisk("Low Signal", Blue, Sym.Info, R.string.sheets_1_detection_often_a_false_positive)
-    flagged < 5 -> VtRisk("Review", Caution, Sym.QueryStats, R.string.sheets_2_4_detections_check_engine_names)
-    else -> VtRisk("High Caution", Red, Sym.GppBad, R.string.sheets_5_detections_treat_as_risky_until)
+    flagged == 0 -> VtRisk(R.string.sheets_clean, Safe, Sym.VerifiedUser, R.string.sheets_0_detections_this_is_the_best)
+    flagged == 1 -> VtRisk(R.string.sheets_low_signal, Blue, Sym.Info, R.string.sheets_1_detection_often_a_false_positive)
+    flagged < 5 -> VtRisk(R.string.sheets_review, Caution, Sym.QueryStats, R.string.sheets_2_4_detections_check_engine_names)
+    else -> VtRisk(R.string.sheets_high_caution, Red, Sym.GppBad, R.string.sheets_5_detections_treat_as_risky_until)
 }
 
 /** Downloaded APK first, then the installed APK, then a direct remote APK link. Android only. */
@@ -474,13 +475,13 @@ fun VirusTotalSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) = Or
     val fx = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
     fun revoke() { vm.set { it.copy(virusTotalApiKey = "") }; vt.reset(); vt.view = VtView.KEY; vm.haptic(H.SUCCESS) }
     fun scan() { scope.launch { vt.start(target, s.virusTotalApiKey, vm::hapticStr) } }
-    SheetTitle("VirusTotal", Sym.Security, app.name)
+    SheetTitle(stringResource(R.string.sheets_virustotal), Sym.Security, app.name)
     SheetToastHost(t)
     AnimatedContent(page.coerceAtMost(MOD_PAGES.size) to vt.view, Modifier.fillMaxWidth(), transitionSpec = { fadeIn(fx) togetherWith fadeOut(fx) }, label = "vt") { (pg, view) ->
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (pg < MOD_PAGES.size) ModWarning(pg) { page++; vm.haptic(H.SELECTION) }
             else when (view) {
-                VtView.KEY -> VtKey(vm, vt, s.virusTotalApiKey, ::revoke)
+                VtView.KEY -> VtKey(vt, s.virusTotalApiKey, ::revoke, { k -> vm.set { it.copy(virusTotalApiKey = k) } }, vm::hapticStr, vm.tracker::open)
                 VtView.READY -> VtReady(target, s.virusTotalApiKey, ::scan, ::revoke)
                 VtView.SCANNING -> VtScanning(vt)
                 VtView.RESULTS -> vt.result?.let { r ->
@@ -496,6 +497,25 @@ fun VirusTotalSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) = Or
     }
 }
 
+/** The VirusTotal flow without a sheet around it, for the APK installer: key, ready, scanning, results and errors. */
+@Composable
+fun VtPanel(vt: VtScan, target: ScanTarget, key: String, save: (String) -> Unit, revoke: () -> Unit, open: (String) -> Unit, onDone: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    fun scan() { scope.launch { vt.start(target, key, {}) } }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        when (vt.view) {
+            VtView.KEY -> VtKey(vt, key, revoke, save, {}, open)
+            VtView.READY -> VtReady(target, key, ::scan, revoke)
+            VtView.SCANNING -> VtScanning(vt)
+            VtView.RESULTS -> vt.result?.let { r -> VtResults(r, onCopy = {}, onReport = { r.permalink?.let(open) }, onAgain = { vt.reset(); vt.view = VtView.READY }, onClose = onDone) }
+            VtView.ERROR -> {
+                Lead(stringResource(R.string.sheets_needs_attention), vt.error.ifEmpty { stringResource(R.string.sheets_something_went_wrong) }, stringResource(R.string.sheets_scan_stopped), cs.error) { Blob(Sym.ErrorOutline, cs.error, 72, MaterialShapes.Cookie7Sided) }
+                CtaButton(stringResource(R.string.sheets_scan_again), { vt.reset(); vt.view = if (key.isNotEmpty()) VtView.READY else VtView.KEY }, icon = Sym.Refresh, tonal = true)
+            }
+        }
+    }
+}
+
 @Composable
 private fun ModWarning(page: Int, onNext: () -> Unit) {
     var left by remember { mutableIntStateOf(10) }
@@ -503,11 +523,11 @@ private fun ModWarning(page: Int, onNext: () -> Unit) {
     val p = MOD_PAGES[page]
     Lead(stringResource(p.title), stringResource(p.body), stringResource(R.string.sheets_notice_of, page + 1, MOD_PAGES.size), Caution, center = true) { Blob(p.icon, Caution, 88, MOD_SHAPES[page]) }
     LinearWavyProgressIndicator({ (10 - left) / 10f }, Modifier.fillMaxWidth(), color = Caution, trackColor = Caution.copy(.2f))
-    CtaButton(if (left > 0) stringResource(R.string.sheets_continue_in_s, left) else if (page < MOD_PAGES.lastIndex) "Continue" else stringResource(R.string.sheets_i_understand), onNext, enabled = left == 0)
+    CtaButton(if (left > 0) stringResource(R.string.sheets_continue_in_s, left) else if (page < MOD_PAGES.lastIndex) stringResource(R.string.sheets_continue) else stringResource(R.string.sheets_i_understand), onNext, enabled = left == 0)
 }
 
 @Composable
-private fun VtKey(vm: MainViewModel, vt: VtScan, saved: String, revoke: () -> Unit) {
+private fun VtKey(vt: VtScan, saved: String, revoke: () -> Unit, save: (String) -> Unit, haptic: (String) -> Unit, open: (String) -> Unit) {
     var key by rememberSaveable { mutableStateOf(saved) }; var show by remember { mutableStateOf(false) }; var err by remember { mutableStateOf("") }
     val pasteFirstMsg = stringResource(R.string.sheets_paste_your_virustotal_api_key_first)
     Lead(stringResource(R.string.sheets_connect_virustotal), stringResource(R.string.sheets_your_key_stays_on_this_device), stringResource(R.string.sheets_byok_setup))
@@ -517,12 +537,12 @@ private fun VtKey(vm: MainViewModel, vt: VtScan, saved: String, revoke: () -> Un
         leadingIcon = { Icon(Sym.Key, null) },
         trailingIcon = { IconButton({ show = !show }) { Icon(if (show) Sym.VisibilityOff else Sym.Visibility, if (show) stringResource(R.string.sheets_hide_key) else stringResource(R.string.sheets_show_key)) } })
     CtaButton(stringResource(R.string.sheets_save_key), {
-        if (key.isBlank()) { err = pasteFirstMsg; vm.haptic(H.ERROR) }
-        else { vm.set { it.copy(virusTotalApiKey = key.trim()) }; vt.view = VtView.READY; vm.haptic(H.SUCCESS) }
+        if (key.isBlank()) { err = pasteFirstMsg; haptic("error") }
+        else { save(key.trim()); vt.view = VtView.READY; haptic("success") }
     }, icon = Sym.Save)
     if (saved.isNotEmpty()) TextButton(revoke, Modifier.fillMaxWidth(), colors = ButtonDefaults.textButtonColors(contentColor = cs.error)) { Text(stringResource(R.string.sheets_remove_saved_key)) }
     Column {
-        GroupItem(0, 2, onClick = { vm.tracker.open(VT_KEY_TUTORIAL) }) {
+        GroupItem(0, 2, onClick = { open(VT_KEY_TUTORIAL) }) {
             ListItem({ Text(stringResource(R.string.sheets_watch_key_tutorial), fontWeight = FontWeight.SemiBold) }, supportingContent = { Text(stringResource(R.string.sheets_quick_help_for_finding_your_virustotal)) },
                 leadingContent = { Blob(Sym.PlayCircle, Red, 40) }, trailingContent = { Icon(Sym.OpenInNew, null) },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent))
@@ -537,10 +557,10 @@ private fun VtKey(vm: MainViewModel, vt: VtScan, saved: String, revoke: () -> Un
 @Composable
 private fun VtReady(target: ScanTarget?, key: String, scan: () -> Unit, revoke: () -> Unit) {
     val masked = if (key.length > 8) key.take(4) + "••••" + key.takeLast(4) else "••••"
-    Lead(stringResource(R.string.detail_scan_with_virustotal), stringResource(R.string.sheets_hash_lookup_first_upload_only_happens), "Ready")
+    Lead(stringResource(R.string.detail_scan_with_virustotal), stringResource(R.string.sheets_hash_lookup_first_upload_only_happens), stringResource(R.string.sheets_ready))
     Column {
         GroupItem(0, 2) {
-            ListItem({ Text(target?.label ?: stringResource(R.string.sheets_no_scan_target_found), fontWeight = FontWeight.SemiBold) },
+            ListItem({ Text(target?.let { when (it.label) { "Downloaded APK" -> stringResource(R.string.sheets_downloaded_apk); "Installed APK" -> stringResource(R.string.sheets_installed_apk); "APK File" -> stringResource(R.string.sheets_apk_file); else -> it.label } } ?: stringResource(R.string.sheets_no_scan_target_found), fontWeight = FontWeight.SemiBold) },
                 supportingContent = target?.let { { Text(it.detail, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
                 leadingContent = { Blob(if (target == null) Sym.Block else Sym.Android, if (target == null) cs.error else Safe, 40) },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent))
@@ -578,7 +598,7 @@ private fun VtResults(r: VtResult, onCopy: () -> Unit, onReport: () -> Unit, onA
     val st = r.stats; val total = st.total; val rate = if (total > 0) (st.flagged * 100f / total).roundToInt() else 0
     val k = risk(st.flagged)
     val detections = r.engines.filter { it.category == "malicious" || it.category == "suspicious" }.take(8)
-    Lead(k.label, stringResource(k.note), stringResource(R.string.sheets_virustotal_result), k.color, center = true) { Blob(k.icon, k.color, 88, MaterialShapes.Cookie9Sided) }
+    Lead(stringResource(k.labelRes), stringResource(k.note), stringResource(R.string.sheets_virustotal_result), k.color, center = true) { Blob(k.icon, k.color, 88, MaterialShapes.Cookie9Sided) }
     Surface(shape = RoundedCornerShape(28.dp), color = k.color.copy(.12f)) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             Text(stringResource(R.string.sheets_harmful_rate), style = ty.labelLarge, color = cs.onSurfaceVariant)
@@ -587,11 +607,11 @@ private fun VtResults(r: VtResult, onCopy: () -> Unit, onReport: () -> Unit, onA
         }
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        listOf(Triple("Flagged", st.flagged, Red), Triple("Clean", st.harmless, Safe), Triple("Engines", total, cs.onSurface)).forEachIndexed { i, (l, v, col) ->
+        listOf(Triple(R.string.sheets_flagged, st.flagged, Red), Triple(R.string.sheets_clean, st.harmless, Safe), Triple(R.string.sheets_engines, total, cs.onSurface)).forEachIndexed { i, (l, v, col) ->
             Surface(Modifier.weight(1f), shape = rowShape(i, 3), color = cs.surfaceContainerHigh) {
                 Column(Modifier.padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("$v", style = ty.titleLargeEmphasized, color = col)
-                    Text(l.uppercase(), style = ty.labelSmall, color = cs.onSurfaceVariant)
+                    Text(stringResource(l).uppercase(), style = ty.labelSmall, color = cs.onSurfaceVariant)
                 }
             }
         }
@@ -617,11 +637,40 @@ private fun VtResults(r: VtResult, onCopy: () -> Unit, onReport: () -> Unit, onA
     if (r.permalink != null) CtaButton(stringResource(R.string.sheets_open_virustotal_report), onReport, icon = Sym.OpenInNew)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onAgain, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.settings_scan_again)) }
-        TextButton(onClose, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Close") }
+        TextButton(onClose, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.xtra_close)) }
     }
 }
 
 // ---------------- App change request ----------------
+
+/** Display resources for a [ChangeField] (the type and its English strings live in Logic.kt; 0 = unknown key, fall back to the English field). */
+@StringRes
+fun changeFieldLabelRes(key: String): Int = when (key) {
+    "name" -> R.string.field_name_label; "author" -> R.string.field_author_label; "description" -> R.string.field_description_label
+    "icon" -> R.string.field_icon_label; "screenshots" -> R.string.field_screenshots_label; "downloadUrl" -> R.string.field_downloadurl_label
+    "repoUrl" -> R.string.field_repourl_label; "githubRepo" -> R.string.field_githubrepo_label; "gitlabRepo" -> R.string.field_gitlabrepo_label
+    "codebergRepo" -> R.string.field_codebergrepo_label; "officialSite" -> R.string.field_officialsite_label; "category" -> R.string.field_category_label
+    "releaseKeyword" -> R.string.field_releasekeyword_label; "packageName" -> R.string.field_packagename_label; else -> 0
+}
+
+@StringRes
+fun changeFieldHintRes(key: String): Int = when (key) {
+    "name" -> R.string.field_name_hint; "author" -> R.string.field_author_hint; "description" -> R.string.field_description_hint
+    "icon" -> R.string.field_icon_hint; "screenshots" -> R.string.field_screenshots_hint; "downloadUrl" -> R.string.field_downloadurl_hint
+    "repoUrl" -> R.string.field_repourl_hint; "githubRepo" -> R.string.field_githubrepo_hint; "gitlabRepo" -> R.string.field_gitlabrepo_hint
+    "codebergRepo" -> R.string.field_codebergrepo_hint; "officialSite" -> R.string.field_officialsite_hint; "category" -> R.string.field_category_hint
+    "releaseKeyword" -> R.string.field_releasekeyword_hint; "packageName" -> R.string.field_packagename_hint; else -> 0
+}
+
+@StringRes
+fun changeFieldGroupRes(group: String): Int = when (group) {
+    "Basics" -> R.string.field_group_basics; "Media" -> R.string.field_group_media; "Source" -> R.string.field_group_source
+    "Catalog" -> R.string.field_group_catalog; "Android" -> R.string.field_group_android; else -> 0
+}
+
+/** The label written into the generated GitHub issue. Issue payloads must stay English exactly as before,
+ *  so this always returns the field's original English label, never the localized display string. */
+fun englishFieldLabel(f: ChangeField): String = f.label
 
 @Composable
 fun ChangeRequestSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
@@ -633,14 +682,14 @@ fun ChangeRequestSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) =
     var value by rememberSaveable { mutableStateOf("") }; var reason by rememberSaveable { mutableStateOf("") }; var ref by rememberSaveable { mutableStateOf("") }
     var view by rememberSaveable { mutableStateOf("form") }; var issueUrl by rememberSaveable { mutableStateOf("") }
     var err by remember { mutableStateOf("") }; var showCurrent by remember { mutableStateOf(false) }
-    val current = remember(key) { currentFieldValue(app, key) }
+    val current = remember(key) { currentFieldValue(ctx, app, key) }
     fun submit() {
         vm.refreshCooldown()
         vm.submissionCooldown?.let { err = ctx.getString(R.string.sheets_next_request_available_in, it); vm.haptic(H.WARNING); return }
-        validateChange(f, value).takeIf { it.isNotEmpty() }?.let { err = it; vm.haptic(H.ERROR); return }
-        if (ref.isNotBlank()) urlError(ref).takeIf { it.isNotEmpty() }?.let { err = ctx.getString(R.string.sheets_evidence_link, it); vm.haptic(H.ERROR); return }
+        validateChange(ctx, f, value).takeIf { it.isNotEmpty() }?.let { err = it; vm.haptic(H.ERROR); return }
+        if (ref.isNotBlank()) urlError(ctx, ref).takeIf { it.isNotEmpty() }?.let { err = ctx.getString(R.string.sheets_evidence_link, it); vm.haptic(H.ERROR); return }
         val v: Any = if (f.kind == "urls") splitUrls(value) else value.trim()
-        issueUrl = appUpdateIssueUrl(app, f.label, current, value, reason, ref, appUpdatePayloadJson(app, f.key, v))
+        issueUrl = appUpdateIssueUrl(app, englishFieldLabel(f), current, value, reason, ref, appUpdatePayloadJson(app, f.key, v))
         err = ""; view = "ready"; vm.haptic(H.SUCCESS)
     }
     if (view != "pick") SheetTitle(stringResource(R.string.sheets_app_update, app.platform), Sym.EditNote, app.name)
@@ -649,11 +698,11 @@ fun ChangeRequestSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) =
             "pick" -> Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                 PickerHeader(stringResource(R.string.sheets_choose_one_field), stringResource(R.string.sheets_correct_an_app_detail)) { view = "form" }
                 fields.groupBy { it.group }.forEach { (g, list) ->
-                    Eyebrow(g, modifier = Modifier.padding(start = 28.dp, top = 12.dp, bottom = 8.dp))
+                    Eyebrow(if (changeFieldGroupRes(g) != 0) stringResource(changeFieldGroupRes(g)) else g, modifier = Modifier.padding(start = 28.dp, top = 12.dp, bottom = 8.dp))
                     Column(Modifier.padding(horizontal = 16.dp)) {
                         list.forEachIndexed { i, x ->
                             GroupItem(i, list.size, selected = x.key == key, onClick = { if (x.key != key) { key = x.key; value = "" }; err = ""; view = "form"; vm.haptic(H.SELECTION) }) {
-                                ListItem({ Text(x.label, style = if (x.key == key) ty.titleMediumEmphasized else ty.titleMedium) }, supportingContent = { Text(x.hint) },
+                                ListItem({ Text(if (changeFieldLabelRes(x.key) != 0) stringResource(changeFieldLabelRes(x.key)) else x.label, style = if (x.key == key) ty.titleMediumEmphasized else ty.titleMedium) }, supportingContent = { Text(if (changeFieldHintRes(x.key) != 0) stringResource(changeFieldHintRes(x.key)) else x.hint) },
                                     trailingContent = { if (x.key == key) Icon(Sym.CheckCircle, null, tint = cs.primary) }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
                             }
                         }
@@ -661,7 +710,7 @@ fun ChangeRequestSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) =
                 }
             }
             "ready" -> Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Lead(stringResource(R.string.sheets_update_issue_ready), stringResource(R.string.sheets_the_issue_contains_the_exact_json), f.label, center = true) {
+                Lead(stringResource(R.string.sheets_update_issue_ready), stringResource(R.string.sheets_the_issue_contains_the_exact_json), if (changeFieldLabelRes(f.key) != 0) stringResource(changeFieldLabelRes(f.key)) else f.label, center = true) {
                     Blob(Sym.TaskAlt, Safe, 88, MaterialShapes.Cookie9Sided)
                 }
                 CtaButton(stringResource(R.string.community_open_github_issue), {
@@ -673,7 +722,7 @@ fun ChangeRequestSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) =
                 Column {
                     Eyebrow(stringResource(R.string.sheets_what_to_correct), modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
                     GroupItem(0, 2, onClick = { view = "pick" }) {
-                        ListItem({ Text(f.label, style = ty.titleMediumEmphasized) }, supportingContent = { Text(f.hint) }, trailingContent = { Icon(Sym.UnfoldMore, stringResource(R.string.sheets_change_field)) },
+                        ListItem({ Text(if (changeFieldLabelRes(f.key) != 0) stringResource(changeFieldLabelRes(f.key)) else f.label, style = ty.titleMediumEmphasized) }, supportingContent = { Text(if (changeFieldHintRes(f.key) != 0) stringResource(changeFieldHintRes(f.key)) else f.hint) }, trailingContent = { Icon(Sym.UnfoldMore, stringResource(R.string.sheets_change_field)) },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent))
                     }
                     GroupItem(1, 2, onClick = { showCurrent = !showCurrent }) {
@@ -688,9 +737,9 @@ fun ChangeRequestSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) =
                 }
                 val multi = f.kind == "textarea" || f.kind == "urls"; val urlKind = f.kind == "url" || f.kind == "urls"
                 OutlinedTextField(value, { value = it.take(4000); err = "" }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.sheets_correct_value)) }, shape = RoundedCornerShape(16.dp),
-                    placeholder = { Text(if (f.kind == "urls") "https://image.example/one.png\nhttps://image.example/two.png" else f.hint) },
+                    placeholder = { Text(if (f.kind == "urls") "https://image.example/one.png\nhttps://image.example/two.png" else if (changeFieldHintRes(f.key) != 0) stringResource(changeFieldHintRes(f.key)) else f.hint) },
                     singleLine = !multi, minLines = if (multi) 4 else 1, keyboardOptions = KeyboardOptions(keyboardType = if (urlKind) KeyboardType.Uri else KeyboardType.Text))
-                OutlinedTextField(reason, { reason = it.take(4000) }, Modifier.fillMaxWidth(), label = { Text("Reason") }, placeholder = { Text(stringResource(R.string.sheets_why_is_this_correction_needed)) },
+                OutlinedTextField(reason, { reason = it.take(4000) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.sheets_reason)) }, placeholder = { Text(stringResource(R.string.sheets_why_is_this_correction_needed)) },
                     minLines = 3, shape = RoundedCornerShape(16.dp))
                 OutlinedTextField(ref, { ref = it; err = "" }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.sheets_evidence_link_optional)) }, placeholder = { Text(stringResource(R.string.sheets_release_page_or_official_source)) },
                     singleLine = true, shape = RoundedCornerShape(16.dp), leadingIcon = { Icon(Sym.Link, null) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
@@ -721,7 +770,7 @@ private val WELCOME_POINTS = listOf(
 @Composable
 fun WelcomeSheet(vm: MainViewModel) = OrionSheet(vm::finishWelcome) {
     val cs = MaterialTheme.colorScheme; val ty = MaterialTheme.typography; val close = LocalSheetClose.current
-    val still = LocalS.current.disableAnimations
+    val still = LocalS.current.calm
     var k by remember { mutableIntStateOf(0) }
     LaunchedEffect(still) { delay(250); k = 1; while (!still) { delay(2200); k++ } }
     val pulse by rememberInfiniteTransition(label = "re").animateFloat(1f, if (still) 1f else 1.08f,
@@ -753,5 +802,104 @@ fun WelcomeSheet(vm: MainViewModel) = OrionSheet(vm::finishWelcome) {
             }
         }
         CtaButton(stringResource(R.string.sheets_let_s_go), close, Modifier.padding(top = 20.dp).reveal(8), icon = Sym.RocketLaunch)
+    }
+}
+
+/** Every catalog app by one developer: a shape avatar, the name, the count, then the apps. */
+@Composable
+fun DevSheet(vm: MainViewModel, dev: String, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
+    val d = LocalD.current; val cs = MaterialTheme.colorScheme; val ty = MaterialTheme.typography
+    val name = dev.trim()
+    val apps = remember(d.apps, d.importedApps, name) {
+        (d.apps + d.importedApps).filter { it.author.trim().equals(name, true) }.distinctBy { it.id }.sortedBy { it.name.lowercase() }
+    }
+    val letter = name.takeIf { it.isNotEmpty() }?.let { String(Character.toChars(it.codePointAt(0))) }.orEmpty().uppercase().ifBlank { "?" }
+    val cap = (LocalConfiguration.current.screenHeightDp * 0.72f).dp
+    LazyColumn(Modifier.fillMaxWidth().heightIn(max = cap), contentPadding = PaddingValues(bottom = 32.dp)) {
+        item("dev") {
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(88.dp).clip(RoundedCornerShape(28.dp)).background(cs.primaryContainer), contentAlignment = Alignment.Center) {
+                    Text(letter, style = ty.displaySmallEmphasized, color = cs.onPrimaryContainer)
+                }
+                Text(dev, Modifier.padding(top = 14.dp, start = 24.dp, end = 24.dp), style = ty.headlineSmallEmphasized, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.sheets_app, apps.size, if (apps.size == 1) "" else "s"), style = ty.labelLarge, color = cs.onSurfaceVariant)
+            }
+        }
+        itemsIndexed(apps, key = { _, a -> a.id }) { i, a -> AppRow(vm, a, i, apps.size, Modifier.animateItem()) }
+    }
+}
+
+/** Display resources for an install option (the [InstallOption] type and its English strings live in Logic.kt; 0 = unknown id, fall back to the English option). */
+@StringRes
+fun installOptionLabelRes(id: String): Int = when (id) {
+    "downgrade" -> R.string.instopt_downgrade_label; "grant" -> R.string.instopt_grant_label; "restricted" -> R.string.instopt_restricted_label
+    "test" -> R.string.instopt_test_label; "lowsdk" -> R.string.instopt_lowsdk_label; "forcesdk" -> R.string.instopt_forcesdk_label
+    "dontkill" -> R.string.instopt_dontkill_label; "currentuser" -> R.string.instopt_currentuser_label; "internal" -> R.string.instopt_internal_label
+    "external" -> R.string.instopt_external_label; "rollback" -> R.string.instopt_rollback_label; "noverify" -> R.string.instopt_noverify_label
+    "queryable" -> R.string.instopt_queryable_label; "nodexopt" -> R.string.instopt_nodexopt_label; "instant" -> R.string.instopt_instant_label
+    "full" -> R.string.instopt_full_label; "preload" -> R.string.instopt_preload_label; "play" -> R.string.instopt_play_label
+    "installer" -> R.string.instopt_installer_label; else -> 0
+}
+
+@StringRes
+fun installOptionDescRes(id: String): Int = when (id) {
+    "downgrade" -> R.string.instopt_downgrade_desc; "grant" -> R.string.instopt_grant_desc; "restricted" -> R.string.instopt_restricted_desc
+    "test" -> R.string.instopt_test_desc; "lowsdk" -> R.string.instopt_lowsdk_desc; "forcesdk" -> R.string.instopt_forcesdk_desc
+    "dontkill" -> R.string.instopt_dontkill_desc; "currentuser" -> R.string.instopt_currentuser_desc; "internal" -> R.string.instopt_internal_desc
+    "external" -> R.string.instopt_external_desc; "rollback" -> R.string.instopt_rollback_desc; "noverify" -> R.string.instopt_noverify_desc
+    "queryable" -> R.string.instopt_queryable_desc; "nodexopt" -> R.string.instopt_nodexopt_desc; "instant" -> R.string.instopt_instant_desc
+    "full" -> R.string.instopt_full_desc; "preload" -> R.string.instopt_preload_desc; "play" -> R.string.instopt_play_desc
+    "installer" -> R.string.instopt_installer_desc; else -> 0
+}
+
+/** The pm install switches this Android version supports, shared by the store's options sheet and the APK installer sheet.
+ *  [suggested] ones carry a "Needed" tag: the APK was read and won't install without them. */
+@Composable
+fun InstallOptionsList(on: Set<String>, installer: String, onChange: (Set<String>) -> Unit, onInstaller: (String) -> Unit, suggested: Set<String> = emptySet(), haptic: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val shown = remember { INSTALL_OPTIONS.filter { android.os.Build.VERSION.SDK_INT >= it.minSdk } }
+    shown.forEachIndexed { i, o ->
+        val c = o.id in on
+        fun flip() { haptic(); onChange(if (c) on - o.id else on + o.id - setOfNotNull(o.excludes)) }
+        SegmentedListItem(::flip, ListItemDefaults.segmentedShapes(i, shown.size),
+            colors = ListItemDefaults.segmentedColors(containerColor = if (c) cs.secondaryContainer else cs.surfaceContainerHigh),
+            supportingContent = { Text(if (installOptionDescRes(o.id) != 0) stringResource(installOptionDescRes(o.id)) else o.desc) },
+            trailingContent = { Switch(c, { flip() }, thumbContent = { Icon(if (c) Sym.Check else Sym.Close, null, Modifier.size(SwitchDefaults.IconSize)) }) }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (installOptionLabelRes(o.id) != 0) stringResource(installOptionLabelRes(o.id)) else o.label, Modifier.weight(1f, false), style = MaterialTheme.typography.titleMedium)
+                if (o.id in suggested) Text(stringResource(R.string.sheets_needed), Modifier.padding(start = 8.dp).clip(Pill).background(cs.tertiaryContainer).padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall, color = cs.onTertiaryContainer)
+            }
+        }
+        if (o.id == "installer" && c) OutlinedTextField(installer, { onInstaller(it.trim()) }, Modifier.fillMaxWidth().padding(vertical = 6.dp), singleLine = true,
+            label = { Text(stringResource(R.string.sheets_installer_package)) }, placeholder = { Text("com.sec.android.app.samsungapps") }, shape = RoundedCornerShape(16.dp),
+            isError = installer.isNotEmpty() && installArgs(listOf("installer", "installer=$installer"), android.os.Build.VERSION.SDK_INT, "").contains(" -i ").not(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+    }
+}
+
+/** The picks as saved and passed to pm: switch ids, plus "installer=<package>" when a custom installer is on. */
+fun pickedOptions(on: Set<String>, installer: String) =
+    on.filter { id -> INSTALL_OPTIONS.any { it.id == id && android.os.Build.VERSION.SDK_INT >= it.minSdk } } + listOfNotNull(installer.takeIf { "installer" in on && it.isNotEmpty() }?.let { "installer=$it" })
+
+/** Beyond install: pm install switches for one APK, last picks preselected. Installs through root or Shizuku. */
+@Composable
+fun InstallOptionsSheet(vm: MainViewModel, app: AppItem, file: String, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
+    val s = LocalS.current; val close = LocalSheetClose.current; val cs = MaterialTheme.colorScheme
+    var on by remember { mutableStateOf(s.installFlags.filterNot { it.startsWith("installer=") }.toSet()) }
+    var installer by remember { mutableStateOf(s.installFlags.firstOrNull { it.startsWith("installer=") }?.substringAfter('=').orEmpty()) }
+    SheetTitle(stringResource(R.string.guide_beyond_install), Sym.Tune, app.name)
+    Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+        InstallOptionsList(on, installer, { on = it }, { installer = it }) { vm.haptic(H.SELECTION) }
+        Text(if (s.rootMode) stringResource(R.string.sheets_installs_with_root) else stringResource(R.string.sheets_installs_through_shizuku), Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+        Button({
+            val picked = pickedOptions(on, installer)
+            vm.set { it.copy(installFlags = picked) }
+            vm.installFile(app, file, opts = picked); close()
+        }, modifier = Modifier.fillMaxWidth().heightIn(min = ButtonDefaults.MediumContainerHeight), shapes = ButtonDefaults.shapesFor(ButtonDefaults.MediumContainerHeight)) {
+            Icon(Sym.InstallMobile, null); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.sheets_install), style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight))
+        }
     }
 }

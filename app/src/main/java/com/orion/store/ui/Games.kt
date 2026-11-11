@@ -119,10 +119,11 @@ fun DinoGameSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
         vm.haptic(if (record) H.SUCCESS else H.ERROR)
     }, Modifier.padding(16.dp).fillMaxWidth().height(160.dp).clip(RoundedCornerShape(24.dp)))
     Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(stringResource(R.string.games_this_run) to "${over ?: score}", stringResource(R.string.games_all_time_hi) to "${maxOf(s.dinoHighScore, over ?: 0)}", "XP Earned" to "+${(over ?: 0) / 100}").forEach { (l, v) ->
+        val xpLabel = stringResource(R.string.games_xp_earned)
+        listOf(stringResource(R.string.games_this_run) to "${over ?: score}", stringResource(R.string.games_all_time_hi) to "${maxOf(s.dinoHighScore, over ?: 0)}", xpLabel to "+${(over ?: 0) / 100}").forEach { (l, v) ->
             Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp)) {
                 Text(l, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(v, style = MaterialTheme.typography.titleLargeEmphasized, color = if (l == "XP Earned") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                Text(v, style = MaterialTheme.typography.titleLargeEmphasized, color = if (l == xpLabel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
             }
         }
     }
@@ -131,9 +132,9 @@ fun DinoGameSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismi
     }
     Row(Modifier.padding(16.dp).navigationBarsPadding(), verticalAlignment = Alignment.CenterVertically) {
         Icon(Sym.PhoneAndroid, null, tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) { Text("Control", style = MaterialTheme.typography.labelLarge); Text(stringResource(R.string.games_action_button_or_tap), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Column(Modifier.weight(1f)) { Text(stringResource(R.string.games_control), style = MaterialTheme.typography.labelLarge); Text(stringResource(R.string.games_action_button_or_tap), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Button({ action(); vm.haptic(H.LIGHT) }, modifier = Modifier.heightIn(min = 56.dp), shapes = ButtonDefaults.shapes()) {
-            Text(when (status) { "crashed" -> "Restart"; "idle" -> "Play"; else -> "Jump" }, style = MaterialTheme.typography.titleMedium)
+            Text(when (status) { "crashed" -> stringResource(R.string.games_restart); "idle" -> stringResource(R.string.games_play); else -> stringResource(R.string.games_jump) }, style = MaterialTheme.typography.titleMedium)
         }
     }
 }

@@ -20,10 +20,14 @@ import kotlin.math.max
 @Serializable data class CustomFont(val id: String, val name: String, val fileName: String, val mimeType: String, val path: String, val addedAt: Long)
 @Serializable data class LibraryEntry(val status: String, val fileName: String? = null, val version: String? = null, val downloadedAt: Long, val installedAt: Long? = null, val lastSeenAt: Long)
 @Serializable data class TabViewState(val query: String = "", val category: String = "All", val sort: SortOption = SortOption.NEWEST, val filterFavorites: Boolean = false)
+/** What Orion installed: the app's own versionName and the catalog version it was offered as, so later checks compare like with like. */
+@Serializable data class InstalledBuild(val versionName: String, val offered: String)
 @Serializable data class IgnoredUpdate(val type: String, val timestamp: Long? = null, val version: String? = null)
 @Serializable data class UserProfile(val name: String, val avatarId: String? = null, val avatarUrl: String? = null, val createdAt: Long = 0)
 @Serializable data class CustomBundle(val id: String, val title: String, val description: String, val icon: String, val appIds: List<String>, val createdAt: Long = 0, val submittedAt: Long? = null)
 @Serializable data class AutoResult(val appId: String, val name: String, val version: String, val ok: Boolean, val error: String? = null, val at: Long)
+/** A palette from the palette maker: seed colors as ARGB. A null secondary or tertiary is derived from the primary. */
+@Serializable data class CustomPalette(val id: String, val name: String, val primary: Int, val secondary: Int? = null, val tertiary: Int? = null, val style: String = "balanced")
 @Serializable data class ForcedSnapshot(val schemaVersion: Int = 1, val targetVersion: String, val downloadFileName: String, val status: String, val downloadCompleted: Boolean, val exported: Boolean)
 
 @Serializable data class Settings(
@@ -31,6 +35,7 @@ import kotlin.math.max
     val palette: String = "orion",
     val appFont: String = "spaceGrotesk",
     val customFonts: List<CustomFont> = emptyList(),
+    val customPalettes: List<CustomPalette> = emptyList(),
     val storeLayout: String = "modern",
     val isOled: Boolean = false,
     val materialYouEnabled: Boolean = false,
@@ -48,6 +53,16 @@ import kotlin.math.max
     val stableOnly: Boolean = false,
     val deleteApk: Boolean = false,
     val useShizuku: Boolean = false,
+    /** Silent installs and uninstalls through Dhizuku's shared device owner. */
+    val useDhizuku: Boolean = false,
+    /** Root or Shizuku installs open a sheet of pm install options first; [installFlags] are the ones picked last time. */
+    val installOptions: Boolean = false, val installFlags: List<String> = emptyList(),
+    /** Launcher icon and dock style, see [APP_ICONS] and [DOCKS]. */
+    val appIcon: String = "default", val navDock: String = "pill",
+    /** Where navigation sits on tablets, foldables and TVs: the side rail, or the phone dock at the bottom or top. */
+    val wideNav: String = "rail",
+    /** Ads counted toward each locked icon or dock, from zero for everyone: only ads watched while [unlockTarget] is set count. */
+    val unlockProgress: Map<String, Int> = emptyMap(), val unlockTarget: String? = null,
     /** Run every privileged action (installs, Guardian) through `su` instead of Shizuku or wireless ADB. */
     val rootMode: Boolean = false,
     /** Root installs ask Android 14+ to make other stores get consent before updating apps Orion installed. */
@@ -63,11 +78,15 @@ import kotlin.math.max
     val installerPackage: String = "",
     val installerLabel: String = "",
     val disableAnimations: Boolean = false,
+    /** auto, lite, balanced or boost. Auto is Lite on low-end phones, Balanced elsewhere. */
+    val perfMode: String = "auto",
     val compactMode: Boolean = false,
     /** Classic rows show a two-line "About this app" preview that expands in place. */
-    val showAppAbout: Boolean = true,
-    val bottomNavScale: Float = 1f,
+    val showAppAbout: Boolean = false,
+    val bottomNavScale: Float = .85f,
     val highRefreshRate: Boolean = true,
+    /** Status bar hidden while Orion is open; a swipe from the top peeks it. */
+    val immersive: Boolean = true,
     val pullToRefreshCharacter: String = "cat",
     val hapticEnabled: Boolean = true,
     val glassEffect: Boolean = true,
@@ -82,19 +101,38 @@ import kotlin.math.max
     /** One-time flags for the 2.0 native switch: web data carried over, welcome shown. */
     val webMigrated: Boolean = false, val seenNativeWelcome: Boolean = false,
     val submissionCount: Int = 0,
+    /** How many Orbit apps were saved the last time the library-share reminder was answered. It comes back every five more. */
+    val orbitSharePromptAt: Int = 0,
+    /** The first-visit note on Orbit. It stays until Hide or Keep is tapped, then never comes back. */
+    val seenOrbitHello: Boolean = false,
     val changeRequestCount: Int = 0,
     val lastSubmissionTime: Long = 0,
     val lastLeaderboardSubmissionTime: Long = 0,
+    /** XP on the leaderboard after the last upload; a joined pilot re-uploads by itself once a day when it grew. */
+    val leaderboardXp: Long = 0,
+    /** The occasional support reminder after installs: when it last showed, and the user's "don't ask again". */
+    val lastDonateNudge: Long = 0, val donateNudgeOff: Boolean = false,
     val useRemoteJson: Boolean = true,
     val loadLocalData: Boolean = false,
     val githubToken: String = "",
+    /** Personal tokens for Orbit. GitHub is the same value as [githubToken], shared with Developer tools. */
+    val gitlabToken: String = "",
+    val codebergToken: String = "",
     val forcedStoreUpdate: ForcedSnapshot? = null,
     val installedVersions: Map<String, String> = emptyMap(),
     val lastRemoteVersions: Map<String, String> = emptyMap(),
     val appStreams: Map<String, String> = emptyMap(),
+    val installedBuilds: Map<String, InstalledBuild> = emptyMap(),
     val resolvedPackageNames: Map<String, String> = emptyMap(),
     val packageOwners: Map<String, String> = emptyMap(),
     val ignoredUpdates: Map<String, IgnoredUpdate> = emptyMap(),
+    /** Per-app manage choice (false = out of My Apps and updates); apps without one follow [skipOtherStores]. */
+    val appManage: Map<String, Boolean> = emptyMap(),
+    val skipOtherStores: Boolean = false,
+    /** Installer package of each installed catalog app, from the last package sync ("" = none recorded). */
+    val installSources: Map<String, String> = emptyMap(),
+    /** My Apps filter pill order (enum names); missing ones follow in default order. */
+    val myAppsFilters: List<String> = emptyList(),
     val hasSeenModernUITutorial: Boolean = false,
     val userProfile: UserProfile? = null,
     val customBundles: List<CustomBundle> = emptyList(),
@@ -109,7 +147,19 @@ import kotlin.math.max
     val seenFlags: Set<String> = emptySet(),
     val devConfigEnabled: Boolean = false,
     val devConfigUrl: String = "",
+    /** Orion AI: the button on store tabs, chat sounds, and the provider in use. Keys stay on this device and only go to their own provider. */
+    val aiButton: Boolean = true,
+    val aiSounds: Boolean = true,
+    val aiProvider: String = "gemini",
+    val aiKeys: Map<String, String> = emptyMap(),
+    val aiModels: Map<String, String> = emptyMap(),
+    val aiBaseUrl: String = "",
+    /** The on-device model in use, and where the user dragged the AI star (fractions of the screen, -1 = default spot). */
+    val aiLocalModel: String = "",
+    val aiFabX: Float = -1f, val aiFabY: Float = -1f,
     @Transient val coinFlipHintCount: Int = 0,
+    /** The sideloading-protection shield in the header, on whenever the phone has the developer-verification component. Off only from Orion Xtra. */
+    val verifierBadge: Boolean = true,
 ) {
     fun toggleHiddenTab(tab: String): Settings {
         val next = if (tab in hiddenTabs) hiddenTabs - tab else hiddenTabs + tab
@@ -117,6 +167,9 @@ import kotlin.math.max
     }
     fun withInstaller(pref: String, pkg: String = "", label: String = "") =
         copy(installerPreference = pref, installerPackage = if (pref == "package") pkg else "", installerLabel = if (pref == "package") label else "")
+    val perf get() = if (perfMode == "auto") (if (Device.lowEnd) "lite" else "balanced") else perfMode
+    /** Endless decorative motion (turning shapes, pulses, hero auto-advance, tilt) stops in Lite and with animations off. */
+    val calm get() = disableAnimations || perf == "lite"
     fun streamOf(id: String) = if (stableOnly) "Stable" else appStreams[id] ?: "Stable"
     fun hideInstaller(pkg: String) = if (pkg in hiddenInstallers) this else copy(hiddenInstallers = hiddenInstallers + pkg)
     fun incrementCoinFlipHint() = copy(coinFlipHintCount = minOf(3, coinFlipHintCount + 1))
@@ -134,12 +187,16 @@ import kotlin.math.max
     fun incrementAdWatch(now: Long): Settings {
         if (adBlockReason(now) != null) return this
         val n = adWatchCount + 1
-        return copy(adWatchCount = n, isContributor = isContributor || n >= 3, isLegend = isLegend || n >= 25, adStamps = adStamps.filter { now - it < Xp.DAY_MS } + now)
+        val t = unlockTarget; val need = (APP_ICONS + DOCKS).firstOrNull { it.id == t }?.ads ?: 0; val got = (unlockProgress[t] ?: 0) + 1
+        return copy(adWatchCount = n, isContributor = isContributor || n >= 3, isLegend = isLegend || n >= 25, adStamps = adStamps.filter { now - it < Xp.DAY_MS } + now,
+            unlockProgress = if (t != null && need > 0) unlockProgress + (t to minOf(got, need)) else unlockProgress, unlockTarget = t.takeIf { need > 0 && got < need })
     }
     fun registerSubmission(now: Long) = copy(submissionCount = submissionCount + 1, lastSubmissionTime = now)
     fun registerChangeRequest(now: Long) = copy(changeRequestCount = changeRequestCount + 1, submissionCount = submissionCount + 1, lastSubmissionTime = now)
     fun withSubmissionCount(c: Double) = copy(submissionCount = if (c.isFinite()) max(0.0, floor(c)).toInt() else 0)
     fun ignoreUpdate(id: String, type: String, version: String?, now: Long) = copy(ignoredUpdates = ignoredUpdates + (id to IgnoredUpdate(type, now, version)))
+    /** Stores an override only when it differs from what the store filter would decide. */
+    fun withManaged(id: String, on: Boolean) = copy(appManage = appManage - id).let { if (isManaged(id, it) == on) it else it.copy(appManage = appManage + (id to on)) }
     fun withProfile(p: UserProfile?, now: Long) = copy(userProfile = p?.copy(createdAt = userProfile?.createdAt ?: now))
     fun removeCustomFont(id: String) = copy(customFonts = customFonts.filterNot { it.id == id }, appFont = if (appFont == "custom:$id") "spaceGrotesk" else appFont)
     fun toggleBundleAppRemoval(bundleId: String, appId: String): Settings {
@@ -176,6 +233,8 @@ import kotlin.math.max
 @Serializable data class DataState(
     @Transient val apps: List<AppItem> = emptyList(),
     val importedApps: List<AppItem> = emptyList(),
+    /** Apps the user tracks themselves in Orbit, straight from their sources. */
+    val orbit: List<OrbitApp> = emptyList(),
     val tabs: Map<String, TabViewState> = mapOf("android" to TabViewState(), "pc" to TabViewState(), "tv" to TabViewState()),
     @Transient val activeDownloads: Map<String, String> = emptyMap(),
     @Transient val downloadProgress: Map<String, Float> = emptyMap(),

@@ -56,8 +56,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -77,7 +79,12 @@ import com.orion.store.Lang
 import com.orion.store.R
 import com.orion.store.findActivity
 import com.orion.store.data.*
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.orion.store.R
+import com.orion.store.platform.DhizukuBridge
 import com.orion.store.platform.Installer
+import com.orion.store.platform.OrionAi
 import com.orion.store.platform.WirelessAdb
 import com.orion.store.platform.ResultHost
 import kotlinx.coroutines.Dispatchers
@@ -108,15 +115,16 @@ fun identityExport(s: Settings, favorites: List<String>, now: Long): String {
         put("adWatchCount", s.adWatchCount); put("submissionCount", s.submissionCount); put("changeRequestCount", s.changeRequestCount)
         put("lastSubmissionTime", s.lastSubmissionTime); put("lastLeaderboardSubmissionTime", s.lastLeaderboardSubmissionTime)
         put("isLegend", s.isLegend); put("isContributor", s.isContributor); put("isDevUnlocked", s.isDevUnlocked)
-        put("theme", s.theme); put("palette", s.palette); put("appFont", s.appFont); put("customFonts", json.encodeToJsonElement(s.customFonts)); put("storeLayout", s.storeLayout)
+        put("theme", s.theme); put("palette", s.palette); put("appFont", s.appFont); put("customFonts", json.encodeToJsonElement(s.customFonts)); put("customPalettes", json.encodeToJsonElement(s.customPalettes)); put("storeLayout", s.storeLayout)
         put("isOled", s.isOled); put("hiddenTabs", json.encodeToJsonElement(s.hiddenTabs)); put("disableAnimations", s.disableAnimations)
-        put("compactMode", s.compactMode); put("showAppAbout", s.showAppAbout); put("bottomNavScale", jsNum(s.bottomNavScale)); put("highRefreshRate", s.highRefreshRate)
+        put("compactMode", s.compactMode); put("showAppAbout", s.showAppAbout); put("bottomNavScale", jsNum(s.bottomNavScale)); put("highRefreshRate", s.highRefreshRate); put("immersive", s.immersive); put("perfMode", s.perfMode)
         put("pullToRefreshCharacter", s.pullToRefreshCharacter); put("hapticEnabled", s.hapticEnabled); put("glassEffect", s.glassEffect)
         put("quickTiles", s.quickTiles?.let { json.encodeToJsonElement(it) } ?: JsonNull); put("settingsOrder", json.encodeToJsonElement(s.settingsOrder))
         put("autoUpdateEnabled", s.autoUpdateEnabled); put("wifiOnly", s.wifiOnly); put("stableOnly", s.stableOnly); put("deleteApk", s.deleteApk); put("useShizuku", s.useShizuku)
         put("installerPreference", s.installerPreference); put("installerPackage", s.installerPackage); put("installerLabel", s.installerLabel)
         put("useRemoteJson", s.useRemoteJson); put("loadLocalData", s.loadLocalData); put("appStreams", json.encodeToJsonElement(s.appStreams))
-        put("ignoredUpdates", json.encodeToJsonElement(s.ignoredUpdates)); put("userProfile", s.userProfile?.let { json.encodeToJsonElement(it) } ?: JsonNull)
+        put("ignoredUpdates", json.encodeToJsonElement(s.ignoredUpdates)); put("appManage", json.encodeToJsonElement(s.appManage)); put("skipOtherStores", s.skipOtherStores)
+        put("myAppsFilters", json.encodeToJsonElement(s.myAppsFilters)); put("userProfile", s.userProfile?.let { json.encodeToJsonElement(it) } ?: JsonNull)
         put("customBundles", json.encodeToJsonElement(s.customBundles)); put("removedBundleApps", json.encodeToJsonElement(s.removedBundleApps))
         put("extraBundleApps", json.encodeToJsonElement(s.extraBundleApps)); put("favorites", json.encodeToJsonElement(favorites)); put("timestamp", now)
     }
@@ -154,18 +162,19 @@ fun mergeIdentity(d: JsonObject, c: Settings): Settings =
         changeRequestCount = d.or("changeRequestCount", c.changeRequestCount), lastSubmissionTime = d.or("lastSubmissionTime", c.lastSubmissionTime),
         lastLeaderboardSubmissionTime = d.or("lastLeaderboardSubmissionTime", c.lastLeaderboardSubmissionTime),
         isLegend = d.or("isLegend", c.isLegend), isContributor = d.or("isContributor", c.isContributor), isDevUnlocked = d.or("isDevUnlocked", c.isDevUnlocked),
-        theme = d.or("theme", c.theme), palette = d.or("palette", c.palette), appFont = d.or("appFont", c.appFont), customFonts = d.or("customFonts", c.customFonts),
+        theme = d.or("theme", c.theme), palette = d.or("palette", c.palette), appFont = d.or("appFont", c.appFont), customFonts = d.or("customFonts", c.customFonts), customPalettes = d.or("customPalettes", c.customPalettes),
         storeLayout = d.or("storeLayout", c.storeLayout), isOled = d.or("isOled", c.isOled), hiddenTabs = d.or("hiddenTabs", c.hiddenTabs),
         disableAnimations = d.or("disableAnimations", c.disableAnimations), compactMode = d.or("compactMode", c.compactMode), showAppAbout = d.or("showAppAbout", c.showAppAbout),
         bottomNavScale = d.or("bottomNavScale", c.bottomNavScale).takeIf { it.isFinite() } ?: c.bottomNavScale,
-        highRefreshRate = d.or("highRefreshRate", c.highRefreshRate), pullToRefreshCharacter = d.or("pullToRefreshCharacter", c.pullToRefreshCharacter),
+        highRefreshRate = d.or("highRefreshRate", c.highRefreshRate), immersive = d.or("immersive", c.immersive), perfMode = d.or("perfMode", c.perfMode), pullToRefreshCharacter = d.or("pullToRefreshCharacter", c.pullToRefreshCharacter),
         hapticEnabled = d.or("hapticEnabled", c.hapticEnabled), glassEffect = d.or("glassEffect", c.glassEffect),
         quickTiles = d.or("quickTiles", c.quickTiles), settingsOrder = d.or("settingsOrder", c.settingsOrder),
         autoUpdateEnabled = d.or("autoUpdateEnabled", c.autoUpdateEnabled), wifiOnly = d.or("wifiOnly", c.wifiOnly), stableOnly = d.or("stableOnly", c.stableOnly), deleteApk = d.or("deleteApk", c.deleteApk),
         useShizuku = d.or("useShizuku", c.useShizuku), installerPreference = d.or("installerPreference", c.installerPreference),
         installerPackage = d.or("installerPackage", c.installerPackage), installerLabel = d.or("installerLabel", c.installerLabel),
         useRemoteJson = d.or("useRemoteJson", c.useRemoteJson), loadLocalData = d.or("loadLocalData", c.loadLocalData),
-        appStreams = d.or("appStreams", c.appStreams), ignoredUpdates = d.or("ignoredUpdates", c.ignoredUpdates), userProfile = d.or("userProfile", c.userProfile),
+        appStreams = d.or("appStreams", c.appStreams), ignoredUpdates = d.or("ignoredUpdates", c.ignoredUpdates),
+        appManage = d.or("appManage", c.appManage), skipOtherStores = d.or("skipOtherStores", c.skipOtherStores), myAppsFilters = d.or("myAppsFilters", c.myAppsFilters), userProfile = d.or("userProfile", c.userProfile),
         customBundles = d.or("customBundles", c.customBundles), removedBundleApps = d.or("removedBundleApps", c.removedBundleApps),
         extraBundleApps = d.or("extraBundleApps", c.extraBundleApps),
     )
@@ -184,19 +193,19 @@ private val headClient by lazy { Net.client.newBuilder().callTimeout(5, TimeUnit
 private suspend fun alive(url: String) = url.startsWith("http") && withContext(Dispatchers.IO) {
     runCatching { headClient.newCall(Request.Builder().url(url).head().cacheControl(CacheControl.FORCE_NETWORK).build()).execute().use { it.code in 200..399 } }.getOrDefault(false)
 }
-private suspend fun scanApp(a: AppItem): MissionResult? {
+private suspend fun scanApp(a: AppItem, ctx: android.content.Context): MissionResult? {
     val i = mutableListOf<String>()
-    if (a.author.isBlank() || a.author.equals("unknown", true)) i += "Missing Developer Name"
-    if (a.description.trim().length < 20) i += "Description missing or too short"
-    if (a.screenshots.isEmpty()) i += "No screenshots provided"
-    if (a.icon.isNotEmpty()) { if (!alive(a.icon)) i += "Dead Icon URL: ${a.icon}" } else i += "Missing Icon URL"
-    if (a.downloadUrl.isNotEmpty()) { if (!alive(a.downloadUrl)) i += "Dead Download URL: ${a.downloadUrl}" } else i += "Missing Download URL"
-    a.screenshots.firstOrNull()?.let { if (!alive(it)) i += "Dead Screenshot URL: $it" }
+    if (a.author.isBlank() || a.author.equals("unknown", true)) i += ctx.getString(R.string.settings_scan_missing_developer_name)
+    if (a.description.trim().length < 20) i += ctx.getString(R.string.settings_scan_description_missing_or_too_short)
+    if (a.screenshots.isEmpty()) i += ctx.getString(R.string.settings_scan_no_screenshots_provided)
+    if (a.icon.isNotEmpty()) { if (!alive(a.icon)) i += ctx.getString(R.string.settings_scan_dead_icon_url, a.icon) } else i += ctx.getString(R.string.settings_scan_missing_icon_url)
+    if (a.downloadUrl.isNotEmpty()) { if (!alive(a.downloadUrl)) i += ctx.getString(R.string.settings_scan_dead_download_url, a.downloadUrl) } else i += ctx.getString(R.string.settings_scan_missing_download_url)
+    a.screenshots.firstOrNull()?.let { if (!alive(it)) i += ctx.getString(R.string.settings_scan_dead_screenshot_url, it) }
     return if (i.isEmpty()) null else MissionResult(a.id, a.name, i)
 }
-suspend fun runCatalogDiagnostic(apps: List<AppItem>, onProgress: (Int, Int) -> Unit): List<MissionResult> {
+suspend fun runCatalogDiagnostic(apps: List<AppItem>, ctx: android.content.Context, onProgress: (Int, Int) -> Unit): List<MissionResult> {
     val out = mutableListOf<MissionResult>(); var n = 0
-    apps.chunked(10).forEach { b -> out += coroutineScope { b.map { async { scanApp(it) } }.awaitAll() }.filterNotNull(); n += b.size; onProgress(n, apps.size) }
+    apps.chunked(10).forEach { b -> out += coroutineScope { b.map { async { scanApp(it, ctx) } }.awaitAll() }.filterNotNull(); n += b.size; onProgress(n, apps.size) }
     return out
 }
 // endregion
@@ -283,14 +292,14 @@ private fun Selectable(selected: Boolean, title: String, meta: String? = null, o
 /** Decorative MaterialShape that slowly turns; used behind hub tiles and page heroes. */
 @Composable
 private fun Spinner(shape: RoundedPolygon, color: Color, size: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier, periodMs: Int = 24_000) {
-    val still = LocalS.current.disableAnimations
+    val still = LocalS.current.calm
     val turn by rememberInfiniteTransition(label = "spin").animateFloat(0f, if (still) 0f else 360f, infiniteRepeatable(tween(periodMs, easing = LinearEasing)), label = "a")
-    Box(modifier.size(size).graphicsLayer { rotationZ = turn }.clip(shape.toShape()).background(color))
+    Box(modifier.size(size).graphicsLayer { rotationZ = turn }.background(color, shape.toShape()))
 }
 
 /** Quick Settings tile: rests as a rounded rectangle, turns into a filled pill when on. */
 @Composable
-private fun QuickTile(icon: ImageVector, label: String, on: Boolean, modifier: Modifier = Modifier, state: String = if (on) "On" else "Off", onClick: () -> Unit) {
+private fun QuickTile(icon: ImageVector, label: String, on: Boolean, modifier: Modifier = Modifier, state: String? = null, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme; val fx = MaterialTheme.motionScheme.defaultEffectsSpec<Color>()
     val r by animateDpAsState(if (on) 36.dp else 20.dp, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "r")
     val bg by animateColorAsState(if (on) cs.primary else cs.surfaceContainerHigh, fx, label = "bg")
@@ -302,7 +311,7 @@ private fun QuickTile(icon: ImageVector, label: String, on: Boolean, modifier: M
         Spacer(Modifier.width(12.dp))
         Column {
             Text(label, style = MaterialTheme.typography.titleSmall, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(state, style = MaterialTheme.typography.labelMedium, color = fg.copy(.75f), maxLines = 1)
+            Text(state ?: stringResource(if (on) R.string.common_on else R.string.common_off), style = MaterialTheme.typography.labelMedium, color = fg.copy(.75f), maxLines = 1)
         }
     }
 }
@@ -311,6 +320,7 @@ private fun QuickTile(icon: ImageVector, label: String, on: Boolean, modifier: M
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
     val s = LocalS.current; val d = LocalD.current; val ctx = LocalContext.current; val scope = rememberCoroutineScope()
+    val customFontFallback = stringResource(R.string.settings_custom_font)
     val menu = vm.settingsMenu
     var modal by remember { mutableStateOf("none") }
     var picker by remember { mutableStateOf<String?>(null) }
@@ -334,9 +344,11 @@ fun SettingsScreen(vm: MainViewModel) {
         installersLoading = false
     }
     val fx = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val saved = rememberSaveableStateHolder()
     SharedTransitionLayout(Modifier.fillMaxSize()) {
         AnimatedContent(menu, transitionSpec = { fadeIn(fx) togetherWith fadeOut(fx) }, label = "menu") { m ->
-            val avs = this
+            saved.SaveableStateProvider(m) {
+            val avs = this@AnimatedContent
             val cat = CATS.firstOrNull { it.id == m }
             if (cat == null) Hub(vm, s, d, active, ready, pending) { c ->
                 Modifier.sharedBounds(rememberSharedContentState("cat-${c.id}"), avs, resizeMode = PAGE_RESIZE)
@@ -359,7 +371,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 BackupGlyph(saving.value, 32.dp, MaterialTheme.colorScheme.onPrimary); Spacer(Modifier.width(8.dp))
                                 AnimatedContent(saving.value, transitionSpec = { (slideInVertically { it / 2 } + fadeIn()) togetherWith (slideOutVertically { -it / 2 } + fadeOut()) }, label = "save") { p ->
                                     Column {
-                                        Text(when (p) { BackupPhase.WORKING -> "Saving..."; BackupPhase.DONE -> "Saved"; BackupPhase.FAILED -> "Failed"; else -> stringResource(R.string.settings_back_up) }, fontWeight = FontWeight.Bold)
+                                        Text(when (p) { BackupPhase.WORKING -> stringResource(R.string.settings_saving); BackupPhase.DONE -> stringResource(R.string.settings_saved); BackupPhase.FAILED -> stringResource(R.string.settings_failed); else -> stringResource(R.string.settings_back_up) }, fontWeight = FontWeight.Bold)
                                         Text(if (p == BackupPhase.DONE) stringResource(R.string.settings_check_your_files) else stringResource(R.string.settings_signed_osf_file), style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
@@ -377,7 +389,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                     catch (_: Exception) { importStatus = ctx.getString(R.string.settings_corrupt_or_incompatible_save_file) to "error"; vm.haptic(H.ERROR) }
                                 }
                             }, modifier = Modifier.weight(1f).heightIn(min = 64.dp), shapes = ButtonDefaults.shapes()) {
-                                Icon(Sym.FileDownload, null); Spacer(Modifier.width(8.dp)); Column { Text("Restore", fontWeight = FontWeight.Bold); Text(stringResource(R.string.settings_import_a_save), style = MaterialTheme.typography.labelSmall) }
+                                Icon(Sym.FileDownload, null); Spacer(Modifier.width(8.dp)); Column { Text(stringResource(R.string.xtra_restore), fontWeight = FontWeight.Bold); Text(stringResource(R.string.settings_import_a_save), style = MaterialTheme.typography.labelSmall) }
                             }
                         }
                         AnimatedVisibility(importStatus.first.isNotEmpty()) {
@@ -389,7 +401,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         }
                         CloudBackup(vm, s)
                     }
-                    "network" -> Section("Downloads") {
+                    "network" -> Section(stringResource(R.string.settings_downloads)) {
                         Toggle(Sym.Wifi, stringResource(R.string.guide_wi_fi_only), stringResource(R.string.settings_skip_downloads_on_cellular_data), s.wifiOnly) { vm.set { it.copy(wifiOnly = !it.wifiOnly) } }
                         Toggle(Sym.Autorenew, stringResource(R.string.settings_auto_update_apps), stringResource(R.string.settings_check_and_download_updates_every_few), s.autoUpdateEnabled) { vm.set { it.copy(autoUpdateEnabled = !it.autoUpdateEnabled) } }
                         if (s.autoUpdateEnabled) {
@@ -404,11 +416,14 @@ fun SettingsScreen(vm: MainViewModel) {
                             })
                         }
                         Toggle(Sym.Verified, stringResource(R.string.guide_stable_releases_only), stringResource(R.string.settings_skip_beta_alpha_and_nightly_builds), s.stableOnly) { vm.set { it.copy(stableOnly = !it.stableOnly) } }
+                        Toggle(Sym.FilterList, stringResource(R.string.new_skip_apps_from_other_stores), stringResource(R.string.new_apps_installed_by_play_store_or_another), s.skipOtherStores) {
+                            vm.set { it.copy(skipOtherStores = !it.skipOtherStores) }
+                        }
                     }
                     "installer" -> {
                         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FeatureTile(Sym.Shield, "Guardian", stringResource(R.string.settings_permissions_apk_export_debloat), Green, MaterialShapes.Cookie9Sided, Modifier.weight(1f)) { modal = "guardian" }
-                            FeatureTile(Sym.MonitorHeart, "Sentinel", stringResource(R.string.settings_malware_scan_for_installed_apps), Blue, MaterialShapes.Sunny, Modifier.weight(1f)) { modal = "sentinel" }
+                            FeatureTile(Sym.Shield, stringResource(R.string.settings_guardian), stringResource(R.string.settings_permissions_apk_export_debloat), Green, MaterialShapes.Cookie9Sided, Modifier.weight(1f)) { modal = "guardian" }
+                            FeatureTile(Sym.MonitorHeart, stringResource(R.string.settings_sentinel), stringResource(R.string.settings_malware_scan_for_installed_apps), Blue, MaterialShapes.Sunny, Modifier.weight(1f)) { modal = "sentinel" }
                         }
                         val ch = ptr(s.pullToRefreshCharacter)
                         Section(stringResource(R.string.pixel_pull_to_refresh)) {
@@ -423,6 +438,10 @@ fun SettingsScreen(vm: MainViewModel) {
                             SRow(Sym.Android, stringResource(R.string.settings_apk_installer), when (s.installerPreference) {
                                 "package" -> s.installerLabel.ifEmpty { stringResource(R.string.settings_specific_installer) }; "chooser" -> stringResource(R.string.settings_ask_every_time); else -> stringResource(R.string.settings_system_installer)
                             }, onClick = { installerStep = "mode"; picker = "installer" }) { Chevron() }
+                            // Orion is also an installer: any APK from a file manager or browser opens on Orion's sheet
+                            SRow(Sym.InstallMobile, stringResource(R.string.settings_install_an_apk_file), stringResource(R.string.settings_pick_any_apk_on_this_phone_and_install_it_with_orion), onClick = {
+                                vm.haptic(H.LIGHT); vm.pickApk()
+                            }) { Chevron() }
                             if (WirelessAdb.supported) Toggle(Sym.Speed, stringResource(R.string.guide_skip_the_24_hour_wait), stringResource(R.string.settings_install_instantly_through_built_in_wireless), s.directInstall) {
                                 if (vm.s.directInstall) vm.set { it.copy(directInstall = false) } else { picker = "direct" }
                             }
@@ -433,15 +452,34 @@ fun SettingsScreen(vm: MainViewModel) {
                                     catch (e: Exception) { shizukuError = if ((e.message ?: "").contains("Shizuku is NOT running")) ctx.getString(R.string.settings_shizuku_service_is_not_running) else ctx.getString(R.string.settings_permission_was_denied_by_user) }
                                 } else vm.set { it.copy(useShizuku = !it.useShizuku) }
                             }
+                            if (android.os.Build.VERSION.SDK_INT >= 26) Toggle(Sym.AdminPanelSettings, "Dhizuku", stringResource(R.string.settings_dhizuku_desc), s.useDhizuku) {
+                                shizukuError = null
+                                if (vm.s.useDhizuku) vm.set { it.copy(useDhizuku = false) }
+                                else scope.launch {
+                                    runCatching { DhizukuBridge.request(ctx) }.onSuccess { ok -> if (ok) { vm.set { it.copy(useDhizuku = true) }; vm.haptic(H.SUCCESS) } else shizukuError = ctx.getString(R.string.settings_dhizuku_permission_denied) }
+                                        .onFailure { shizukuError = it.message ?: ctx.getString(R.string.settings_dhizuku_not_available) }
+                                }
+                            }
+                            Toggle(Sym.Tune, stringResource(R.string.settings_beyond_install), stringResource(R.string.settings_beyond_install_desc), s.installOptions) {
+                                shizukuError = null
+                                if (!vm.s.installOptions && !vm.s.rootMode) scope.launch {
+                                    try { vm.tracker.requestElevated(); vm.set { it.copy(installOptions = true) } }
+                                    catch (e: Exception) { shizukuError = if ((e.message ?: "").contains("Shizuku is NOT running")) ctx.getString(R.string.settings_shizuku_service_is_not_running) else ctx.getString(R.string.settings_permission_was_denied_by_user) }
+                                } else vm.set { it.copy(installOptions = !it.installOptions) }
+                            }
                             shizukuError?.let { Text(it, Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(16.dp),
                                 color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold) }
-                            InfoCard(stringResource(R.string.settings_silent_installs_require_shizuku_to_be)) {
-                                TextButton({ vm.navigateFromSettings("shizuku") }, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.settings_get_shizuku)) }
+                            InfoCard(stringResource(R.string.settings_silent_installs_need_shizuku_running_or_dhizuku_activated_as_device_owner)) {
+                                Row {
+                                    TextButton({ vm.navigateFromSettings("shizuku") }, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.settings_get_shizuku)) }
+                                    Spacer(Modifier.width(16.dp))
+                                    TextButton({ vm.tracker.open(DhizukuBridge.URL) }, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.settings_get_dhizuku)) }
+                                }
                             }
                         }
-                        Section("Root") {
+                        Section(stringResource(R.string.settings_root)) {
                             var adopt by remember { mutableStateOf<String?>(null) }
-                            ConfirmDialog(adopt, "Adopt", onConfirm = vm::adoptApps, onDismiss = { adopt = null })
+                            ConfirmDialog(adopt, stringResource(R.string.settings_adopt), onConfirm = vm::adoptApps, onDismiss = { adopt = null })
                             Toggle(Sym.Terminal, stringResource(R.string.guide_root_mode), stringResource(R.string.settings_silent_installs_and_every_guardian_tool), s.rootMode) {
                                 if (vm.s.rootMode) vm.set { it.copy(rootMode = false) }
                                 else scope.launch { if (vm.tracker.requestRoot()) { vm.set { it.copy(rootMode = true) }; vm.haptic(H.SUCCESS) } else vm.error(ctx.getString(R.string.settings_root_access_was_denied_or_this)) }
@@ -454,7 +492,16 @@ fun SettingsScreen(vm: MainViewModel) {
                                 SRow(Sym.DeleteSweep, stringResource(R.string.guide_clear_every_app_s_cache), stringResource(R.string.settings_free_space_across_all_apps_in), onClick = vm::trimCaches) { Chevron() }
                             }
                         }
-                        Section("Recovery") {
+                        Section(stringResource(R.string.guide_sideloading_protection)) {
+                            val vs = vm.verifierState
+                            SRow(if (vs == com.orion.store.platform.Verifier.State.ACTIVE) Sym.GppBad else Sym.GppGood, stringResource(R.string.settings_developer_verification), when (vs) {
+                                com.orion.store.platform.Verifier.State.ACTIVE -> stringResource(R.string.settings_verifier_on_turn_it_off)
+                                com.orion.store.platform.Verifier.State.OFF -> stringResource(R.string.settings_verifier_off_sideloading_is_protected)
+                                else -> stringResource(R.string.settings_verifier_not_on_this_phone)
+                            }, onClick = { vm.haptic(H.LIGHT); vm.openVerifier() }) { Chevron() }
+                            Toggle(Sym.Shield, stringResource(R.string.settings_protection_shield), stringResource(R.string.settings_protection_shield_desc), s.verifierBadge) { vm.set { it.copy(verifierBadge = !it.verifierBadge) } }
+                        }
+                        Section(stringResource(R.string.settings_recovery)) {
                             SRow(Sym.Sync, stringResource(R.string.settings_force_rescan_packages), stringResource(R.string.settings_reload_every_installed_app_list), onClick = { vm.reload(); vm.scheduleInstalledSync(); vm.close(Overlay.SETTINGS) })
                         }
                     }
@@ -464,62 +511,45 @@ fun SettingsScreen(vm: MainViewModel) {
                                 Icon(Sym.CleaningServices, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.settings_clean_now))
                             }
                         }
-                        Section("Janitor") {
+                        Section(stringResource(R.string.guide_janitor)) {
                             Toggle(Sym.CleaningServices, stringResource(R.string.settings_auto_cleanup_installer), stringResource(R.string.settings_remove_apks_after_they_install), s.deleteApk) { vm.set { it.copy(deleteApk = !it.deleteApk) } }
                             InfoCard(stringResource(R.string.settings_janitor_mode_clears_installed_apk_files))
-                        }
-                    }
-                    "queue" -> {
-                        StatHero("${active + ready + pending}", stringResource(R.string.settings_in_the_queue_active_ready_updates, active, ready, pending)) {
-                            if ((s.useShizuku || s.directInstall || s.rootMode) && ready > 1) Button(vm::batchInstall, shapes = ButtonDefaults.shapes()) { Icon(Sym.Bolt, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.settings_update_all, ready)) }
-                        }
-                        if (active == 0 && vm.updates.isEmpty() && ready == 0) EmptyState(Sym.DownloadDone, stringResource(R.string.settings_queue_is_empty), stringResource(R.string.settings_downloads_and_updates_show_up_here))
-                        else Section("Queue") {
-                            fun app(id: String) = all.firstOrNull { it.id == id }
-                            d.readyToInstall.forEach { (id, file) ->
-                                val a = app(id)
-                                ListItem({ Text(a?.name ?: id, style = MaterialTheme.typography.titleMedium) }, Modifier.clip(RoundedCornerShape(4.dp)).clickable { a?.let { vm.navigateFromSettings(it.id) } },
-                                    supportingContent = { Text(stringResource(R.string.logic_ready_to_install)) }, leadingContent = { a?.let { AppIcon(it, 44.dp) } ?: TonalIcon(Sym.Inventory, Safe) },
-                                    trailingContent = {
-                                        if (vm.installingId == id) LoadingIndicator(Modifier.size(32.dp))
-                                        else Button({ a?.let { vm.installFile(it, file) } }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("Install") }
-                                    }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer))
-                            }
-                            d.activeDownloads.keys.forEach { id ->
-                                val a = app(id); val p = d.downloadProgress[id] ?: 0f
-                                Column(Modifier.clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainer).clickable { a?.let { vm.navigateFromSettings(it.id) } }.padding(16.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        a?.let { AppIcon(it, 44.dp) }; Spacer(Modifier.width(12.dp))
-                                        Text(a?.name ?: id, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text("${p.roundToInt()}%", style = MaterialTheme.typography.labelLarge)
-                                        IconButton({ vm.cancelDownload(id) }) { Icon(Sym.Close, stringResource(R.string.detail_cancel_download)) }
-                                    }
-                                    LinearWavyProgressIndicator({ p / 100f }, Modifier.fillMaxWidth().padding(top = 8.dp))
-                                }
-                            }
-                            vm.updates.filter { it.id !in d.activeDownloads && it.id !in d.readyToInstall }.forEach { a ->
-                                ListItem({ Text(a.name, style = MaterialTheme.typography.titleMedium) }, Modifier.clip(RoundedCornerShape(4.dp)).clickable { vm.navigateFromSettings(a.id) },
-                                    supportingContent = { Text(stringResource(R.string.settings_update_to_v, a.latestVersion)) }, leadingContent = { AppIcon(a, 44.dp) },
-                                    trailingContent = { FilledTonalButton({ vm.download(a) }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("Update") } },
-                                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer))
-                            }
                         }
                     }
                     "visuals" -> {
                         Section(stringResource(R.string.settings_language)) {
                             val lctx = LocalContext.current
-                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainer).horizontalScroll(rememberScrollState()).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("" to stringResource(R.string.settings_language_system_default), "en" to "English", "es" to "Español", "zh-CN" to "简体中文", "ja" to "日本語", "ru" to "Русский", "hi" to "हिन्दी", "ar" to "العربية", "tl" to "Tagalog", "fr" to "Français", "pl" to "Polski").forEach { (tag, label) ->
-                                    Choice(Lang.tag(lctx) == tag, label) { Lang.set(lctx, tag); if (android.os.Build.VERSION.SDK_INT < 33) lctx.findActivity()?.recreate() }
-                                }
-                            }
+                            val langOptions = listOf("" to stringResource(R.string.settings_language_system_default), "en" to "English", "es" to "Español", "zh-CN" to "中文", "ja" to "日本語", "ru" to "Русский", "hi" to "हिन्दी", "ar" to "العربية", "tl" to "Tagalog", "fr" to "Français", "pl" to "Polski")
+                            var showLang by remember { mutableStateOf(false) }
+                            val currentLang = langOptions.firstOrNull { it.first == Lang.tag(lctx) }?.second ?: langOptions[0].second
+                            SRow(Sym.Translate, stringResource(R.string.settings_language), currentLang, onClick = { showLang = true }) { Chevron() }
+                            if (showLang) AlertDialog({ showLang = false }, title = { Text(stringResource(R.string.settings_language)) },
+                                text = { Column { langOptions.forEach { (tag, label) ->
+                                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { Lang.set(lctx, tag); showLang = false; if (android.os.Build.VERSION.SDK_INT < 33) lctx.findActivity()?.recreate() }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        RadioButton(Lang.tag(lctx) == tag, { Lang.set(lctx, tag); showLang = false; if (android.os.Build.VERSION.SDK_INT < 33) lctx.findActivity()?.recreate() })
+                                        Spacer(Modifier.width(8.dp)); Text(label, style = MaterialTheme.typography.bodyLarge)
+                                    } } } },
+                                confirmButton = { TextButton({ showLang = false }) { Text(stringResource(R.string.root_got_it)) } })
                         }
                         ThemePicker(vm, s)
                         PalettePicker(vm, s)
                         Section(stringResource(R.string.settings_color_type)) {
                             Toggle(Sym.AutoAwesome, stringResource(R.string.guide_material_you), stringResource(R.string.settings_dynamic_wallpaper_colors_android_12), s.materialYouEnabled) { vm.set { it.copy(materialYouEnabled = !it.materialYouEnabled) } }
-                            SRow(Sym.FontDownload, "Font", fontLabel(s), onClick = { fontError = null; picker = "font" }) {
+                            SRow(Sym.FontDownload, stringResource(R.string.settings_font), fontLabel(s), onClick = { fontError = null; picker = "font" }) {
                                 Row(verticalAlignment = Alignment.CenterVertically) { Text("Aa", style = MaterialTheme.typography.headlineSmallEmphasized); Chevron() }
+                            }
+                        }
+                        Text(stringResource(R.string.settings_performance), Modifier.padding(start = 32.dp, top = 16.dp, bottom = 2.dp), style = MaterialTheme.typography.titleSmallEmphasized, color = tonal(LocalAccent.current).second)
+                        Text(if (s.perfMode == "auto") stringResource(R.string.settings_auto_picks_for_this_phone, s.perf.replaceFirstChar { it.uppercase() })
+                            else stringResource(R.string.new_lite_stops_decorative_motion_boost_keeps_more), Modifier.padding(horizontal = 32.dp),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // One connected group across the page, the same 16dp margins as the groups below: no scrolling, nothing off to one side
+                        val modes = listOf("auto" to stringResource(R.string.settings_perf_auto), "lite" to stringResource(R.string.settings_perf_lite), "balanced" to stringResource(R.string.settings_perf_balanced), "boost" to stringResource(R.string.settings_perf_boost))
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+                            modes.forEachIndexed { i, (id, label) ->
+                                ToggleButton(s.perfMode == id, { vm.haptic(H.SELECTION); vm.set { it.copy(perfMode = id) } }, Modifier.weight(if (id == "balanced") 1.3f else 1f),
+                                    shapes = when (i) { 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes(); modes.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes(); else -> ButtonGroupDefaults.connectedMiddleButtonShapes() },
+                                    contentPadding = PaddingValues(horizontal = 4.dp)) { Text(label, maxLines = 1) }
                             }
                         }
                         Section(stringResource(R.string.settings_motion_feel)) {
@@ -527,19 +557,30 @@ fun SettingsScreen(vm: MainViewModel) {
                             Toggle(Sym.Speed, stringResource(R.string.guide_smooth_motion), stringResource(R.string.settings_prefer_high_refresh_rate_scrolling), s.highRefreshRate) { vm.set { it.copy(highRefreshRate = !it.highRefreshRate) } }
                             Toggle(Sym.MotionPhotosOff, stringResource(R.string.guide_disable_animations), stringResource(R.string.settings_every_transition_snaps_instantly), s.disableAnimations) { vm.set { it.copy(disableAnimations = !it.disableAnimations) } }
                             Toggle(Sym.BlurOn, stringResource(R.string.guide_glass_dock), stringResource(R.string.settings_slightly_translucent_floating_navigation), s.glassEffect) { vm.set { it.copy(glassEffect = !it.glassEffect) } }
+                            Toggle(Sym.OpenInFull, stringResource(R.string.settings_full_screen), stringResource(R.string.settings_hide_the_status_bar_while_orion_is_open), s.immersive) { vm.set { it.copy(immersive = !it.immersive) } }
                             Toggle(Sym.Compress, stringResource(R.string.guide_compact_mode), stringResource(R.string.settings_smaller_rows_with_denser_spacing), s.compactMode) { vm.set { it.copy(compactMode = !it.compactMode) } }
                         }
+                        if (!Device.isTv) IconPicker(vm, s)
+                        DockPicker(vm, s)
                         DockSize(vm, s)
+                        DockPosition(vm, s)
                     }
                     "interface" -> {
                         LayoutPicker(vm, s)
                         Section(stringResource(R.string.settings_navigation_tabs)) {
                             listOf(Triple("android", "Apps", stringResource(R.string.settings_android_apps)), Triple("pc", "PC", stringResource(R.string.settings_pc_and_desktop_software)),
-                                Triple("tv", "TV", stringResource(R.string.settings_tv_and_big_screen_apps)), Triple("myapps", stringResource(R.string.root_my_apps), stringResource(R.string.settings_library_and_download_history))).forEach { (t, title, desc) ->
-                                Toggle(when (t) { "android" -> Sym.Android; "pc" -> Sym.DesktopWindows; "tv" -> Sym.Tv; else -> Sym.GridView }, title, desc, t !in s.hiddenTabs) {
+                                Triple("tv", "TV", stringResource(R.string.settings_tv_and_big_screen_apps)), Triple("orbit", "Orbit", stringResource(R.string.settings_apps_you_track_from_their_own_source)), Triple("myapps", stringResource(R.string.root_my_apps), stringResource(R.string.settings_library_and_download_history))).forEach { (t, title, desc) ->
+                                Toggle(when (t) { "android" -> Sym.Android; "pc" -> Sym.DesktopWindows; "tv" -> Sym.Tv; "orbit" -> Sym.Orbit; else -> Sym.GridView }, title, desc, t !in s.hiddenTabs) {
                                     vm.set { it.toggleHiddenTab(t) }
                                 }
                             }
+                        }
+                        Section(stringResource(R.string.guide_orion_ai)) {
+                            Toggle(Sym.AutoAwesome, stringResource(R.string.settings_ai_star), stringResource(R.string.settings_ai_star_desc), s.aiButton) { vm.set { it.copy(aiButton = !it.aiButton) } }
+                            Toggle(Sym.Notifications, stringResource(R.string.settings_ai_sound_effects), stringResource(R.string.settings_ai_sound_effects_desc), s.aiSounds) { vm.set { it.copy(aiSounds = !it.aiSounds) } }
+                            SRow(Sym.Key, stringResource(R.string.settings_provider_and_key), OrionAi.provider(s.aiProvider).label + if (vm.ai.ready(s)) stringResource(R.string.settings_connected_suffix) else stringResource(R.string.settings_not_connected_suffix),
+                                onClick = { modal = "ai" }) { Chevron() }
+                            SRow(Sym.Chat, stringResource(R.string.settings_open_orion_ai), stringResource(R.string.settings_find_apps_by_describing_what_you_need), onClick = { vm.close(Overlay.SETTINGS); vm.open(Overlay.AI) }) { Chevron() }
                         }
                     }
                     "developer" -> {
@@ -549,6 +590,8 @@ fun SettingsScreen(vm: MainViewModel) {
                             Toggle(Sym.Construction, stringResource(R.string.settings_local_maintenance_mode), stringResource(R.string.settings_work_on_bundles_and_data_locally), s.localMaintenanceMode) {
                                 vm.set { it.copy(localMaintenanceMode = !it.localMaintenanceMode) }
                             }
+                            SRow(Sym.Shield, stringResource(R.string.settings_test_sideloading_protection), stringResource(R.string.settings_play_the_secure_me_popup_with_a_fake_success), onClick = { vm.haptic(H.LIGHT); vm.testVerifier("done") }) { Chevron() }
+                            SRow(Sym.GppMaybe, stringResource(R.string.settings_test_sideloading_protection_failure), stringResource(R.string.settings_the_same_popup_ending_in_a_fake_error), onClick = { vm.haptic(H.LIGHT); vm.testVerifier("failed") }) { Chevron() }
                             SRow(Sym.Radar, stringResource(R.string.settings_run_catalog_scanner_admin), stringResource(R.string.settings_check_every_app_for_missing_text), onClick = { modal = "scanner" }) { Chevron() }
                             SRow(Sym.DeleteSweep, stringResource(R.string.settings_clear_system_cache), stringResource(R.string.settings_reset_pending_cleanup_and_ready_installs), onClick = {
                                 vm.upd { it.copy(pendingCleanup = emptyMap(), readyToInstall = emptyMap()) }; vm.haptic(H.WARNING)
@@ -558,6 +601,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         DevTools(vm)
                     }
                 }
+            }
             }
         }
     }
@@ -581,7 +625,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         ctx.contentResolver.openInputStream(uri)!!.use { i -> f.outputStream().use { i.copyTo(it) } }; f
                     }
                 }.onSuccess { f ->
-                    val font = CustomFont(id, name.substringBeforeLast('.').trim().ifEmpty { "Custom Font" }, name, ctx.contentResolver.getType(uri) ?: "font/$ext", f.absolutePath, System.currentTimeMillis())
+                    val font = CustomFont(id, name.substringBeforeLast('.').trim().ifEmpty { customFontFallback }, name, ctx.contentResolver.getType(uri) ?: "font/$ext", f.absolutePath, System.currentTimeMillis())
                     vm.set { it.copy(customFonts = it.customFonts + font, appFont = "custom:$id") }
                 }.onFailure { fontError = ctx.getString(R.string.settings_could_not_read_this_font) }
                 importingFont = false
@@ -592,6 +636,7 @@ fun SettingsScreen(vm: MainViewModel) {
     }
     when (modal) {
         "guardian" -> GuardianSheet(vm) { modal = "none" }
+        "ai" -> AiSettingsSheet(vm) { modal = "none" }
         "sentinel" -> SentinelSheet(vm) { modal = "none" }
         "scanner" -> ScannerSheet(all) { modal = "none" }
     }
@@ -630,19 +675,30 @@ private fun PageFooter(cat: Cat) {
 private fun Hub(vm: MainViewModel, s: Settings, d: DataState, active: Int, ready: Int, pending: Int, shared: @Composable (Cat) -> Modifier) {
     val cs = MaterialTheme.colorScheme
     fun cat(id: String) = CATS.first { it.id == id }
-    Column(Modifier.fillMaxSize().background(cs.surface).verticalScroll(rememberScrollState()).readableWidth().windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility).padding(bottom = 32.dp)) {
-        Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp)) {
-            Text("Settings", style = MaterialTheme.typography.displaySmallEmphasized)
-            Text(stringResource(R.string.settings_orion_store_v_apps_in_catalog, STORE_VERSION, vm.allApps().size), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+    Column(Modifier.fillMaxSize().background(cs.surface).readableWidth().verticalScroll(rememberScrollState()).readableWidth().windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility).padding(bottom = 32.dp)) {
+        Row(Modifier.padding(start = 24.dp, end = 16.dp, top = 24.dp), verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                Text("Settings", style = MaterialTheme.typography.displaySmallEmphasized)
+                Text(stringResource(R.string.settings_orion_store_v_apps_in_catalog, STORE_VERSION, vm.allApps().size), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+            }
+            // Announcements already read leave the header; the latest one stays readable here until a new one arrives
+            val ann = vm.config?.announcement?.takeIf { it.isNotBlank() }
+            var showAnn by remember { mutableStateOf(false) }
+            if (ann != null) IconButton({ vm.haptic(H.LIGHT); showAnn = true }) { Icon(Sym.Campaign, stringResource(R.string.settings_last_announcement), tint = cs.onSurfaceVariant) }
+            if (showAnn && ann != null) AlertDialog({ showAnn = false }, icon = { Icon(Sym.Campaign, null) }, title = { Text(stringResource(R.string.root_from_the_orion_team)) },
+                text = { Text(ann, Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) },
+                confirmButton = { TextButton({ showAnn = false; vm.dismissAnnouncement() }) { Text(stringResource(R.string.root_got_it)) } })
         }
         var editing by remember { mutableStateOf(false) }
         HubHeader(stringResource(R.string.guide_quick_toggles)) { IconButton({ editing = true }) { Icon(Sym.Edit, stringResource(R.string.settings_edit_quick_toggles), tint = cs.primary) } }
         val quick = (s.quickTiles ?: DEFAULT_QUICK).mapNotNull { id -> QUICK.firstOrNull { it.id == id && it.shown(s) } }
         if (quick.isEmpty()) Text(stringResource(R.string.settings_no_quick_toggles_tap_the_pencil), Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
-        quick.chunked(2).forEach { row ->
+        // Three across on big screens, so the tiles keep a tile's shape instead of stretching into long bars
+        val per = if (LocalWidthClass.current.wide) 3 else 2
+        quick.chunked(per).forEach { row ->
             Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { q -> QuickTile(q.icon, stringResource(q.label), q.get(s), Modifier.weight(1f)) { vm.haptic(H.SELECTION); vm.set(q.flip) } }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+                repeat(per - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
         if (editing) QuickTilesSheet(vm, s) { editing = false }
@@ -706,7 +762,7 @@ private fun Hub(vm: MainViewModel, s: Settings, d: DataState, active: Int, ready
             }
         }
         HubHeader(stringResource(R.string.settings_everything_else), stringResource(R.string.settings_long_press_a_card_to_move)) {
-            if (s.settingsOrder.isNotEmpty()) TextButton({ vm.set { it.copy(settingsOrder = emptyList()) }; vm.haptic(H.MEDIUM) }) { Text("Reset") }
+            if (s.settingsOrder.isNotEmpty()) TextButton({ vm.set { it.copy(settingsOrder = emptyList()) }; vm.haptic(H.MEDIUM) }) { Text(stringResource(R.string.common_reset)) }
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Slot(0, Modifier.zIndex(z(0)).fillMaxWidth().height(156.dp))
@@ -804,28 +860,29 @@ private fun QuickTilesSheet(vm: MainViewModel, s: Settings, onDismiss: () -> Uni
         if (rest.isNotEmpty()) Text(stringResource(R.string.settings_add_tiles), Modifier.padding(start = 8.dp, top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmallEmphasized, color = cs.primary)
         rest.forEachIndexed { i, q ->
             SegmentedListItem({ toggle(q.id) }, ListItemDefaults.segmentedShapes(i, rest.size), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh),
-                leadingContent = { Icon(q.icon, null) }, trailingContent = { Icon(Sym.Add, "Add") }) {
+                leadingContent = { Icon(q.icon, null) }, trailingContent = { Icon(Sym.Add, stringResource(R.string.common_add)) }) {
                 Text(stringResource(q.label), fontWeight = FontWeight.SemiBold)
             }
         }
     }
     Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton({ vm.set { it.copy(quickTiles = null) }; vm.haptic(H.MEDIUM) }, modifier = Modifier.weight(1f), enabled = s.quickTiles != null, shapes = ButtonDefaults.shapes()) {
-            Icon(Sym.RestartAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Reset")
+            Icon(Sym.RestartAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.common_reset))
         }
-        Button(LocalSheetClose.current, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Icon(Sym.Check, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Done") }
+        Button(LocalSheetClose.current, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Icon(Sym.Check, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.xtra_done)) }
     }
 }
 
 @Composable
 private fun Bento(vm: MainViewModel, cat: Cat, shared: @Composable (Cat) -> Modifier, modifier: Modifier, compact: Boolean = false, badge: String? = null, extra: @Composable ColumnScope.() -> Unit = {}) {
     val (bg, fg) = tonal(cat.color)
-    Box(modifier.then(shared(cat)).springClick(RoundedCornerShape(28.dp)) { vm.haptic(H.LIGHT); vm.settingsMenu = cat.id }.background(bg)) {
-        Spinner(cat.shape, fg.copy(.1f), if (compact) 120.dp else 168.dp, Modifier.align(Alignment.BottomEnd).offset(36.dp, 36.dp))
+    Box(modifier.then(shared(cat)).springClick(RoundedCornerShape(28.dp)) { vm.haptic(H.LIGHT); if (cat.id == "queue") vm.open(Overlay.DOWNLOADS) else vm.settingsMenu = cat.id }.background(bg)) {
+        // Short tiles (the full-width Developer strip) get the small shape, so it hugs the corner like the others instead of filling the strip
+        Spinner(cat.shape, fg.copy(.1f), if (compact || cat.id == "developer") 120.dp else 168.dp, Modifier.align(Alignment.BottomEnd).offset(36.dp, 36.dp))
         CompositionLocalProvider(LocalContentColor provides fg) {
             Column(Modifier.fillMaxSize().padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(44.dp).clip(cat.shape.toShape()).background(fg.copy(.14f)), contentAlignment = Alignment.Center) { Icon(cat.icon, null, Modifier.size(24.dp)) }
+                    Box(Modifier.size(44.dp).background(fg.copy(.14f), cat.shape.toShape()), contentAlignment = Alignment.Center) { Icon(cat.icon, null, Modifier.size(24.dp)) }
                     Spacer(Modifier.weight(1f))
                     badge?.let { Badge(containerColor = fg, contentColor = bg) { Text(it, Modifier.padding(horizontal = 4.dp)) } }
                 }
@@ -845,10 +902,11 @@ private fun Page(cat: Cat, modifier: Modifier, onBack: () -> Unit, content: @Com
     CompositionLocalProvider(LocalAccent provides cat.color) {
         val screen = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
         // At least a screen tall, so the footer settles at the bottom of short pages (weight works once the scroll column has a min height).
-        Column(modifier.fillMaxSize().background(cs.surface).verticalScroll(rememberScrollState()).readableWidth().heightIn(min = screen).padding(bottom = 40.dp)) {
-            Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(bg, cs.surface)))) {
+        // The tinted hero runs edge to edge on every screen; only the text and rows keep to a readable column
+        Column(modifier.fillMaxSize().background(cs.surface).verticalScroll(rememberScrollState()).heightIn(min = screen).padding(bottom = 40.dp)) {
+            Box(Modifier.fillMaxWidth().clipToBounds().background(Brush.verticalGradient(listOf(bg, cs.surface)))) {
                 Spinner(cat.shape, fg.copy(.08f), 260.dp, Modifier.align(Alignment.TopEnd).offset(70.dp, (-30).dp), periodMs = 40_000)
-                Column(Modifier.windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility).padding(bottom = 12.dp)) {
+                Column(Modifier.readableWidth().windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility).padding(bottom = 12.dp)) {
                     Box(Modifier.padding(start = 24.dp, top = 24.dp).size(72.dp), contentAlignment = Alignment.Center) {
                         Spinner(cat.shape, fg.copy(.16f), 72.dp, periodMs = 18_000)
                         Icon(cat.icon, null, Modifier.size(34.dp), tint = fg)
@@ -857,9 +915,9 @@ private fun Page(cat: Cat, modifier: Modifier, onBack: () -> Unit, content: @Com
                     Text(stringResource(cat.desc), Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp), style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant)
                 }
             }
-            Column(Modifier.reveal(1)) { content() }
+            Column(Modifier.readableWidth().reveal(1)) { content() }
             Spacer(Modifier.weight(1f))
-            PageFooter(cat)
+            Box(Modifier.readableWidth()) { PageFooter(cat) }
         }
     }
 }
@@ -880,10 +938,10 @@ private fun CloudBackup(vm: MainViewModel, s: Settings) = Section(stringResource
     SRow(Sym.Cloud, if (uri == null) stringResource(R.string.settings_connect_a_cloud) else stringResource(R.string.settings_backing_up_to, where.orEmpty()), if (uri == null) stringResource(R.string.settings_google_drive_onedrive_proton_drive_or) else stringResource(R.string.settings_tap_to_pick_another_file), onClick = ::connect) { Chevron() }
     if (uri != null) {
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainer).horizontalScroll(rememberScrollState()).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("off" to "Off", "day" to "Daily", "week" to "Weekly", "month" to "Monthly").forEach { (id, label) -> Choice(s.cloudBackupEvery == id, label) { vm.set { it.copy(cloudBackupEvery = id) } } }
+            listOf("off" to stringResource(R.string.common_off), "day" to stringResource(R.string.settings_daily), "week" to stringResource(R.string.settings_weekly), "month" to stringResource(R.string.settings_monthly)).forEach { (id, label) -> Choice(s.cloudBackupEvery == id, label) { vm.set { it.copy(cloudBackupEvery = id) } } }
         }
         BackupNowRow(vm, s, where)
-        SRow(Sym.CloudOff, "Disconnect", stringResource(R.string.settings_stop_backing_up_the_file_in), onClick = {
+        SRow(Sym.CloudOff, stringResource(R.string.settings_disconnect), stringResource(R.string.settings_stop_backing_up_the_file_in), onClick = {
             runCatching { ctx.contentResolver.releasePersistableUriPermission(uri, rw) }; vm.set { it.copy(cloudBackupUri = "", cloudBackupEvery = "off") }
         })
     }
@@ -931,7 +989,7 @@ private fun BackupNowRow(vm: MainViewModel, s: Settings, where: String?) {
     val scope = rememberCoroutineScope(); val cs = MaterialTheme.colorScheme
     val phase = remember { mutableStateOf(BackupPhase.IDLE) }; val p = phase.value
     val last = if (s.lastCloudBackup == 0L) stringResource(R.string.settings_never_backed_up) else stringResource(R.string.settings_last_backup) + android.text.format.DateUtils.getRelativeTimeSpanString(s.lastCloudBackup)
-    val caption = when (p) { BackupPhase.WORKING -> "Sending your identity to ${where ?: "your cloud"}..."; BackupPhase.DONE -> stringResource(R.string.settings_backed_up_just_now); BackupPhase.FAILED -> stringResource(R.string.settings_backup_failed_tap_to_try_again); else -> last }
+    val caption = when (p) { BackupPhase.WORKING -> stringResource(R.string.settings_sending_your_identity_to, where ?: stringResource(R.string.settings_your_cloud)); BackupPhase.DONE -> stringResource(R.string.settings_backed_up_just_now); BackupPhase.FAILED -> stringResource(R.string.settings_backup_failed_tap_to_try_again); else -> last }
     val container by animateColorAsState(if (p == BackupPhase.DONE) androidx.compose.ui.graphics.lerp(cs.surfaceContainer, tonal(Safe).first, .6f) else cs.surfaceContainer,
         MaterialTheme.motionScheme.slowEffectsSpec(), label = "row")
     ListItem(
@@ -948,7 +1006,7 @@ private fun BackupNowRow(vm: MainViewModel, s: Settings, where: String?) {
             AnimatedContent(p, transitionSpec = { (scaleIn(pop) + fadeIn()) togetherWith (scaleOut() + fadeOut()) }, label = "trail") {
                 when (it) {
                     BackupPhase.WORKING -> LoadingIndicator(Modifier.size(32.dp))
-                    BackupPhase.DONE -> Text("Saved", style = MaterialTheme.typography.labelLargeEmphasized, color = tonal(Safe).second)
+                    BackupPhase.DONE -> Text(stringResource(R.string.settings_saved), style = MaterialTheme.typography.labelLargeEmphasized, color = tonal(Safe).second)
                     else -> Chevron()
                 }
             }
@@ -968,6 +1026,62 @@ private fun FeatureTile(icon: ImageVector, title: String, desc: String, c: Color
     }
 }
 
+/** The download queue as a compact sheet over whatever is open, like the profile card: active downloads, ready installs and pending
+ *  updates. Tapping a row opens that app; the sheet closes so the app page lands on top. */
+@Composable
+fun DownloadsSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
+    val s = LocalS.current; val d = LocalD.current; val cs = MaterialTheme.colorScheme
+    val active = d.activeDownloads.size; val ready = d.readyToInstall.size
+    val updates = vm.updates.filter { it.id !in d.activeDownloads && it.id !in d.readyToInstall }
+    val all = vm.allApps()
+    fun app(id: String) = all.firstOrNull { it.id == id }
+    fun open(id: String) { vm.close(Overlay.DOWNLOADS); vm.navigateFromSettings(id) }
+    CompositionLocalProvider(LocalAccent provides Blue) {
+        SheetTitle(stringResource(R.string.settings_downloads), Sym.Downloading, if (active + ready + updates.size == 0) stringResource(R.string.settings_all_caught_up) else stringResource(R.string.settings_active_ready_updates, active, ready, updates.size))
+        val silent = s.useShizuku || s.useDhizuku || s.directInstall || s.rootMode
+        val rows = ready + active + updates.size
+        if (rows == 0) EmptyState(Sym.DownloadDone, stringResource(R.string.settings_queue_is_empty), stringResource(R.string.settings_downloads_and_updates_show_up_here), Modifier.navigationBarsPadding())
+        else Column(Modifier.weight(1f, false).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+            var i = 0
+            val colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh)
+            d.readyToInstall.forEach { (id, file) ->
+                val a = app(id)
+                SegmentedListItem({ a?.let { open(it.id) } }, ListItemDefaults.segmentedShapes(i++, rows), colors = colors,
+                    leadingContent = { a?.let { AppIcon(it, 44.dp) } ?: TonalIcon(Sym.Inventory, Safe) }, supportingContent = { Text(stringResource(R.string.logic_ready_to_install)) },
+                    trailingContent = {
+                        if (vm.installingId == id) LoadingIndicator(Modifier.size(32.dp))
+                        else Button({ a?.let { vm.installFile(it, file) } }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text(stringResource(R.string.common_install)) }
+                    }) { Text(a?.name ?: id, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+            d.activeDownloads.keys.forEach { id ->
+                val a = app(id); val p = d.downloadProgress[id] ?: 0f
+                SegmentedListItem({ a?.let { open(it.id) } }, ListItemDefaults.segmentedShapes(i++, rows), colors = colors,
+                    leadingContent = { a?.let { AppIcon(it, 44.dp) } ?: TonalIcon(Sym.Downloading, Blue) },
+                    supportingContent = {
+                        Column {
+                            Text(if (p > 0f) stringResource(R.string.common_downloading, p.roundToInt()) else stringResource(R.string.common_starting_download))
+                            if (p <= 0f) LinearWavyProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp)) else LinearWavyProgressIndicator({ p / 100f }, Modifier.fillMaxWidth().padding(top = 6.dp))
+                        }
+                    },
+                    trailingContent = { IconButton({ vm.cancelDownload(id) }) { Icon(Sym.Close, stringResource(R.string.detail_cancel_download)) } }) {
+                    Text(a?.name ?: id, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            updates.forEach { a ->
+                SegmentedListItem({ open(a.id) }, ListItemDefaults.segmentedShapes(i++, rows), colors = colors,
+                    leadingContent = { AppIcon(a, 44.dp) }, supportingContent = { Text(stringResource(R.string.settings_update_to_v, a.latestVersion.removePrefix("v")), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    trailingContent = { FilledTonalButton({ vm.download(a) }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text(stringResource(R.string.common_update)) } }) {
+                    Text(a.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (silent && ready > 1) CtaButton(stringResource(R.string.settings_install_all, ready), vm::batchInstall, Modifier.padding(top = 12.dp), Sym.Bolt)
+            else if (updates.size > 1) CtaButton(stringResource(R.string.settings_update_all, updates.size), { vm.haptic(H.MEDIUM); updates.filter { it.installsHere() }.forEach { vm.download(it) } }, Modifier.padding(top = 12.dp), Sym.SystemUpdate, tonal = true)
+            Text(stringResource(TIPS.getValue("queue")), Modifier.fillMaxWidth().padding(top = 12.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+    }
+}
+
 /** A big number with a caption, for pages whose state is a count. */
 @Composable
 private fun StatHero(value: String, caption: String, action: @Composable () -> Unit = {}) {
@@ -983,38 +1097,52 @@ private fun StatHero(value: String, caption: String, action: @Composable () -> U
     }
 }
 
-/** Seed palettes as Android-style split swatches in the current theme. Picking one turns Material You off; the toggle below turns it back on. */
+/** Seed palettes as Android-style split swatches in the current theme, then the user's own and a tile to make one.
+ *  Picking one turns Material You off; the toggle below turns it back on. */
 @Composable
 private fun PalettePicker(vm: MainViewModel, s: Settings) {
     val cs = MaterialTheme.colorScheme; val reveal = LocalThemeReveal.current
     val theme = if (s.isOled) "oled" else s.theme
-    Section("Palette") {
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(cs.surfaceContainer).horizontalScroll(rememberScrollState()).padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PALETTES.forEach { p ->
-                val sc = p.scheme(theme); val on = !s.materialYouEnabled && s.palette == p.id
-                val at = remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.size(60.dp).trackCenter(at).springClick(if (on) MaterialShapes.Cookie9Sided.toShape() else CircleShape) {
-                        vm.haptic(H.SELECTION)
-                        val apply = { vm.set { it.copy(palette = p.id, materialYouEnabled = false) } }
-                        if (reveal != null && !on) reveal.run(at.value, apply) else apply()
-                    }, contentAlignment = Alignment.Center) {
-                        Column(Modifier.fillMaxSize()) {
-                            Box(Modifier.fillMaxWidth().weight(1f).background(sc.primary))
-                            Row(Modifier.fillMaxWidth().weight(1f)) {
-                                Box(Modifier.weight(1f).fillMaxHeight().background(sc.secondaryContainer))
-                                Box(Modifier.weight(1f).fillMaxHeight().background(sc.tertiary))
-                            }
-                        }
-                        if (on) Box(Modifier.size(24.dp).clip(CircleShape).background(sc.surface), contentAlignment = Alignment.Center) { Icon(Sym.Check, null, Modifier.size(16.dp), tint = sc.primary) }
+    var maker by remember { mutableStateOf<CustomPalette?>(null) }; var making by remember { mutableStateOf(false) }
+    @Composable fun Swatch(p: Palette, onLong: (() -> Unit)? = null) {
+        val sc = p.scheme(theme); val on = !s.materialYouEnabled && s.palette == p.id
+        val at = remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+        Column(Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(60.dp).trackCenter(at).springClick(if (on) MaterialShapes.Cookie9Sided.toShape() else CircleShape, onLongClick = onLong) {
+                vm.haptic(H.SELECTION)
+                val apply = { vm.set { it.copy(palette = p.id, materialYouEnabled = false) } }
+                if (reveal != null && !on) reveal.run(at.value, apply) else apply()
+            }, contentAlignment = Alignment.Center) {
+                Column(Modifier.fillMaxSize()) {
+                    Box(Modifier.fillMaxWidth().weight(1f).background(sc.primary))
+                    Row(Modifier.fillMaxWidth().weight(1f)) {
+                        Box(Modifier.weight(1f).fillMaxHeight().background(sc.secondaryContainer))
+                        Box(Modifier.weight(1f).fillMaxHeight().background(sc.tertiary))
                     }
-                    Text(p.label, Modifier.padding(top = 8.dp), style = if (on) MaterialTheme.typography.labelLargeEmphasized else MaterialTheme.typography.labelLarge,
-                        color = if (on) cs.primary else cs.onSurfaceVariant)
                 }
+                if (on) Box(Modifier.size(24.dp).clip(CircleShape).background(sc.surface), contentAlignment = Alignment.Center) { Icon(Sym.Check, null, Modifier.size(16.dp), tint = sc.primary) }
             }
+            Text(p.label, Modifier.padding(top = 8.dp), style = if (on) MaterialTheme.typography.labelLargeEmphasized else MaterialTheme.typography.labelLarge,
+                color = if (on) cs.primary else cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
+    Section(stringResource(R.string.settings_palette)) {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(cs.surfaceContainer).horizontalScroll(rememberScrollState()).padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PALETTES.forEach { Swatch(it) }
+            s.customPalettes.forEach { cp -> Swatch(customScheme(cp)) { vm.haptic(H.LIGHT); maker = cp; making = true } }
+            Column(Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(60.dp).springClick(MaterialShapes.Cookie9Sided.toShape()) { maker = null; making = true }.background(cs.primaryContainer), contentAlignment = Alignment.Center) {
+                    Icon(Sym.Add, stringResource(R.string.settings_make_a_palette), tint = cs.onPrimaryContainer)
+                }
+                Text(stringResource(R.string.settings_make), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
+            }
+        }
+        s.customPalettes.firstOrNull { it.id == s.palette && !s.materialYouEnabled }?.let { cp ->
+            SRow(Sym.Edit, stringResource(R.string.settings_edit_palette, cp.name), stringResource(R.string.settings_edit_palette_desc), onClick = { maker = cp; making = true }) { Chevron() }
+        }
+    }
+    if (making) PaletteMakerSheet(vm, maker) { making = false }
 }
 
 /** Theme previews drawn from each real scheme; picking one sweeps the change across the screen from the tap. */
@@ -1022,10 +1150,10 @@ private fun PalettePicker(vm: MainViewModel, s: Settings) {
 private fun ThemePicker(vm: MainViewModel, s: Settings) {
     val reveal = LocalThemeReveal.current
     val current = if (s.isOled) "oled" else s.theme
-    Section("Theme") {
+    Section(stringResource(R.string.settings_theme)) {
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("light" to "Light", "dusk" to "Dusk", "dark" to "Dark", "oled" to "OLED").forEach { (t, label) ->
-                val p = previewScheme(t, s.palette); val on = current == t
+            listOf("light" to stringResource(R.string.common_light), "dusk" to stringResource(R.string.common_dusk), "dark" to stringResource(R.string.common_dark), "oled" to stringResource(R.string.common_oled)).forEach { (t, label) ->
+                val p = previewScheme(t, s.palette, s.customPalettes); val on = current == t
                 val at = remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
                 val r by animateDpAsState(if (on) 24.dp else 14.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "r")
                 val ring by animateDpAsState(if (on) 3.dp else 0.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "ring")
@@ -1062,7 +1190,7 @@ private fun ThemePicker(vm: MainViewModel, s: Settings) {
 private fun LayoutPicker(vm: MainViewModel, s: Settings) = Section(stringResource(R.string.settings_store_layout)) {
     val cs = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(cs.surfaceContainer).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        listOf("modern" to "Modern", "classic" to "Classic").forEach { (id, label) ->
+        listOf("modern" to stringResource(R.string.common_modern), "classic" to stringResource(R.string.common_classic)).forEach { (id, label) ->
             val on = s.storeLayout == id
             val r by animateDpAsState(if (on) 28.dp else 16.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "r")
             Column(Modifier.weight(1f).springClick(RoundedCornerShape(r)) { vm.haptic(H.SELECTION); vm.set { it.copy(storeLayout = id) } }
@@ -1093,7 +1221,7 @@ private fun LayoutPicker(vm: MainViewModel, s: Settings) = Section(stringResourc
 @Composable
 private fun DockSize(vm: MainViewModel, s: Settings) = Section(stringResource(R.string.guide_dock_size)) {
     val cs = MaterialTheme.colorScheme
-    val scale = s.bottomNavScale.takeIf { it.isFinite() } ?: 1f
+    val scale = s.bottomNavScale.takeIf { it.isFinite() } ?: .85f
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(cs.surfaceContainer).padding(16.dp)) {
         Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) {
             Row(Modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(Pill).background(cs.surfaceContainerHighest).padding(6.dp),
@@ -1108,11 +1236,33 @@ private fun DockSize(vm: MainViewModel, s: Settings) = Section(stringResource(R.
             }
         }
         Slider(scale, { v -> vm.set { it.copy(bottomNavScale = (v * 20).roundToInt() / 20f) } }, valueRange = .85f..1.15f, steps = 5)
-        Row { Text("Compact", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium); Text("${(scale * 100).roundToInt()}%", style = MaterialTheme.typography.labelLargeEmphasized); Text("Large", Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.labelMedium) }
+        Row { Text(stringResource(R.string.settings_compact), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium); Text("${(scale * 100).roundToInt()}%", style = MaterialTheme.typography.labelLargeEmphasized); Text(stringResource(R.string.common_large), Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.labelMedium) }
     }
 }
 
-private fun fontLabel(s: Settings) = if (s.appFont.startsWith("custom:")) s.customFonts.firstOrNull { "custom:${it.id}" == s.appFont }?.name ?: "Custom Font"
+/** Tablets, foldables and TVs: keep the side rail, or bring the phone dock to the bottom or top. Phones always keep the bottom dock. */
+@Composable
+private fun DockPosition(vm: MainViewModel, s: Settings) = Section(stringResource(R.string.guide_big_screen_navigation)) {
+    val cs = MaterialTheme.colorScheme
+    val opts = listOf(Triple("rail", stringResource(R.string.common_side), Sym.ViewQuilt), Triple("bottom", stringResource(R.string.common_bottom), Sym.ArrowDownward), Triple("top", stringResource(R.string.common_top), Sym.ArrowUpward))
+    val cur = s.wideNav.takeIf { w -> opts.any { it.first == w } } ?: "rail"
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(cs.surfaceContainer).padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+            opts.forEachIndexed { i, (id, label, icon) ->
+                ToggleButton(cur == id, { vm.haptic(H.SELECTION); vm.set { it.copy(wideNav = id) } }, Modifier.weight(1f),
+                    shapes = when (i) { 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes(); opts.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes(); else -> ButtonGroupDefaults.connectedMiddleButtonShapes() },
+                    contentPadding = PaddingValues(horizontal = 6.dp)) {
+                    Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        Text(stringResource(R.string.settings_big_screen_navigation_desc),
+            Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun fontLabel(s: Settings) = if (s.appFont.startsWith("custom:")) s.customFonts.firstOrNull { "custom:${it.id}" == s.appFont }?.name ?: stringResource(R.string.settings_custom_font)
     else Defaults.FONTS.firstOrNull { it.first == s.appFont }?.second ?: "Space Grotesk"
 
 @Composable
@@ -1126,13 +1276,13 @@ private fun DevConfigEditor(vm: MainViewModel, s: Settings) = Section(stringReso
             placeholder = { Text("https://example.com/config.json") }, singleLine = true, shape = RoundedCornerShape(16.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(vm::reload, modifier = Modifier.weight(1f), enabled = s.devConfigEnabled && url.isNotEmpty() && !loading, shapes = ButtonDefaults.shapes()) {
-                Text(if (loading) "Reloading..." else stringResource(R.string.settings_reload_dev_config))
+                Text(if (loading) stringResource(R.string.settings_reloading) else stringResource(R.string.settings_reload_dev_config))
             }
             OutlinedButton({ vm.set { it.copy(devConfigEnabled = false, devConfigUrl = "") }; vm.devStatus = "idle"; vm.devError = null; vm.reload() }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(R.string.settings_disable_and_clear))
             }
         }
-        Text(if (s.devConfigEnabled) stringResource(R.string.settings_status, when (vm.devStatus) { "loading" -> "loading"; "loaded" -> "loaded"; "error" -> "failed"; else -> "idle" }) else stringResource(R.string.settings_status_production_mode),
+        Text(if (s.devConfigEnabled) stringResource(R.string.settings_status, when (vm.devStatus) { "loading" -> stringResource(R.string.settings_status_loading); "loaded" -> stringResource(R.string.settings_status_loaded); "error" -> stringResource(R.string.settings_status_failed); else -> stringResource(R.string.settings_status_idle) }) else stringResource(R.string.settings_status_production_mode),
             style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
         if (s.devConfigEnabled && url.isEmpty()) Text(stringResource(R.string.settings_enter_a_config_url_to_fully), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (s.devConfigEnabled && vm.devStatus == "loaded") Text(stringResource(R.string.settings_last_loaded, url), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1142,7 +1292,7 @@ private fun DevConfigEditor(vm: MainViewModel, s: Settings) = Section(stringReso
 
 @Composable
 private fun FontSheet(vm: MainViewModel, s: Settings, error: String?, importing: Boolean, onImport: () -> Unit, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
-    SheetTitle("Fonts", Sym.FontDownload, stringResource(R.string.settings_select_app_typeface))
+    SheetTitle(stringResource(R.string.guide_fonts), Sym.FontDownload, stringResource(R.string.settings_select_app_typeface))
     LazyColumn(Modifier.heightIn(max = 560.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         item {
             Card(Modifier.fillMaxWidth().padding(bottom = 10.dp), shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(MaterialTheme.colorScheme.primaryContainer)) {
@@ -1163,16 +1313,16 @@ private fun FontSheet(vm: MainViewModel, s: Settings, error: String?, importing:
                 } },
                 colors = ListItemDefaults.colors(containerColor = if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer))
         }
-        items(Defaults.FONTS) { (k, l) -> FontRow(k, l, when (k) { "spaceGrotesk" -> "Default"; "systemDefault" -> "System"; else -> null }) }
-        items(s.customFonts, key = { it.id }) { f -> FontRow("custom:${f.id}", f.name, "Custom") { vm.set { it.removeCustomFont(f.id) } } }
+        items(Defaults.FONTS) { (k, l) -> FontRow(k, l, when (k) { "spaceGrotesk" -> stringResource(R.string.common_default); "systemDefault" -> stringResource(R.string.common_system); else -> null }) }
+        items(s.customFonts, key = { it.id }) { f -> FontRow("custom:${f.id}", f.name, stringResource(R.string.common_custom)) { vm.set { it.removeCustomFont(f.id) } } }
         item {
             OutlinedButton(onImport, modifier = Modifier.fillMaxWidth().padding(top = 10.dp), enabled = !importing, shapes = ButtonDefaults.shapes()) {
-                Icon(Sym.Upload, null); Spacer(Modifier.width(8.dp)); Text(if (importing) "Importing..." else stringResource(R.string.settings_import_custom_font))
+                Icon(Sym.Upload, null); Spacer(Modifier.width(8.dp)); Text(if (importing) stringResource(R.string.settings_importing) else stringResource(R.string.settings_import_custom_font))
             }
             error?.let { Text(it, Modifier.padding(8.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Active: ", style = MaterialTheme.typography.bodySmall); Text(fontLabel(s), Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                Button(onDismiss, shapes = ButtonDefaults.shapes()) { Text("Done") }
+                Text(stringResource(R.string.settings_active_label), style = MaterialTheme.typography.bodySmall); Spacer(Modifier.width(4.dp)); Text(fontLabel(s), Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                Button(onDismiss, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.xtra_done)) }
             }
         }
     }
@@ -1181,7 +1331,7 @@ private fun FontSheet(vm: MainViewModel, s: Settings, error: String?, importing:
 
 /** One-time guided setup for direct installs: Wi-Fi, Developer options, then pairing through the notification shade. */
 @Composable
-private fun DirectInstallSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
+internal fun DirectInstallSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
     val ctx = LocalContext.current; val close = LocalSheetClose.current
     val st by WirelessAdb.status.collectAsState()
     var wifi by remember { mutableStateOf(WirelessAdb.onWifi(ctx)) }; var dev by remember { mutableStateOf(WirelessAdb.devOptions(ctx)) }
@@ -1199,15 +1349,15 @@ private fun DirectInstallSheet(vm: MainViewModel, onDismiss: () -> Unit) = Orion
         Text(stringResource(R.string.settings_one_time_setup_orion_installs_through),
             Modifier.padding(horizontal = 8.dp).padding(top = 4.dp, bottom = 16.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(Modifier.clip(RoundedCornerShape(24.dp)), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            SetupStep(1, stringResource(R.string.settings_connect_to_wi_fi), if (wifi) "Connected" else stringResource(R.string.settings_wireless_debugging_only_works_on_wi), wifi)
-            SetupStep(2, stringResource(R.string.settings_unlock_developer_options), if (dev) "Unlocked" else stringResource(R.string.settings_tap_build_number_7_times_in), dev)
-            SetupStep(3, stringResource(R.string.settings_turn_on_wireless_debugging), if (wl) "On" else stringResource(R.string.settings_switch_it_on_and_tap_allow), wl)
+            SetupStep(1, stringResource(R.string.settings_connect_to_wi_fi), if (wifi) stringResource(R.string.settings_status_connected) else stringResource(R.string.settings_wireless_debugging_only_works_on_wi), wifi)
+            SetupStep(2, stringResource(R.string.settings_unlock_developer_options), if (dev) stringResource(R.string.settings_unlocked) else stringResource(R.string.settings_tap_build_number_7_times_in), dev)
+            SetupStep(3, stringResource(R.string.settings_turn_on_wireless_debugging), if (wl) stringResource(R.string.common_on) else stringResource(R.string.settings_switch_it_on_and_tap_allow), wl)
             SetupStep(4, stringResource(R.string.settings_pair_orion), stringResource(R.string.settings_tap_pair_device_with_pairing_code), st.phase == WirelessAdb.Phase.READY)
         }
         Text(stringResource(R.string.settings_orion_s_notification_walks_you_through), Modifier.padding(8.dp),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = { WirelessAdb.startSetup(ctx) }, modifier = Modifier.fillMaxWidth(), enabled = wifi && st.phase != WirelessAdb.Phase.PAIRING, shapes = ButtonDefaults.shapes()) {
-            Text(if (st.phase == WirelessAdb.Phase.IDLE) stringResource(R.string.settings_start_setup) else "Continue")
+            Text(if (st.phase == WirelessAdb.Phase.IDLE) stringResource(R.string.settings_start_setup) else stringResource(R.string.common_continue))
         }
         if (st.phase == WirelessAdb.Phase.PAIRING || st.phase == WirelessAdb.Phase.FAILED) Row(Modifier.padding(8.dp).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (st.phase == WirelessAdb.Phase.PAIRING) { LoadingIndicator(Modifier.size(32.dp)); Spacer(Modifier.width(8.dp)) }
@@ -1215,7 +1365,7 @@ private fun DirectInstallSheet(vm: MainViewModel, onDismiss: () -> Unit) = Orion
         }
         OutlinedTextField(code, { code = it.filter(Char::isDigit).take(6) }, Modifier.fillMaxWidth().padding(top = 12.dp), singleLine = true,
             label = { Text(stringResource(R.string.settings_or_type_the_code_here_split)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            trailingIcon = { TextButton({ WirelessAdb.pairAsync(ctx, code) }, enabled = code.length == 6 && st.phase != WirelessAdb.Phase.PAIRING) { Text("Pair") } })
+            trailingIcon = { TextButton({ WirelessAdb.pairAsync(ctx, code) }, enabled = code.length == 6 && st.phase != WirelessAdb.Phase.PAIRING) { Text(stringResource(R.string.settings_pair)) } })
     }
     Spacer(Modifier.navigationBarsPadding().height(16.dp))
 }
@@ -1245,9 +1395,9 @@ private fun InstallerSheet(vm: MainViewModel, s: Settings, step: String, setStep
             if (st == "mode") {
                 Selectable(s.installerPreference == "system", stringResource(R.string.settings_system_installer)) { vm.set { it.withInstaller("system") }; onDismiss() }
                 Selectable(s.installerPreference == "chooser", stringResource(R.string.settings_ask_every_time)) { vm.set { it.withInstaller("chooser") }; onDismiss() }
-                Selectable(s.installerPreference == "package", stringResource(R.string.settings_specific_installer), if (s.installerPreference == "package") s.installerLabel.ifEmpty { "Selected" } else null) { setStep("specific") }
+                Selectable(s.installerPreference == "package", stringResource(R.string.settings_specific_installer), if (s.installerPreference == "package") s.installerLabel.ifEmpty { stringResource(R.string.settings_selected) } else null) { setStep("specific") }
             } else when {
-                loading -> Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.Center) { LoadingIndicator(); Text("Loading...", Modifier.padding(start = 12.dp)) }
+                loading -> Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.Center) { LoadingIndicator(); Text(stringResource(R.string.common_loading), Modifier.padding(start = 12.dp)) }
                 error != null -> Text(error, color = MaterialTheme.colorScheme.error)
                 list.isEmpty() -> EmptyState(Sym.Android, stringResource(R.string.settings_no_installers_found))
                 else -> LazyColumn(Modifier.heightIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1271,7 +1421,7 @@ private fun InstallerRow(vm: MainViewModel, ins: Installer, selected: Boolean, h
             supportingContent = { Text(ins.packageName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             leadingContent = { icon?.let { Image(it, null, Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))) } ?: TonalIcon(Sym.Android, MaterialTheme.colorScheme.primary) },
             trailingContent = { Row(verticalAlignment = Alignment.CenterVertically) {
-                if (ins.isSystem) Text("System", Modifier.clip(Pill).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
+                if (ins.isSystem) Text(stringResource(R.string.common_system), Modifier.clip(Pill).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
                 if (selected) Icon(Sym.CheckCircle, null, Modifier.padding(start = 8.dp), tint = MaterialTheme.colorScheme.primary)
             } },
             colors = ListItemDefaults.colors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh))
@@ -1280,13 +1430,14 @@ private fun InstallerRow(vm: MainViewModel, ins: Installer, selected: Boolean, h
 
 @Composable
 private fun ScannerSheet(apps: List<AppItem>, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
+    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var scanning by remember { mutableStateOf(false) }; var done by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }; var total by remember { mutableIntStateOf(apps.size) }
     var results by remember { mutableStateOf<List<MissionResult>>(emptyList()) }
     fun start() = scope.launch {
         scanning = true; progress = 0; done = false; results = emptyList()
-        results = runCatalogDiagnostic(apps) { p, t -> progress = p; total = t }
+        results = runCatalogDiagnostic(apps, ctx) { p, t -> progress = p; total = t }
         scanning = false; done = true
     }
     SheetTitle(stringResource(R.string.settings_mission_scanner_admin), Sym.Radar)
@@ -1326,4 +1477,73 @@ private fun ScannerSheet(apps: List<AppItem>, onDismiss: () -> Unit) = OrionShee
         }
     }
     Spacer(Modifier.navigationBarsPadding().height(16.dp))
+}
+
+private val ICON_ART = mapOf(
+    "default" to (R.mipmap.ic_launcher_background to R.mipmap.ic_launcher_foreground),
+    "midnight" to (R.drawable.ic_icon_midnight_bg to R.drawable.ic_icon_midnight_fg), "sunset" to (R.drawable.ic_icon_sunset_bg to R.drawable.ic_icon_sunset_fg),
+    "ocean" to (R.drawable.ic_icon_ocean_bg to R.drawable.ic_icon_ocean_fg), "mint" to (R.drawable.ic_icon_mint_bg to R.drawable.ic_icon_mint_fg),
+    "neon" to (R.drawable.ic_icon_neon_bg to R.drawable.ic_icon_neon_fg), "gold" to (R.drawable.ic_icon_gold_bg to R.drawable.ic_icon_gold_fg),
+)
+
+/** A scrolling row of picks; locked ones carry their ad count and route to Fuel the Code. */
+@Composable
+private fun CosmeticRow(items: List<Cosmetic>, selected: String, width: androidx.compose.ui.unit.Dp, onPick: (Cosmetic) -> Unit, art: @Composable (Cosmetic) -> Unit) {
+    val s = LocalS.current; val cs = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(cs.surfaceContainer).horizontalScroll(rememberScrollState()).padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.forEach { c ->
+            val on = c.id == selected; val open = c.unlocked(s)
+            val r by animateDpAsState(if (on) 28.dp else 16.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "r")
+            Column(Modifier.width(width).springClick(RoundedCornerShape(r)) { onPick(c) }.background(if (on) cs.secondaryContainer else cs.surfaceContainerHigh).padding(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.height(64.dp).fillMaxWidth().graphicsLayer { alpha = if (open) 1f else .45f }, contentAlignment = Alignment.Center) { art(c) }
+                Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (!open) { Icon(Sym.Lock, null, Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
+                    Text(c.label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                }
+                Text(when { open -> if (on) stringResource(R.string.settings_in_use) else stringResource(R.string.settings_tap_to_use); s.unlockTarget == c.id -> stringResource(R.string.settings_unlocking_progress, c.progress(s), c.ads); else -> stringResource(R.string.settings_ads_progress, c.progress(s), c.ads) }, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun IconPicker(vm: MainViewModel, s: Settings) = Section(stringResource(R.string.settings_app_icon)) {
+    CosmeticRow(APP_ICONS, s.appIcon, 92.dp, { vm.pickCosmetic(it, true) }) { c ->
+        val (bg, fg) = ICON_ART.getValue(c.id)
+        Box(Modifier.size(56.dp).clip(CircleShape)) {
+            Image(painterResource(bg), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Image(painterResource(fg), c.label, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
+    }
+    InfoCard(stringResource(R.string.settings_app_icon_info), icon = Sym.Palette)
+}
+
+/** Each dock drawn small, in its own colors and selected-item style. */
+@Composable
+private fun DockPicker(vm: MainViewModel, s: Settings) = Section(stringResource(R.string.settings_dock_style)) {
+    val cs = MaterialTheme.colorScheme
+    CosmeticRow(DOCKS, s.navDock, 132.dp, { vm.pickCosmetic(it, false) }) { c ->
+        val icons = listOf(Sym.AndroidFilled, Sym.DesktopWindows, Sym.GridView, Sym.Code)
+        val (bg, fg) = cs.surfaceContainerHighest to cs.onSurfaceVariant
+        val shape = when (c.id) { "bar" -> RoundedCornerShape(4.dp); "labels" -> RoundedCornerShape(12.dp); else -> Pill }
+        Row(Modifier.fillMaxWidth().clip(shape).background(bg).padding(horizontal = 4.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            icons.forEachIndexed { i, ic ->
+                val on = i == 0
+                val (ibg, ifg, ishape) = when (c.id) {
+                    "vibrant" -> Triple(if (on) cs.primary else Color.Transparent, if (on) cs.onPrimary else fg, if (on) RoundedCornerShape(8.dp) else CircleShape)
+                    "shapes" -> Triple(if (on) cs.secondaryContainer else Color.Transparent, if (on) cs.onSecondaryContainer else fg, if (on) MaterialShapes.Cookie9Sided.toShape() else CircleShape)
+                    else -> Triple(if (on) cs.secondaryContainer else Color.Transparent, if (on) cs.onSecondaryContainer else fg, Pill)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.size(if (c.id == "bar" || c.id == "labels") 26.dp else 22.dp, if (c.id == "bar" || c.id == "labels") 16.dp else 22.dp).clip(ishape).background(ibg), contentAlignment = Alignment.Center) {
+                        Icon(ic, null, Modifier.size(12.dp), tint = ifg)
+                    }
+                    if (c.id == "bar" || c.id == "labels") Box(Modifier.padding(top = 2.dp).size(14.dp, 3.dp).clip(Pill).background(fg.copy(.5f)))
+                }
+            }
+        }
+    }
+    InfoCard(stringResource(R.string.settings_dock_style_info), icon = Sym.Palette)
 }

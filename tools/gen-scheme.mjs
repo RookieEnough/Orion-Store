@@ -66,6 +66,5 @@ class Palette(val id: String, val label: String, val light: ColorScheme, val dar
 ${blocks.join('\n\n')}
 
 val PALETTES = listOf(${PALETTES.map(p => p[0][0].toUpperCase() + p[0].slice(1)).join(', ')})
-fun palette(id: String) = PALETTES.firstOrNull { it.id == id } ?: PALETTES[0]
 `);
 console.log(`wrote ${PALETTES.length} palettes`);

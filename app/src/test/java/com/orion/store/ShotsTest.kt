@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import coil3.ImageLoader
@@ -201,5 +202,34 @@ class ShotsTest {
         shot("welcome") { vm.overlays.clear(); vm.set { it.copy(localMaintenanceMode = false, seenNativeWelcome = false) }; vm.migratedFromWeb = true }
         shot("ignored") { vm.set { it.copy(seenNativeWelcome = true, ignoredUpdates = vm.allApps().take(2).associate { a -> a.id to com.orion.store.data.IgnoredUpdate("never") }) }; pump(1000); vm.navTo(Tab.MYAPPS) }
         shot("quest") { vm.overlays.clear(); vm.set { it.copy(adWatchCount = 25) }; pump(1000); vm.open(Overlay.AD_DONATION) }
+        shot("compact") { vm.overlays.clear(); vm.tour = false; vm.navTo(Tab.ANDROID); vm.set { it.copy(storeLayout = "classic", compactMode = true, adWatchCount = 0) } }
+        shot("ai") { vm.set { it.copy(storeLayout = "modern", compactMode = false) }; pump(1000); vm.open(Overlay.AI) }
+        shot("aihero") { vm.set { it.copy(aiKeys = mapOf("gemini" to "k")) } }
+        shot("aichat") {
+            vm.overlays.remove(Overlay.TUTORIAL)
+            val apps = vm.allApps().filter { it.category.contains("Music", true) }.take(3)
+            vm.ai.messages += com.orion.store.ui.AiMsg(true, "I want an app to listen to music for free")
+            vm.ai.messages += com.orion.store.ui.AiMsg(false, "Here are great free music apps from the catalog. All of them stream without ads.", apps)
+        }
+        shot("maker") { vm.overlays.clear(); vm.ai.clear(); pump(800); vm.openSettings("visuals"); pump(2500); rule.onAllNodesWithText("Make").onFirst().performScrollTo().performClick() }
+        shot("aisettings") { vm.overlays.clear(); vm.set { it.copy(storeLayout = "modern", compactMode = false) }; pump(800); vm.openSettings("interface"); pump(2500)
+            rule.onAllNodesWithText("Provider and key").onFirst().performScrollTo().performClick() }
+        shot("guidechips") { vm.overlays.clear(); pump(800); vm.open(Overlay.GUIDE); pump(2500); end() }
+    }
+
+    /** Small phone with a bigger font, like budget HiOS phones: -Pshots=smallcompact */
+    @Config(sdk = [35], qualifiers = "w360dp-h800dp-xhdpi", fontScale = 1.15f)
+    @Test fun smallcompact() {
+        assumeTrue("smallcompact" in want)
+        val vm = boot(); vm.tour = false
+        vm.navTo(Tab.ANDROID); vm.set { it.copy(storeLayout = "classic", compactMode = true) }; pump(3500); captureScreenRoboImage("build/shots/smallcompact.png", roborazziOptions = opts)
+    }
+
+    /** Android TV in landscape: -Pshots=tvland */
+    @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-television-xhdpi")
+    @Test fun tvland() {
+        assumeTrue("tvland" in want)
+        val vm = boot()
+        vm.navTo(Tab.TV); pump(3500); captureScreenRoboImage("build/shots/tvland.png", roborazziOptions = opts)
     }
 }

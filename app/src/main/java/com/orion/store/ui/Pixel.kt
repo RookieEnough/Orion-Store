@@ -86,7 +86,7 @@ fun PtrBadge(c: PtrCharacter, size: Dp, modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
     when {
         c.loader -> Box(modifier.size(size), contentAlignment = Alignment.Center) { ContainedLoadingIndicator({ .7f }, Modifier.size(size)) }
-        c.shape != null -> Box(modifier.size(size).clip(c.shape.toShape()).background(cs.primaryContainer), contentAlignment = Alignment.Center) {
+        c.shape != null -> Box(modifier.size(size).background(cs.primaryContainer, c.shape.toShape()), contentAlignment = Alignment.Center) {
             Icon(Sym.Refresh, null, Modifier.size(size * .42f), tint = cs.onPrimaryContainer)
         }
         else -> Box(modifier.size(size).clip(MaterialShapes.Cookie9Sided.toShape()).background(cs.surfaceContainerHigh).background(c.brush()), contentAlignment = Alignment.Center) {
@@ -122,7 +122,7 @@ fun PtrIndicator(state: PullToRefreshState, refreshing: Boolean, characterId: St
             c.shape != null -> Box(Modifier.fillMaxSize().graphicsLayer {
                 rotationZ = if (refreshing) ((now - spinFrom) % 900L) / 900f * 360f else frac * 270f
                 val pulse = if (refreshing) 1f + .06f * kotlin.math.sin((now - spinFrom) / 140f) else 1f; scaleX = pulse; scaleY = pulse
-            }.clip(c.shape.toShape()).background(cs.primaryContainer), contentAlignment = Alignment.Center) {
+            }.background(cs.primaryContainer, c.shape.toShape()), contentAlignment = Alignment.Center) {
                 Icon(Sym.Refresh, null, Modifier.size(24.dp).graphicsLayer { rotationZ = -frac * 270f }, tint = cs.onPrimaryContainer)
             }
             else -> Box(Modifier.fillMaxSize().clip(MaterialShapes.Cookie9Sided.toShape()).background(cs.surfaceContainerHigh).background(c.brush()), contentAlignment = Alignment.Center) {
@@ -149,7 +149,7 @@ fun PtrPickerSheet(selected: String, onSelect: (String) -> Unit, onDismiss: () -
     SheetTitle(stringResource(R.string.pixel_pull_to_refresh), Sym.Refresh, stringResource(R.string.pixel_pick_what_greets_your_pull))
     Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(148.dp).clip(RoundedCornerShape(32.dp))
         .background(Brush.verticalGradient(listOf(cs.primaryContainer, cs.surfaceContainerLow))), contentAlignment = Alignment.Center) {
-        Box(Modifier.align(Alignment.TopEnd).offset(40.dp, (-36).dp).size(150.dp).clip(MaterialShapes.Cookie12Sided.toShape()).background(cs.onPrimaryContainer.copy(.06f)))
+        Box(Modifier.align(Alignment.TopEnd).offset(40.dp, (-36).dp).size(150.dp).background(cs.onPrimaryContainer.copy(.06f), MaterialShapes.Cookie12Sided.toShape()))
         val demo = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
         PtrIndicator(demo, true, active.id, Modifier.offset(y = (-6).dp))
         Column(Modifier.align(Alignment.BottomStart).padding(20.dp)) {

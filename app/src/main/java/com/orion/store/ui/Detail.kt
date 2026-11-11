@@ -16,14 +16,20 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.Brush
@@ -78,7 +84,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     val app = remember(base, s.resolvedPackageNames, s.stableOnly) { base.copy(packageName = s.resolvedPackageNames[base.id] ?: base.packageName,
         availableVersions = if (s.stableOnly) base.availableVersions.filter { it.type == "Stable" }.ifEmpty { base.availableVersions } else base.availableVersions) }
     val local = s.installedVersions[app.id]
-    val needsUpdate = hasAvailableUpdate(app, local, s.streamOf(app.id))
+    val needsUpdate = hasAvailableUpdate(app, local, s.streamOf(app.id), s.installedBuilds[app.id])
     val installed = !local.isNullOrEmpty(); val upToDate = installed && !needsUpdate
     val activeId = d.activeDownloads[app.id]; val cleanup = d.pendingCleanup[app.id]?.fileName; val ready = d.readyToInstall[app.id]
     val status = d.downloadStatus[app.id]; val progress = d.downloadProgress[app.id] ?: 0f
@@ -87,13 +93,20 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     val fallback = app.latestVersion == "Unknown" || app.version == "View on GitHub"
     val hasTarget = (app.downloadUrl.isNotEmpty() && app.downloadUrl != "#") || app.variants.isNotEmpty() || app.availableVersions.isNotEmpty()
     val unavailable = ready == null && cleanup == null && !installed && !hasTarget && app.latestVersion == "Latest" && app.size == "Varies"
-    val lower = app.downloadUrl.lowercase()
-    val external = (lower.startsWith("http://") || lower.startsWith("https://")) && listOf(".apk", ".exe", ".zip", ".dmg").none(lower::endsWith) && "github.com" !in lower
+    val path = app.downloadUrl.lowercase().substringBefore('?').substringBefore('#')
+    val packaged = listOf(".apk", ".apks", ".xapk", ".apkm", ".zip", ".exe", ".dmg").any(path::endsWith)
+    val directHost = listOf("uptodown.com", "winudf.com", "apkpure.com", "apkmirror.com", "itch.io", "itch.zone").any { it in path }
+    // A known source already resolved a file. The link itself often does not end in .apk (APKMirror's download page is one of those).
+    val tracked = Orbit.owns(app.id) || app.repoUrl?.takeIf { it.isNotBlank() && it != "#" }?.let { Orbit.sourceOf(it) != OrbitSource.WEB } == true
+    val external = !tracked && !directHost && (path.startsWith("http://") || path.startsWith("https://")) && !packaged && "github.com" !in path
     val domain = if (external) runCatching { app.downloadUrl.toUri().host!!.replace("www.", "") }.getOrDefault("Source") else stringResource(R.string.detail_external_source)
     val fav = app.id in d.favorites
     val shareText = stringResource(R.string.detail_check_out_on_orion_store, app.name)
     val launchError = stringResource(R.string.detail_could_not_launch_app_it_may)
     val updatesReturnMsg = stringResource(R.string.detail_updates_for_will_show_again, app.name)
+    val leftMsg = stringResource(R.string.detail_left_my_apps_and_updates, app.name)
+    val backMsg = stringResource(R.string.detail_is_back_in_my_apps, app.name)
+    val undoLabel = stringResource(R.string.detail_undo)
 
     var target by remember(app.id) { mutableStateOf<VersionOption?>(null) }
     var versions by remember { mutableStateOf(false) }; var variants by remember { mutableStateOf(false) }
@@ -141,9 +154,24 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     }
     fun report() = vm.tracker.open("mailto:${vm.config?.supportEmail ?: Defaults.SUPPORT_EMAIL}?subject=${Uri.encode("Report Issue: ${app.name}")}")
 
+    val shown = target ?: app.availableVersions.firstOrNull { it.type == s.streamOf(app.id) } ?: app.availableVersions.firstOrNull()
+    // Morphe and other patched builds: their release notes describe the build bot, not the app
+    val notesTag = if (app.patches.isNotEmpty() || listOf(app.name, app.author, app.repoUrl, app.githubRepo, app.gitlabRepo).any { "morphe" in it.orEmpty().lowercase() }) "" else shown?.tag.orEmpty()
+    // Fetched as the page opens, not when the row scrolls in; null while loading, NOTES_FAILED when the call failed
+    val notes by produceState<String?>(null, app.id, notesTag) { value = if (notesTag.isEmpty()) null else fetchReleaseNotes(app, notesTag, s.githubToken) ?: NOTES_FAILED }
+    // Asked of the repo's host once per session: a fork shows where it came from
+    val fork by produceState<ForkInfo?>(null, app.id) { value = fetchForkOf(app, s.githubToken) }
+    // Anything that ends up as an APK on this phone can be read first: a downloaded file, the installed copy, or the direct link
+    val directApk = remember(app) { inspectUrl(app) }
+    val canInspect = android && (ready != null || installed || (!external && !fallback && !unavailable && directApk != null))
+    var inspecting by remember { mutableStateOf(false) }
     val from = remember(app.id) { vm.openFrom }
-    val list = rememberLazyListState()
-    val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 } }
+    // Keyed by app: the page stays composed between apps, and a shared state opened the next app at the last one's scroll position
+    val list = rememberSaveable(app.id, saver = LazyListState.Saver) { LazyListState() }; val media = rememberSaveable(app.id, saver = LazyListState.Saver) { LazyListState() }
+    val scrolled by remember(list, media) { derivedStateOf { list.firstVisibleItemIndex > 0 || media.firstVisibleItemIndex > 0 } }
+    // Medium and expanded windows: the actions float as a card; expanded ones split the page into an info pane and a media pane
+    val wc = LocalWidthClass.current
+    val wide = wc.wide; val twoPane = wc == WidthClass.EXPANDED
     Scaffold(
         containerColor = cs.surface,
         topBar = {
@@ -151,14 +179,26 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                 title = { AnimatedVisibility(scrolled) { Text(app.name, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                 actions = {
                     IconToggleButton(fav, { vm.haptic(H.HEAVY); vm.upd { it.toggleFavorite(app.id) } }) {
-                        Icon(if (fav) Sym.Favorite else Sym.FavoriteBorder, "Favorite", tint = if (fav) cs.primary else LocalContentColor.current)
+                        Icon(if (fav) Sym.Favorite else Sym.FavoriteBorder, stringResource(R.string.detail_favorite), tint = if (fav) cs.primary else LocalContentColor.current)
                     }
-                    IconButton({ vm.haptic(H.SELECTION); vm.tracker.share(app.name, shareText, Share.webLink(app.id, app.icon)) }) { Icon(Sym.Share, "Share") }
+                    IconButton({ vm.haptic(H.SELECTION); vm.tracker.share(app.name, shareText, if (Orbit.owns(app.id)) app.repoUrl.orEmpty() else Share.webLink(app.id)) }) { Icon(Sym.Share, stringResource(R.string.detail_share)) }
                     Box {
                         IconButton({ more = true }) { Icon(Sym.MoreVert, stringResource(R.string.detail_more_options)) }
                         DropdownMenu(more, { more = false }, shape = RoundedCornerShape(20.dp)) {
-                            DropdownMenuItem({ Text(stringResource(R.string.detail_request_app_change)) }, { more = false; vm.haptic(H.LIGHT); vm.changeRequest = true }, leadingIcon = { Icon(Sym.EditNote, null) })
-                            DropdownMenuItem({ Text(stringResource(R.string.detail_report_an_issue)) }, { more = false; vm.haptic(H.LIGHT); report() }, leadingIcon = { Icon(Sym.Flag, null) })
+                            // Orbit apps are the user's own, not the catalog's: no catalog corrections, and leaving Orbit is one tap
+                            if (Orbit.owns(app.id)) DropdownMenuItem({ Text(stringResource(R.string.orbit_remove_from_orbit)) }, { more = false; vm.orbitRemove(app.id); vm.selectedApp = null }, leadingIcon = { Icon(Sym.Orbit, null) })
+                            else {
+                                DropdownMenuItem({ Text(stringResource(R.string.detail_request_app_change)) }, { more = false; vm.haptic(H.LIGHT); vm.changeRequest = true }, leadingIcon = { Icon(Sym.EditNote, null) })
+                                DropdownMenuItem({ Text(stringResource(R.string.detail_report_an_issue)) }, { more = false; vm.haptic(H.LIGHT); report() }, leadingIcon = { Icon(Sym.Flag, null) })
+                            }
+                            if (installed && android) DropdownMenuItem({ Text(stringResource(R.string.detail_uninstall)) }, { more = false; vm.uninstall(app) }, leadingIcon = { Icon(Sym.Delete, null) })
+                            if (installed) {
+                                val managed = isManaged(app.id, s)
+                                DropdownMenuItem({ Text(if (managed) stringResource(R.string.new_don_t_manage_with_orion) else stringResource(R.string.new_manage_with_orion)) }, {
+                                    more = false; vm.haptic(H.SUCCESS); vm.set { it.withManaged(app.id, !managed) }
+                                    vm.toast(if (managed) leftMsg else backMsg, action = undoLabel) { vm.set { it.withManaged(app.id, managed) } }
+                                }, leadingIcon = { Icon(if (managed) Sym.VisibilityOff else Sym.Visibility, null) })
+                            }
                             if (s.isDevUnlocked) DropdownMenuItem({ Text(stringResource(R.string.detail_developer_deep_links)) }, { more = false; vm.haptic(H.SELECTION); shareSheet = true }, leadingIcon = { Icon(Sym.Link, null) })
                         }
                     }
@@ -168,8 +208,12 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             )
         },
         bottomBar = {
-            Surface(color = cs.surfaceContainer, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
-                Row(Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Phones: a sheet-like bar along the bottom edge. Tablets, foldables and TVs: a floating card the size of its buttons,
+            // so no full-width slab of color runs from one side of the screen to the other.
+            Box(Modifier.fillMaxWidth().then(if (wide) Modifier.navigationBarsPadding().padding(16.dp) else Modifier), contentAlignment = Alignment.Center) {
+            Surface(if (wide) Modifier.widthIn(max = 560.dp) else Modifier.fillMaxWidth(), color = if (wide) cs.surfaceContainerHigh else cs.surfaceContainer,
+                shape = if (wide) RoundedCornerShape(36.dp) else RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), shadowElevation = if (wide) 6.dp else 0.dp) {
+                Row(Modifier.fillMaxWidth().then(if (wide) Modifier.padding(10.dp) else Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp)), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val h = Modifier.heightIn(min = ButtonDefaults.MediumContainerHeight)
                     val side = Modifier.size(ButtonDefaults.MediumContainerHeight)
                     val big = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight)
@@ -181,7 +225,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     @Composable fun Side(icon: ImageVector, label: String, enabled: Boolean = true, onClick: () -> Unit) =
                         FilledTonalIconButton(onClick, modifier = side, enabled = enabled, shapes = IconButtonDefaults.shapes()) { Icon(icon, label) }
                     when {
-                        scanning -> Main(null, "Scanning...", enabled = false, busy = true) {}
+                        scanning -> Main(null, stringResource(R.string.detail_scanning), enabled = false, busy = true) {}
                         activeId != null || status == "RUNNING" || status == "PENDING" -> {
                             val p by animateFloatAsState(progress / 100f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "dl")
                             Surface(h.weight(1f), shape = Pill, color = cs.primaryContainer, contentColor = cs.onPrimaryContainer) {
@@ -194,24 +238,27 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                             Side(Sym.Close, stringResource(R.string.detail_cancel_download)) { vm.cancelDownload(app.id) }
                         }
                         ready != null -> {
-                            Main(Sym.InstallMobile, if (installing) "Installing..." else stringResource(R.string.logic_install_now), enabled = !installing, busy = installing) { action() }
-                            Side(Sym.Refresh, "Redownload", enabled = !installing) { vm.haptic(H.MEDIUM); vm.deleteReadyFile(app, ready) }
+                            Main(Sym.InstallMobile, if (installing) stringResource(R.string.detail_installing) else stringResource(R.string.logic_install_now), enabled = !installing, busy = installing) { action() }
+                            Side(Sym.Refresh, stringResource(R.string.detail_redownload), enabled = !installing) { vm.haptic(H.MEDIUM); vm.deleteReadyFile(app, ready) }
                         }
                         cleanup != null && android -> {
-                            Main(Sym.OpenInNew, "Open", onClick = ::launch)
+                            Main(Sym.OpenInNew, stringResource(R.string.myapps_open), onClick = ::launch)
                             Side(Sym.SaveAlt, stringResource(R.string.detail_export_apk_to_downloads)) { vm.exportApk(app, cleanup) }
                         }
-                        upToDate && android -> Main(Sym.OpenInNew, "Open", onClick = ::launch)
+                        upToDate && android -> {
+                            Side(Sym.Delete, stringResource(R.string.detail_uninstall)) { vm.uninstall(app) }
+                            Main(Sym.OpenInNew, stringResource(R.string.myapps_open), onClick = ::launch)
+                        }
                         else -> {
                             val (icon, label) = when {
                                 unavailable -> Sym.Block to stringResource(R.string.detail_currently_unavailable)
-                                fallback -> Sym.Code to "View on GitHub"
+                                fallback -> Sym.Code to stringResource(R.string.detail_view_on_github)
                                 external -> Sym.OpenInNew to stringResource(R.string.detail_get_from_source)
                                 needsUpdate -> Sym.SystemUpdate to stringResource(R.string.detail_update_now)
                                 app.platform == Platform.PC -> Sym.DesktopWindows to stringResource(R.string.detail_get_on_pc)
-                                else -> Sym.Download to "Download"
+                                else -> Sym.Download to stringResource(R.string.detail_download)
                             }
-                            Main(icon, if (installing) "Installing..." else label, enabled = !installing && !fallback && !unavailable, busy = installing) { action() }
+                            Main(icon, if (installing) stringResource(R.string.detail_installing) else label, enabled = !installing && !fallback && !unavailable, busy = installing) { action() }
                             if (needsUpdate && !installing && !fallback && !unavailable && isUpdateIgnored(app, s, System.currentTimeMillis()))
                                 Side(Sym.Notifications, stringResource(R.string.detail_stop_ignoring_this_update)) { vm.set { it.copy(ignoredUpdates = it.ignoredUpdates - app.id) }; vm.haptic(H.SUCCESS); vm.toast(updatesReturnMsg) }
                             else if (needsUpdate && !installing && !fallback && !unavailable) Box {
@@ -219,7 +266,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                                 DropdownMenu(ignoreMenu, { ignoreMenu = false }, shape = RoundedCornerShape(20.dp)) {
                                     Text(stringResource(R.string.detail_ignore_update), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
                                     DropdownMenuItem({ Text(stringResource(R.string.detail_ignore_for_1_week)) }, { ignore("week") }, leadingIcon = { Icon(Sym.Schedule, null) })
-                                    DropdownMenuItem({ Text(stringResource(R.string.detail_until_next_version)) }, { ignore("version", app.latestVersion) }, leadingIcon = { Icon(Sym.SkipNext, null) })
+                                    DropdownMenuItem({ Text(stringResource(R.string.detail_until_next_version)) }, { ignore("version", preferredVersion(app, s.streamOf(app.id))) }, leadingIcon = { Icon(Sym.SkipNext, null) })
                                     DropdownMenuItem({ Text(stringResource(R.string.detail_never_show_again)) }, { ignore("never") }, leadingIcon = { Icon(Sym.Block, null) })
                                 }
                             }
@@ -227,21 +274,29 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     }
                 }
             }
+            }
         },
     ) { pad ->
-        LazyColumn(Modifier.fillMaxSize().readableWidth(), list, contentPadding = PaddingValues(bottom = pad.calculateBottomPadding() + 24.dp)) {
+        // Sections as list pieces, so phones stack them in one column and wide screens split them into two panes
+        fun LazyListScope.top() {
             item("head") {
-                val wash by animateColorAsState(iconColor(app)?.let { tonal(it).first } ?: cs.surfaceContainer, MaterialTheme.motionScheme.slowEffectsSpec(), label = "wash")
                 // The bar only holds actions on the right now, so the head tucks up right under it.
-                Row(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(wash, cs.surface))).padding(top = pad.calculateTopPadding())
+                Row(Modifier.fillMaxWidth().padding(top = pad.calculateTopPadding())
                     .padding(start = 20.dp, end = 20.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     AppIcon(app, 96.dp, state = true, from = from, target = true)
                     Spacer(Modifier.width(18.dp))
                     Column(Modifier.weight(1f)) {
                         Text(app.name, style = MaterialTheme.typography.headlineSmallEmphasized, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(app.author, style = MaterialTheme.typography.titleSmall, color = cs.primary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, false))
-                            Spacer(Modifier.width(4.dp)); Icon(Sym.VerifiedFilled, "Verified", Modifier.size(16.dp), tint = cs.primary)
+                            Text(app.author, style = MaterialTheme.typography.titleSmall, color = cs.primary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, false).clip(Pill).clickable(enabled = app.author.isNotBlank()) { vm.haptic(H.LIGHT); vm.devProfile = app.author to app.id })
+                            Spacer(Modifier.width(4.dp)); Icon(Sym.VerifiedFilled, stringResource(R.string.detail_verified), Modifier.size(16.dp), tint = cs.primary)
+                        }
+                        app.stars?.let { n ->
+                            Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Sym.StarFilled, null, Modifier.size(14.dp), tint = cs.tertiary); Spacer(Modifier.width(4.dp))
+                                Text(if (n == 1) stringResource(R.string.detail_star, compactCount(n)) else stringResource(R.string.detail_stars, compactCount(n)), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                            }
                         }
                         statusText(app)?.let { (t, c) -> Text(t, style = MaterialTheme.typography.labelLarge, color = c, modifier = Modifier.padding(top = 2.dp)) }
                         if (cleanup != null) Box(Modifier.padding(top = 6.dp)) { Tag(stringResource(R.string.detail_pending_cleanup), Caution, Sym.CleaningServices) }
@@ -251,22 +306,37 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             }
             item("stats") {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth().height(IntrinsicSize.Min)) {
-                    @Composable fun Cell(value: @Composable () -> Unit, label: String) = Column(Modifier.weight(1f).padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) { value() }
-                        Text(label, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, maxLines = 1)
-                    }
+                    @Composable fun Cell(value: @Composable () -> Unit, label: String, labelColor: Color = cs.onSurfaceVariant, onClick: (() -> Unit)? = null) =
+                        Column(Modifier.weight(1f).then(if (onClick != null) Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = label, onClick = onClick) else Modifier)
+                            .padding(horizontal = 4.dp, vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) { value() }
+                            Text(label, style = MaterialTheme.typography.labelMedium, color = labelColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     val divider = @Composable { VerticalDivider(Modifier.padding(vertical = 8.dp), color = cs.outlineVariant) }
-                    Cell({ Text(app.latestVersion.removePrefix("v"), style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis) }, "Version")
+                    Cell({ Text(app.latestVersion.removePrefix("v"), style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis) }, stringResource(R.string.detail_version))
                     divider()
-                    Cell({ Text(app.size, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1) }, "Size")
+                    Cell({ Text(app.size, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1) }, stringResource(R.string.detail_size))
                     divider()
                     Cell({ Icon(when (app.platform) { Platform.ANDROID -> Sym.Android; Platform.TV -> Sym.Tv; else -> Sym.DesktopWindows }, null, Modifier.size(24.dp)) }, app.platform)
+                    // The package inspector, one tap from the stats: a tonal cookie that names what it found once it has looked
+                    if (canInspect) {
+                        divider()
+                        val r = InspectCache.reports[InspectCache.key(app)]
+                        Cell({
+                            Box(Modifier.size(28.dp).background(cs.secondaryContainer, MaterialShapes.Cookie6Sided.toShape()), contentAlignment = Alignment.Center) {
+                                Icon(Sym.Science, null, Modifier.size(16.dp), tint = cs.onSecondaryContainer)
+                            }
+                        }, r?.let { when (it.trackers.size) { 0 -> stringResource(R.string.detail_no_trackers); 1 -> stringResource(R.string.detail_1_tracker); else -> stringResource(R.string.detail_trackers_count, it.trackers.size) } } ?: stringResource(R.string.detail_inspect), cs.primary) { vm.haptic(H.SELECTION); inspecting = true }
+                    }
                 }
             }
+        }
+        fun LazyListScope.media() {
             if (app.screenshots.isNotEmpty()) item("shots") {
                 val portrait = app.platform == Platform.ANDROID
+                // The wide pane has the room: screenshots grow instead of leaving the page half empty
                 LazyRow(Modifier.reveal(1).padding(top = 8.dp), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    itemsIndexed(app.screenshots) { i, u -> Shot(u, 320.dp, if (portrait) 340.dp else 200.dp, Modifier.reveal(i), portrait = portrait) { lightbox = i; vm.haptic(H.SELECTION) } }
+                    itemsIndexed(app.screenshots) { i, u -> Shot(u, if (twoPane) 520.dp else 320.dp, if (portrait) (if (twoPane) 460.dp else 340.dp) else (if (twoPane) 300.dp else 200.dp), Modifier.reveal(i), portrait = portrait) { lightbox = i; vm.haptic(H.SELECTION) } }
                 }
             }
             item("about") { Column(Modifier.reveal(2)) {
@@ -276,34 +346,53 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant, maxLines = if (open) Int.MAX_VALUE else 4, overflow = TextOverflow.Ellipsis)
                 if (app.description.length > 180) TextButton({ open = !open }, Modifier.padding(start = 8.dp)) { Text(if (open) stringResource(R.string.detail_show_less) else stringResource(R.string.detail_read_more)) }
             } }
-            if (app.patches.isNotEmpty()) item("patches") { Column(Modifier.reveal(3).animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec())) {
-                var all by remember { mutableStateOf(false) }
-                val list = app.patches.sortedBy { it.length }
-                SectionTitle("Patches", Modifier.padding(top = 12.dp), stringResource(R.string.detail_modifications_applied, app.patches.size))
-                FlowRow(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    (if (all) list else list.take(6)).forEach { p ->
-                        Surface(shape = RoundedCornerShape(12.dp), color = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) {
-                            Text(p, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge)
+            if (notesTag.isNotEmpty()) item("new") { WhatsNew(vm, shown, notes, needsUpdate) }
+            if (app.patches.isNotEmpty()) item("patches") { Column(Modifier.reveal(3)) {
+                // Folded like App info: one row with the count, every patch name listed once opened
+                var open by rememberSaveable { mutableStateOf(false) }
+                val list = remember(app.patches) { app.patches.distinct().sortedWith(String.CASE_INSENSITIVE_ORDER) }
+                val turn by animateFloatAsState(if (open) 180f else 0f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "chev")
+                Column(Modifier.padding(horizontal = 16.dp).padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+                    SegmentedListItem({ open = !open; vm.haptic(H.SELECTION) }, ListItemDefaults.segmentedShapes(0, if (open) list.size + 1 else 1),
+                        colors = if (open) ListItemDefaults.segmentedColors(containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer, leadingContentColor = cs.onTertiaryContainer,
+                            trailingContentColor = cs.onTertiaryContainer, supportingContentColor = cs.onTertiaryContainer.copy(.8f)) else ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
+                        leadingContent = { IconBox(Sym.Extension, if (open) cs.onTertiaryContainer else cs.tertiary) }, trailingContent = { Icon(Sym.ExpandMore, if (open) stringResource(R.string.detail_hide_patches) else stringResource(R.string.detail_show_patches), Modifier.graphicsLayer { rotationZ = turn }) },
+                        supportingContent = { Text(stringResource(R.string.detail_applied_to_this_build, list.size), maxLines = 1) }) { Text(stringResource(R.string.detail_patches), style = MaterialTheme.typography.titleMedium) }
+                    AnimatedVisibility(open, enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) + fadeIn(), exit = shrinkVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) + fadeOut()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+                            list.forEachIndexed { i, p ->
+                                SegmentedListItem(ListItemDefaults.segmentedShapes(i + 1, list.size + 1), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
+                                    leadingContent = { Icon(Sym.Check, null, Modifier.size(20.dp), tint = cs.tertiary) }) { Text(p, style = MaterialTheme.typography.bodyLarge) }
+                            }
                         }
-                    }
-                    if (list.size > 6) Surface({ all = !all }, shape = RoundedCornerShape(12.dp), color = cs.surfaceContainerHigh) {
-                        Text(if (all) stringResource(R.string.detail_show_less) else stringResource(R.string.detail_more, list.size - 6), Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge)
                     }
                 }
             } }
+        }
+        fun LazyListScope.facts() {
             item("source") { Column(Modifier.reveal(4)) {
                 SectionTitle(stringResource(R.string.detail_source_safety), Modifier.padding(top = 20.dp))
                 val repo = app.repoUrl?.takeIf { it.isNotBlank() && it != "#" }
-                val n = if (repo != null) 2 else 1
+                val f = fork
+                val n = 1 + (if (repo != null) 1 else 0) + (if (f != null) 1 else 0)
+                var at = 0
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                     repo?.let { r ->
                         val (mark, name, tint) = repoBrand(r)
-                        SegmentedListItem({ vm.haptic(H.SELECTION); vm.tracker.open(r) }, ListItemDefaults.segmentedShapes(0, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
+                        SegmentedListItem({ vm.haptic(H.SELECTION); vm.tracker.open(r) }, ListItemDefaults.segmentedShapes(at++, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
                             leadingContent = { Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { Icon(mark, null, Modifier.size(30.dp), tint = tint) } },
                             trailingContent = { Icon(Sym.OpenInNew, stringResource(R.string.detail_open, name)) },
                             supportingContent = { Text(r.substringAfter("://").substringAfter('/').trimEnd('/'), maxLines = 1, overflow = TextOverflow.Ellipsis) }) { Text(name, style = MaterialTheme.typography.titleMedium) }
                     }
-                    SegmentedListItem({ vm.haptic(H.SELECTION); vm.vtTarget = app }, ListItemDefaults.segmentedShapes(n - 1, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
+                    // A fork names its upstream, right under its own repo
+                    f?.let {
+                        SegmentedListItem({ vm.haptic(H.SELECTION); vm.tracker.open(it.url) }, ListItemDefaults.segmentedShapes(at++, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
+                            leadingContent = { IconBox(Sym.AccountTree, cs.secondary) }, trailingContent = { Icon(Sym.OpenInNew, stringResource(R.string.detail_open_the_original_project)) },
+                            supportingContent = { Text(listOfNotNull(it.parent, it.stars?.let { n -> stringResource(R.string.detail_stars, compactCount(n)) }).joinToString(" · "), maxLines = 1, overflow = TextOverflow.Ellipsis) }) {
+                            Text(stringResource(R.string.detail_forked_from), style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                    SegmentedListItem({ vm.haptic(H.SELECTION); vm.vtTarget = app }, ListItemDefaults.segmentedShapes(at, n), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainer),
                         leadingContent = { IconBox(Sym.Shield) }, trailingContent = { Icon(Sym.ChevronRight, null) },
                         supportingContent = { Text(stringResource(R.string.detail_check_the_download_against_70_antivirus), maxLines = 1, overflow = TextOverflow.Ellipsis) }) { Text(stringResource(R.string.detail_scan_with_virustotal), style = MaterialTheme.typography.titleMedium) }
                 }
@@ -311,10 +400,10 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             item("info") { Column(Modifier.reveal(5)) {
                 var open by rememberSaveable { mutableStateOf(false) }
                 val rows = listOfNotNull(
-                    local?.takeIf { installed }?.let { Triple(Sym.CheckCircle, "Installed", it) }, Triple(Sym.Person, "Developer", app.author), Triple(Sym.Storage, "Size", app.size),
+                    local?.takeIf { installed }?.let { Triple(Sym.CheckCircle, stringResource(R.string.detail_installed), it) }, Triple(Sym.Person, stringResource(R.string.settings_developer), app.author), Triple(Sym.Storage, stringResource(R.string.detail_size), app.size),
                     app.githubRepo?.takeIf { it.isNotBlank() }?.let { Triple(Sym.BrandGitHub, "GitHub", it) }, app.gitlabRepo?.takeIf { it.isNotBlank() }?.let { Triple(Sym.BrandGitLab, "GitLab", it) },
                     app.codebergRepo?.takeIf { it.isNotBlank() }?.let { Triple(Sym.BrandCodeberg, "Codeberg", it) },
-                    app.packageName?.takeIf { it.isNotBlank() }?.let { Triple(Sym.Package2, "Package", it) },
+                    app.packageName?.takeIf { it.isNotBlank() }?.let { Triple(Sym.Package2, stringResource(R.string.detail_package), it) },
                 )
                 val turn by animateFloatAsState(if (open) 180f else 0f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "chev")
                 Column(Modifier.padding(horizontal = 16.dp).padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
@@ -335,12 +424,31 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                 }
             } }
         }
+        // The icon's color washes the top of the page from edge to edge, behind both panes, and scrolls away with the head
+        val wash by animateColorAsState(iconColor(app)?.let { tonal(it).first } ?: cs.surfaceContainer, MaterialTheme.motionScheme.slowEffectsSpec(), label = "wash")
+        val bottom = PaddingValues(bottom = pad.calculateBottomPadding() + 24.dp)
+        Box(Modifier.fillMaxSize()) {
+            // Height capped, so on big screens it stays a soft band instead of a billboard; it fades as either pane scrolls
+            Box(Modifier.fillMaxWidth().height(pad.calculateTopPadding() + 150.dp)
+                .graphicsLayer {
+                    fun gone(l: LazyListState) = if (l.firstVisibleItemIndex > 0) 1f else (l.firstVisibleItemScrollOffset / size.height).coerceIn(0f, 1f)
+                    val k = maxOf(gone(list), if (twoPane) gone(media) else 0f)
+                    if (twoPane) alpha = 1f - k else translationY = -k * size.height
+                }
+                .background(Brush.verticalGradient(listOf(wash, cs.surface))))
+            if (twoPane) Row(Modifier.fillMaxSize().wrapContentWidth().widthIn(max = 1280.dp)) {
+                LazyColumn(Modifier.fillMaxHeight().fillMaxWidth(.36f).widthIn(min = 340.dp, max = 460.dp), list, contentPadding = bottom) { top(); facts() }
+                LazyColumn(Modifier.weight(1f).fillMaxHeight(), media, contentPadding = PaddingValues(top = pad.calculateTopPadding(), bottom = bottom.calculateBottomPadding())) { media() }
+            } else LazyColumn(Modifier.fillMaxSize().readableWidth(), list, contentPadding = bottom) { top(); media(); facts() }
+        }
     }
 
     if (versions) OrionSheet({ versions = false }) {
         SheetTitle(stringResource(R.string.detail_select_version), Sym.History, stringResource(R.string.detail_choose_your_release_channel))
-        Column(Modifier.navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
-            app.availableVersions.forEachIndexed { i, v ->
+        val versionCap = (app.availableVersions.size * 76).coerceAtMost((LocalConfiguration.current.screenHeightDp * 0.62f).toInt()).coerceAtLeast(88).dp
+        LazyColumn(Modifier.fillMaxWidth().height(versionCap).navigationBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+            items(app.availableVersions.size, key = { app.availableVersions[it].version + it }) { i ->
+                val v = app.availableVersions[i]
                 SegmentedListItem({ versions = false; target = v; proceed(v) }, ListItemDefaults.segmentedShapes(i, app.availableVersions.size), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh),
                     leadingContent = { IconBox(Sym.Layers, streamColor(v.type)) }, trailingContent = { Icon(Sym.ChevronRight, null) },
                     supportingContent = { Text(v.date) }) {
@@ -360,7 +468,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.detail_select_architecture), style = MaterialTheme.typography.headlineSmallEmphasized)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Target:", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant); Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.detail_target), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant); Spacer(Modifier.width(6.dp))
                     Text(target?.version ?: app.latestVersion, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.width(6.dp))
                     StreamBadge(target?.type ?: "Stable")
                 }
@@ -376,7 +484,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                 if (normalizeArch(raw) != Arch.Unknown) Tag(stringResource(R.string.detail_your_phone), cs.primary)
             }
         }
-        Column(Modifier.navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+        Column(Modifier.weight(1f, false).heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.5f).dp).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
             list2.forEachIndexed { i, (v, c) ->
                 val (compat, rec) = c
                 SegmentedListItem({ variants = false; action(v.url) }, ListItemDefaults.segmentedShapes(i, list2.size),
@@ -390,7 +498,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     supportingContent = { Text(if (rec) stringResource(R.string.detail_best_match_for_your_phone) else "APK") }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(v.arch, fontWeight = FontWeight.Bold); Spacer(Modifier.width(8.dp))
-                        if (rec) Tag("Recommended", cs.primary) else if (compat && v.arch.equals("universal", true)) Tag("Universal", Safe)
+                        if (rec) Tag(stringResource(R.string.detail_recommended), cs.primary) else if (compat && v.arch.equals("universal", true)) Tag(stringResource(R.string.detail_universal), Safe)
                     }
                 }
             }
@@ -415,7 +523,67 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
         })
 
     if (shareSheet) ShareLinksSheet(vm, app) { shareSheet = false }
+    if (inspecting) InspectSheet(vm, app) { inspecting = false }
     lightbox?.let { Lightbox(app.screenshots, it) { lightbox = null } }
+}
+
+private const val NOTES_FAILED = "\u0000"
+
+
+/** The release notes of the version Download would fetch, folded into one row that shows at once; the notes fill in when they arrive. */
+@Composable
+private fun WhatsNew(vm: MainViewModel, v: VersionOption?, notes: String?, update: Boolean) {
+    val cs = MaterialTheme.colorScheme
+    var open by rememberSaveable(v?.tag) { mutableStateOf(false) }
+    val turn by animateFloatAsState(if (open) 180f else 0f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "chev")
+    // An update wears the secondary container pair: tinted enough to stand out, and its on-color keeps the text readable on every palette
+    val (bg, fg) = if (update) cs.secondaryContainer to cs.onSecondaryContainer else cs.surfaceContainer to cs.onSurface
+    Surface(Modifier.padding(horizontal = 16.dp).padding(top = 20.dp).fillMaxWidth().animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),
+        shape = RoundedCornerShape(24.dp), color = bg, contentColor = fg) {
+        Column {
+            Row(Modifier.fillMaxWidth().clickable { open = !open; vm.haptic(H.SELECTION) }.padding(16.dp, 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconBox(Sym.NewReleases, if (update) cs.onSecondaryContainer else cs.primary)
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.about_what_s_new), style = MaterialTheme.typography.titleMedium)
+                    Text(listOfNotNull(v?.version?.let { if (update) stringResource(R.string.detail_update_to, it.removePrefix("v")) else stringResource(R.string.detail_version_label, it.removePrefix("v")) }, v?.date?.ifBlank { null }).joinToString(" · "),
+                        style = MaterialTheme.typography.bodyMedium, color = if (update) fg.copy(.8f) else cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Icon(Sym.ExpandMore, if (open) stringResource(R.string.detail_hide_changelog) else stringResource(R.string.detail_show_changelog), Modifier.graphicsLayer { rotationZ = turn })
+            }
+            if (open) when (notes) {
+                null -> Box(Modifier.fillMaxWidth().padding(bottom = 18.dp), contentAlignment = Alignment.Center) { LoadingIndicator(Modifier.size(40.dp), color = fg) }
+                NOTES_FAILED, "" -> Text(if (notes.isEmpty()) stringResource(R.string.detail_this_release_came_without_notes) else stringResource(R.string.detail_could_not_load_the_release_notes),
+                    Modifier.padding(start = 20.dp, end = 20.dp, bottom = 18.dp), style = MaterialTheme.typography.bodyMedium, color = fg.copy(.8f))
+                else -> SelectionContainer {
+                    Text(notesText(notes), Modifier.padding(start = 20.dp, end = 20.dp, bottom = 18.dp).heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+                        style = MaterialTheme.typography.bodyMedium, color = fg.copy(.9f))
+                }
+            }
+        }
+    }
+}
+
+private val INLINE = Regex("""\*\*(.+?)\*\*|`([^`]+)`""")
+
+/** Headings bold, **bold** and `code` styled, the markers dropped. */
+private fun notesText(t: String) = buildAnnotatedString {
+    t.lines().forEachIndexed { i, raw ->
+        if (i > 0) append('\n')
+        val h = raw.trimStart().startsWith("#")
+        val line = if (h) raw.trimStart().trimStart('#').trim() else raw
+        if (h) withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(line.replace("**", "")) }
+        else INLINE.let { re ->
+            var at = 0
+            re.findAll(line).forEach { m ->
+                append(line.substring(at, m.range.first))
+                if (m.groupValues[1].isNotEmpty()) withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(m.groupValues[1]) }
+                else withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(m.groupValues[2]) }
+                at = m.range.last + 1
+            }
+            append(line.substring(at))
+        }
+    }
 }
 
 /** 40dp tonal icon container for list rows. */
@@ -458,8 +626,8 @@ fun Lightbox(shots: List<String>, start: Int, onClose: () -> Unit) = Dialog(onCl
         }
         val chrome = IconButtonDefaults.filledTonalIconButtonColors(Color.White.copy(.14f), Color.White)
         if (n > 1 && zoom == 1f) {
-            FilledTonalIconButton({ scope.launch { pager.animateScrollToPage((pager.currentPage - 1 + n) % n) } }, Modifier.align(Alignment.CenterStart).padding(12.dp), colors = chrome) { Icon(Sym.ChevronLeft, "Previous") }
-            FilledTonalIconButton({ scope.launch { pager.animateScrollToPage((pager.currentPage + 1) % n) } }, Modifier.align(Alignment.CenterEnd).padding(12.dp), colors = chrome) { Icon(Sym.ChevronRight, "Next") }
+            FilledTonalIconButton({ scope.launch { pager.animateScrollToPage((pager.currentPage - 1 + n) % n) } }, Modifier.align(Alignment.CenterStart).padding(12.dp), colors = chrome) { Icon(Sym.ChevronLeft, stringResource(R.string.detail_previous)) }
+            FilledTonalIconButton({ scope.launch { pager.animateScrollToPage((pager.currentPage + 1) % n) } }, Modifier.align(Alignment.CenterEnd).padding(12.dp), colors = chrome) { Icon(Sym.ChevronRight, stringResource(R.string.detail_next)) }
             Text("${pager.currentPage + 1} / $n", Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(20.dp).clip(Pill).background(Color.White.copy(.14f)).padding(horizontal = 14.dp, vertical = 6.dp),
                 color = Color.White, style = MaterialTheme.typography.labelLarge)
         }
@@ -471,11 +639,11 @@ private fun ShareLinksSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Un
     val clip = LocalClipboardManager.current; val cs = MaterialTheme.colorScheme
     var open by remember { mutableStateOf<String?>(null) }; var copied by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(copied) { if (copied != null) { delay(2000); copied = null } }
-    val web = Share.webLink(app.id, app.icon)
+    val web = Share.webLink(app.id)
     data class Row5(val key: String, val label: String, val helper: String, val value: String, val action: String, val multi: Boolean)
     val rows = listOf(
-        Row5("deep", stringResource(R.string.detail_deep_link), stringResource(R.string.detail_launches_orion_store_directly_to_this), Share.deepLink(app.id), "Copy", false),
-        Row5("web", stringResource(R.string.detail_web_link), stringResource(R.string.detail_uses_the_fallback_redirect_page_before), web, "Copy", false),
+        Row5("deep", stringResource(R.string.detail_deep_link), stringResource(R.string.detail_launches_orion_store_directly_to_this), Share.deepLink(app.id), stringResource(R.string.detail_copy), false),
+        Row5("web", stringResource(R.string.detail_web_link), stringResource(R.string.detail_uses_the_fallback_redirect_page_before), web, stringResource(R.string.detail_copy), false),
         Row5("md", stringResource(R.string.detail_markdown_badge), stringResource(R.string.detail_badge_snippet_for_markdown_readmes_and), Share.markdown(web), stringResource(R.string.community_copy_markdown), true),
         Row5("html", stringResource(R.string.detail_html_badge), stringResource(R.string.detail_badge_snippet_for_websites_and_embedded), Share.html(web), stringResource(R.string.detail_copy_html), true),
     )
@@ -498,7 +666,7 @@ private fun ShareLinksSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Un
                             }
                             FilledTonalButton({ clip.setText(AnnotatedString(r.value)); copied = r.key; vm.haptic(H.SUCCESS) }, modifier = Modifier.padding(top = 10.dp), shapes = ButtonDefaults.shapes()) {
                                 Icon(if (copied == r.key) Sym.Check else Sym.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
-                                Text(if (copied == r.key) "Copied" else r.action)
+                                Text(if (copied == r.key) stringResource(R.string.detail_copied) else r.action)
                             }
                         }
                     }

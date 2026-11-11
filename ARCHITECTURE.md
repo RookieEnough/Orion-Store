@@ -13,13 +13,13 @@ Native Jetpack Compose port of the Capacitor Orion Store (`Orion Legacy/`). Sing
 | Progress | `LoadingIndicator`, `LinearWavyProgressIndicator`, `CircularWavyProgressIndicator` |
 | Images | Coil 3 (DiceBear SVG avatars requested as PNG via `pngAvatar`) |
 | Network | OkHttp 5 + kotlinx-serialization (`data/Net`) |
-| Privileged install | Shizuku |
+| Privileged install | Shizuku, Dhizuku (device owner), root, built-in wireless ADB |
 | Ads | Unity Ads (rewarded, `Rewarded_Android`) |
 
 ## Flow
 
 ```
-MainActivity  splash, edge-to-edge, ResultHost, notification permission, deep links, refresh rate
+OrionActivity  splash, edge-to-edge, ResultHost, notification permission, deep links, refresh rate
   └─ OrionRoot(vm)                 ui/Root.kt      theme, gate, nav bar, tab host, overlay host
        ├─ routes = VM state        vm.tab, vm.selectedApp, vm.overlays
        ├─ CompositionLocals        LocalVm, LocalS (Settings), LocalD (DataState)

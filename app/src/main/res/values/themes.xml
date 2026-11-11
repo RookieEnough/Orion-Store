@@ -3,6 +3,16 @@
         <item name="android:windowBackground">@color/splash_bg</item>
         <item name="android:forceDarkAllowed" tools:targetApi="29">false</item>
     </style>
+    <!-- The APK installer sheet floats over the file manager or browser that opened the file -->
+    <style name="Theme.Orion.Installer" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
     <style name="Theme.Orion.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_bg</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_animated</item>

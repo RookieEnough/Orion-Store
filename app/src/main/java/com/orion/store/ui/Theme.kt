@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.ExperimentalTextApi
+import com.orion.store.data.CustomPalette
 import com.orion.store.data.Defaults
 import com.orion.store.data.Settings
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +30,7 @@ import java.io.File
 val Safe = Color(0xFF10B981)
 val Caution = Color(0xFFF59E0B)
 
-fun previewScheme(theme: String, palette: String): ColorScheme = palette(palette).scheme(theme)
+fun previewScheme(theme: String, palette: String, custom: List<CustomPalette> = emptyList()): ColorScheme = palette(palette, custom).scheme(theme)
 
 /** Material You ships no dusk tones: lift the dynamic dark surfaces toward onSurface so dusk stays a softer, distinct dark. */
 private fun ColorScheme.dusk(): ColorScheme {
@@ -107,8 +108,8 @@ fun OrionTheme(s: Settings, content: @Composable () -> Unit) {
     val theme = if (s.isOled) "oled" else s.theme
     val dyn = s.materialYouEnabled && Build.VERSION.SDK_INT >= 31
     // Theme objects are remembered: fresh instances on every Settings change re-ran the whole tree through these static locals.
-    val colors = remember(theme, dyn, s.palette) {
-        if (!dyn) palette(s.palette).scheme(theme) else (if (theme == "light") dynamicLightColorScheme(ctx) else dynamicDarkColorScheme(ctx)).let {
+    val colors = remember(theme, dyn, s.palette, s.customPalettes) {
+        if (!dyn) palette(s.palette, s.customPalettes).scheme(theme) else (if (theme == "light") dynamicLightColorScheme(ctx) else dynamicDarkColorScheme(ctx)).let {
             when (theme) {
                 "oled" -> it.copy(background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black, surfaceContainerLow = lerp(Color.Black, it.surfaceContainerLow, .5f))
                 "dusk" -> it.dusk()
@@ -120,6 +121,13 @@ fun OrionTheme(s: Settings, content: @Composable () -> Unit) {
     val ff by produceState(first, s.appFont, s.customFonts) { value = Fonts.load(ctx, s.appFont, s) }
     val type = remember(ff) { typography(ff) }
     val motion = remember(s.disableAnimations) { if (s.disableAnimations) InstantMotion else MotionScheme.expressive() }
+    // Bar icons follow Orion's own theme, not the system's: a dark Orion on a light-mode phone kept dark icons on a dark page
+    val view = androidx.compose.ui.platform.LocalView.current; val light = colors.isLight
+    if (!view.isInEditMode) androidx.compose.runtime.SideEffect {
+        (view.context as? android.app.Activity)?.window?.let { w ->
+            androidx.core.view.WindowCompat.getInsetsController(w, view).run { isAppearanceLightStatusBars = light; isAppearanceLightNavigationBars = light }
+        }
+    }
     MaterialExpressiveTheme(colorScheme = colors, motionScheme = motion, typography = type, content = content)
 }
 

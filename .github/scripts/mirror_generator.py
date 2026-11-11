@@ -81,6 +81,32 @@ def minify_release(release, fetch_sizes=False):
         "assets": minified_assets
     }
 
+STARS_FILE = "stars.json"
+
+def fetch_stars(repos, headers):
+    """
+    owner/repo (lowercase) -> stargazer count, via GraphQL in batches of 50,
+    so ~1000 repos cost ~20 calls instead of 1000 REST calls.
+    """
+    stars = {}
+    repos = sorted({r.lower() for r in repos if r.count("/") == 1})
+    for i in range(0, len(repos), 50):
+        batch = repos[i:i + 50]
+        parts = []
+        for n, r in enumerate(batch):
+            owner, name = r.split("/")
+            parts.append(f'r{n}: repository(owner: {json.dumps(owner)}, name: {json.dumps(name)}) {{ stargazerCount }}')
+        try:
+            r = requests.post("https://api.github.com/graphql", json={"query": "{" + " ".join(parts) + "}"}, headers=headers, timeout=30)
+            data = (r.json() or {}).get("data") or {}
+            for n, repo in enumerate(batch):
+                node = data.get(f"r{n}")
+                if node and node.get("stargazerCount") is not None:
+                    stars[repo] = node["stargazerCount"]
+        except Exception as e:
+            print(f"   ⚠️ Stars batch {i // 50} failed: {e}")
+    return stars
+
 def generate_mirror():
     # 1. Setup & Cleanup
     print("🧹 Cleaning mirrors directory...")
@@ -127,12 +153,14 @@ def generate_mirror():
         if app.get("githubRepo"):
             repo_key = app["githubRepo"].replace("https://github.com/", "").strip("/")
             source_type = 'github'
+            domain = "github.com"
         elif app.get("repoUrl") and "github.com" in app["repoUrl"]:
             parts = app["repoUrl"].split("github.com/")
             if len(parts) > 1:
                 repo_key = parts[1].split('/')[0] + "/" + parts[1].split('/')[1]
                 repo_key = repo_key.replace(".git", "").strip("/")
                 source_type = 'github'
+                domain = "github.com"
         elif app.get("gitlabRepo"):
             repo_key = app["gitlabRepo"].strip("/")
             source_type = 'gitlab'
@@ -190,6 +218,39 @@ def generate_mirror():
                         if r_fallback.status_code == 200:
                             print(f"   ✅ Fallback success! Found 'latest' tag.")
                             data = [r_fallback.json()] # Wrap in list to match expected structure
+                    # --- STABLE-FIRST FIX ---
+                    # /releases lists newest-upload first, which can be a
+                    # Nightly/Beta with an inconsistent prerelease flag
+                    # (e.g. Brave). Ask GitHub for the true latest stable
+                    # release and hoist it to position 0, so the store
+                    # compares updates against the real stable, not a
+                    # prerelease. The full 20-release list is preserved for
+                    # the Version Selection feature; only position 0 changes.
+                    if isinstance(data, list) and data:
+                        try:
+                            stable_url = f"https://api.github.com/repos/{repo_path}/releases/latest"
+                            r_stable = requests.get(stable_url, headers=gh_headers)
+                            if r_stable.status_code == 200:
+                                stable = r_stable.json()
+                                stable_id = stable.get("id")
+                                # Some repos (e.g. Brave) mislabel prerelease flags:
+                                # a "Release vX" can be flagged prerelease=True while
+                                # "Nightly"/"Beta" ones are flagged False. Prefer the
+                                # newest release whose name starts with "Release ",
+                                # which is the stable channel naming convention.
+                                for rel in data:
+                                    rel_name = (rel.get("name") or "").strip()
+                                    if rel_name.lower().startswith("release "):
+                                        if rel.get("id") != stable_id:
+                                            print(f"   ✅ Stable-first: preferring {rel.get('tag_name')} (Release channel) over {stable.get('tag_name')}.")
+                                        stable = rel
+                                        stable_id = rel.get("id")
+                                        break
+                                if stable_id is not None:
+                                    data = [stable] + [x for x in data if x.get("id") != stable_id]
+                                    print(f"   ✅ Stable-first: hoisted {stable.get('tag_name')} to latest.")
+                        except Exception as e:
+                            print(f"   ⚠️ Stable-first lookup failed ({e}); using release list order.")
                 elif r.status_code == 404:
                     print(f"   ⚠️ Repo not found: {repo_path}")
                     fetch_errors[u_key] = f"404 Not Found (Check if {repo_path} exists and is Public)"
@@ -334,6 +395,20 @@ def generate_mirror():
         print("   Action: Check repo URLs, verify Releases exist, or check GitHub Status.")
     print("="*50 + "\n")
     # --------------------------------------
+
+    # --- STARS (GitHub only) ---
+    if gh_headers.get("Authorization"):
+        print("⭐ Fetching stars...")
+        gh_repos = [repo_path for _, repo_path, s_type, _ in unique_repos if s_type == 'github']
+        stars = fetch_stars(gh_repos, gh_headers)
+        try:
+            with open(STARS_FILE, "w", encoding="utf-8") as f:
+                json.dump(stars, f, separators=(',', ':'), sort_keys=True)
+            print(f"   ✅ Saved {STARS_FILE} ({len(stars)} repos)")
+        except Exception as e:
+            print(f"   ❌ Error writing {STARS_FILE}: {e}")
+    else:
+        print("⚠️ No GH_TOKEN. Skipping stars (GraphQL needs auth).")
 
     # 4. Generate Monolithic File (Legacy)
     print("💾 Saving legacy mirror.json...")

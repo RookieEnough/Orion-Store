@@ -10,6 +10,16 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.decodeFromStream
+import java.io.InputStream
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.math.floor
@@ -26,7 +36,7 @@ object CatalogProcessor {
         when { "arm64" in it || "v8a" in it -> "ARM64"; "armeabi" in it || "v7a" in it -> "ARMv7"; "x86_64" in it || "x64" in it -> "x64"; "x86" in it -> "x86"; else -> "Universal" }
     }
 
-    private val VERSION_NOISE = listOf("armeabi-v7a", "arm64-v8a", "x86_64", "x86", "v7a", "v8a", "-all", "_all", "-universal", "_universal", "universal", ".apk", "release", "mod", "beta", "alpha", "nightly", "debug")
+    private val VERSION_NOISE = listOf("armeabi-v7a", "arm64-v8a", "x86_64", "x86", "v7a", "v8a", "-all", "_all", "-universal", "_universal", "universal", ".apks", ".xapk", ".apkm", ".apk", "release", "mod", "beta", "alpha", "nightly", "debug")
     private val VERSION = Regex("v?(\\d+(?:\\.\\d+)+)")
     private val REPO_HOST = Regex("^https?://(www\\.)?(github\\.com|gitlab\\.com|codeberg\\.org)/")
     fun extractVersion(s: String?): String? {
@@ -86,18 +96,47 @@ object CatalogProcessor {
     // region mirror
     class Release(val tag: String, val name: String, val prerelease: Boolean, val date: String, val assets: List<Triple<String, String, Long?>>)
 
-    fun parseMirror(root: JsonElement?): Map<String, List<Release>> = (root as? JsonObject)?.mapNotNull { (k, v) ->
-        val arr = when (v) { is JsonArray -> v; is JsonObject -> JsonArray(listOf(v)); else -> return@mapNotNull null }
-        k.lowercase() to arr.mapNotNull { r ->
+    fun parseMirror(root: JsonElement?): Map<String, List<Release>> = (root as? JsonObject)?.mapNotNull { (k, v) -> releasesOf(v)?.let { k.lowercase() to it } }?.toMap().orEmpty()
+
+    /** One repo's releases, keeping only APK assets: everything else in the mirror (sources, desktop builds, checksums) is never offered. */
+    private fun releasesOf(v: JsonElement): List<Release>? {
+        val arr = when (v) { is JsonArray -> v; is JsonObject -> JsonArray(listOf(v)); else -> return null }
+        return arr.mapNotNull { r ->
             val o = r as? JsonObject ?: return@mapNotNull null
             fun s(key: String) = (o[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
-            Release(s("tag_name"), s("name"), (o["prerelease"] as? JsonPrimitive)?.booleanOrNull ?: false, s("published_at").ifEmpty { s("created_at") },
-                (o["assets"] as? JsonArray).orEmpty().mapNotNull { e ->
-                    val ao = e as? JsonObject ?: return@mapNotNull null
-                    Triple((ao["name"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (ao["browser_download_url"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (ao["size"] as? JsonPrimitive)?.longOrNull)
-                })
+            val assets = (o["assets"] as? JsonArray).orEmpty().mapNotNull { e ->
+                val ao = e as? JsonObject ?: return@mapNotNull null
+                val n = (ao["name"] as? JsonPrimitive)?.contentOrNull.orEmpty(); val u = (ao["browser_download_url"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+                if ("apk" !in n.lowercase() && ".apk" !in u.lowercase()) null else Triple(n, u, (ao["size"] as? JsonPrimitive)?.longOrNull)
+            }
+            if (assets.isEmpty()) null
+            else Release(s("tag_name"), s("name"), (o["prerelease"] as? JsonPrimitive)?.booleanOrNull ?: false, s("published_at").ifEmpty { s("created_at") }, assets)
         }
-    }?.toMap().orEmpty()
+    }
+
+    /** GitHub-shaped releases (GitHub, Codeberg, Forgejo, Gitea) from any API response, APK assets only. */
+    fun releasesFrom(v: JsonElement): List<Release> = releasesOf(v).orEmpty()
+
+    /** Decodes repo by repo, so only one repo's JSON tree is alive at a time. */
+    private object ReleasesSerializer : KSerializer<List<Release>> {
+        override val descriptor: SerialDescriptor = JsonElement.serializer().descriptor
+        override fun deserialize(decoder: Decoder): List<Release> = releasesOf((decoder as JsonDecoder).decodeJsonElement()).orEmpty()
+        override fun serialize(encoder: Encoder, value: List<Release>) = throw UnsupportedOperationException()
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    fun decodeMirror(input: InputStream): Map<String, List<Release>> =
+        json.decodeFromStream(MapSerializer(String.serializer(), ReleasesSerializer), input).entries.filter { it.value.isNotEmpty() }.associate { it.key.lowercase() to it.value }
+
+    /** A refresh whose mirror failed keeps each app's last known releases instead of marking the whole catalog unavailable, while new and edited apps still come through. */
+    fun carryVersions(fresh: List<AppItem>, old: List<AppItem>): List<AppItem> {
+        val prev = old.filter { it.availableVersions.isNotEmpty() }.associateBy { it.id }
+        if (prev.isEmpty()) return fresh
+        return fresh.map { a ->
+            val p = prev[a.id]?.takeIf { a.availableVersions.isEmpty() } ?: return@map a
+            a.copy(version = p.version, latestVersion = p.latestVersion, downloadUrl = p.downloadUrl, variants = p.variants, availableVersions = p.availableVersions, size = p.size)
+        }
+    }
 
     private fun dateMillis(d: String) = runCatching { Instant.parse(d).toEpochMilli() }.getOrElse { runCatching { LocalDate.parse(d.take(10)).toEpochDay() * 86_400_000 }.getOrDefault(0) }
     private val ARCH_ORDER = mapOf("Universal" to 1, "ARM64" to 2, "ARMv7" to 3)
@@ -135,7 +174,7 @@ object CatalogProcessor {
             val tagV = r.tag.takeIf { it.lowercase() !in setOf("latest", "all") }?.let(::extractVersion)
             val ver = extractVersion(assets[0].first) ?: tagV ?: extractVersion(r.name) ?: r.date.ifEmpty { now }.substringBefore('T')
             val variants = assets.map { (n, u, s) -> AppVariant(determineArch(n), u, s) }.sortedBy { ARCH_ORDER[it.arch] ?: 4 }
-            VersionOption(stream, ver, r.date.substringBefore('T'), variants) to dateMillis(r.date)
+            VersionOption(stream, ver, r.date.substringBefore('T'), variants, r.tag) to dateMillis(r.date)
         }
         if (versions.isEmpty()) return app
         val latest = STREAMS.mapNotNull { st -> versions.filter { it.first.type == st }.maxByOrNull { it.second }?.first }
@@ -145,6 +184,17 @@ object CatalogProcessor {
             availableVersions = latest, size = v0?.size?.let(::formatSize) ?: app.size)
     }
     // endregion
+
+    private val GH_REPO = Regex("github\\.com/([^/\\s]+/[^/\\s#?]+)", RegexOption.IGNORE_CASE)
+    fun githubKey(a: AppItem): String? = (a.githubRepo?.takeIf { it.isNotBlank() }?.removePrefix("https://github.com/") ?: a.repoUrl?.let { GH_REPO.find(it)?.groupValues?.get(1) })
+        ?.removeSuffix("/")?.removeSuffix(".git")?.trim('/')?.lowercase()?.takeIf { '/' in it }
+
+    /** Stars from [stars]; when that file could not be fetched, each app keeps the count it had. */
+    fun withStars(apps: List<AppItem>, stars: Map<String, Int>?, old: List<AppItem>): List<AppItem> {
+        val prev = if (stars == null) old.filter { it.stars != null }.associate { it.id to it.stars } else emptyMap()
+        if (stars.isNullOrEmpty() && prev.isEmpty()) return apps
+        return apps.map { a -> a.copy(stars = if (stars != null) githubKey(a)?.let(stars::get) else prev[a.id]) }
+    }
 
     fun process(rawApps: JsonElement?, mirror: Map<String, List<Release>>): List<AppItem> =
         (rawApps as? JsonArray).orEmpty().mapNotNull(::sanitizeApp).map { processItem(it, mirror) }
@@ -248,6 +298,19 @@ object CatalogProcessor {
         while (ii < inter.size && inter[ii].first <= 0) out += inter[ii++].second
         rows.forEachIndexed { n, r -> out += r; while (ii < inter.size && n + 1 >= inter[ii].first) out += inter[ii++].second }
         while (ii < inter.size) out += inter[ii++].second
+        // Most and least starred, three category rows after the bundles (or the end of the rows when there are none)
+        val starred = apps.filter { (it.stars ?: 0) > 0 }.sortedByDescending { it.stars }
+        if (starred.size >= 12) {
+            val b = out.indexOfFirst { it.type == CollectionType.RECOMMENDATION_BUNDLES }
+            var at = if (b < 0) out.size else b + 1; var cats = 0
+            while (at < out.size && cats < 3) { if (out[at].id.startsWith("cat_")) cats++; at++ }
+            val top = starred.take(12); val topIds = top.map { it.id }.toSet()
+            out.addAll(at, listOfNotNull(
+                StoreCollection("most_popular", "Most popular", CollectionType.RANKED, "The most starred on GitHub", apps = top),
+                starred.asReversed().filter { it.id !in topIds }.take(12).takeIf { it.size >= 6 }
+                    ?.let { StoreCollection("hidden_gems", "Hidden gems", CollectionType.RANKED, "Fewest stars, worth a look", apps = it) },
+            ))
+        }
         shuffle(byTag.keys.toList(), seed + 2).take(2).forEach { t -> byTag.getValue(t).takeIf { it.size >= 3 }?.let { out += StoreCollection("tag_${t.lowercase()}", "Curated: $t", CollectionType.SWIMLANE, filter = t, apps = it.take(12)) } }
         return out
     }

@@ -501,4 +501,3 @@ private val Cocoa = Palette("cocoa", "Cocoa", CocoaLight, CocoaDark,
 )
 
 val PALETTES = listOf(Orion, Ocean, Forest, Sunset, Rose, Mono, Grape, Mint, Ember, Amber, Cyber, Midnight, Lime, Cocoa)
-fun palette(id: String) = PALETTES.firstOrNull { it.id == id } ?: PALETTES[0]

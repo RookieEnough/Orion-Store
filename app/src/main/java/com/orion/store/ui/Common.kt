@@ -12,6 +12,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -95,8 +99,12 @@ private val FA: Map<String, ImageVector> = mapOf(
 fun faIcon(name: String?, fb: ImageVector = Sym.Apps): ImageVector =
     name?.split(' ')?.map { it.removePrefix("fa-") }?.firstNotNullOfOrNull { FA[it] } ?: fb
 
-/** Row padding while compact mode is on: about half the M3 list item default. */
-val CompactRowPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+/** Row padding while compact mode is on: about half the M3 list item default. Rows always pass centered alignment:
+ *  M3 top-aligns taller rows, which left the icon and download button above the middle. */
+val CompactRowPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+/** Compact rows size to their content instead of M3's fixed list-item minimum, which left empty space under short rows on some
+ *  screens. M3 only applies its minimum when the row has none of its own, so this sets one just above the padding. */
+val CompactRowHeight = Modifier.heightIn(min = CompactRowPadding.calculateTopPadding() + CompactRowPadding.calculateBottomPadding() + 1.dp)
 
 private val CATEGORY_ICONS: List<Pair<List<String>, () -> ImageVector>> = listOf(
     listOf("video", "stream", "movie", "film") to { Sym.Movie }, listOf("music", "audio") to { Sym.MusicNote },
@@ -151,8 +159,26 @@ private fun Modifier.sharedIcon(key: String?, visible: Boolean): Modifier {
     return with(sc) { this@sharedIcon.sharedElementWithCallerManagedVisibility(rememberSharedContentState(key), visible) }
 }
 
+/** Material window width classes, from the window Orion actually has (a split screen half counts as its own size, not the device's). */
+enum class WidthClass { COMPACT, MEDIUM, EXPANDED; val wide get() = this != COMPACT }
+fun widthClassOf(w: Dp) = when { w < 600.dp -> WidthClass.COMPACT; w < 840.dp -> WidthClass.MEDIUM; else -> WidthClass.EXPANDED }
+/** Provided once at the root and read by every screen, so layouts follow the window and never ask which device they are on. */
+val LocalWidthClass = compositionLocalOf { WidthClass.COMPACT }
+
+/** Centres a single column (cards, forms, banners) and stops it at [max], so on medium and expanded windows it never stretches
+ *  into a ribbon. On phones the cap is wider than the screen, so nothing changes. */
+fun Modifier.adaptiveContentWidth(max: Dp = 840.dp) = fillMaxWidth().wrapContentWidth().widthIn(max = max).fillMaxWidth()
+
 /** Tablets and landscape: centre the page in a readable column instead of stretching rows across the whole screen. No-op on phones. */
-fun Modifier.readableWidth() = wrapContentWidth().widthIn(max = 840.dp)
+fun Modifier.readableWidth() = adaptiveContentWidth()
+
+/** Back to the top of a long list briskly: far down, it jumps close to the top first, so the animation covers a few rows instead of crawling past hundreds. */
+suspend fun androidx.compose.foundation.lazy.grid.LazyGridState.toTop() { if (firstVisibleItemIndex > 15) scrollToItem(5); animateScrollToItem(0) }
+suspend fun androidx.compose.foundation.lazy.LazyListState.toTop() { if (firstVisibleItemIndex > 15) scrollToItem(5); animateScrollToItem(0) }
+
+/** For a full-width list: the side padding that keeps its rows in the same readable column. A tinted hero row then wears
+ *  [bleed] with the same gutter so its color runs edge to edge while its text stays in the column. */
+fun readableGutter(width: Dp) = ((width - 840.dp) / 2).coerceAtLeast(0.dp)
 
 /** Squash-on-press with an expressive spatial spring, plus ripple, clipped to [shape]. */
 @Composable
@@ -224,7 +250,7 @@ fun cardState(app: AppItem): Pair<CardState, Float> {
     return when {
         app.id in d.activeDownloads -> CardState.DOWNLOADING to (d.downloadProgress[app.id] ?: 0f)
         app.id in d.readyToInstall -> CardState.READY to 1f
-        hasAvailableUpdate(app, local, s.streamOf(app.id)) -> CardState.UPDATE to 0f
+        hasAvailableUpdate(app, local, s.streamOf(app.id), s.installedBuilds[app.id]) -> CardState.UPDATE to 0f
         !local.isNullOrEmpty() -> CardState.INSTALLED to 0f
         else -> CardState.NONE to 0f
     }
@@ -291,7 +317,7 @@ fun SectionTitle(title: String, modifier: Modifier = Modifier, subtitle: String?
 @Composable
 fun EmptyState(icon: ImageVector, title: String, body: String? = null, modifier: Modifier = Modifier) =
     Column(modifier.fillMaxWidth().padding(vertical = 64.dp, horizontal = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(96.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(96.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialShapes.Cookie9Sided.toShape()), contentAlignment = Alignment.Center) {
             Icon(icon, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(16.dp))
@@ -305,7 +331,7 @@ fun gradient(colors: List<String>, fb: List<Color>) = Brush.linearGradient(color
 fun SheetTitle(title: String, icon: ImageVector? = null, subtitle: String? = null) =
     Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         icon?.let {
-            Box(Modifier.size(44.dp).clip(MaterialShapes.Cookie6Sided.toShape()).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.primaryContainer, MaterialShapes.Cookie6Sided.toShape()), contentAlignment = Alignment.Center) {
                 Icon(it, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Spacer(Modifier.width(14.dp))
@@ -327,8 +353,9 @@ fun OrionSheet(onDismiss: () -> Unit, dismissible: Boolean = true, content: @Com
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { it != SheetValue.Hidden || canHide }); val scope = rememberCoroutineScope()
     val dismiss by rememberUpdatedState(onDismiss)
     val close: () -> Unit = remember { { scope.launch { state.hide() }.invokeOnCompletion { dismiss() } } }
-    ModalBottomSheet(onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-        CompositionLocalProvider(LocalSheetClose provides close) { content() }
+    ModalBottomSheet(onDismiss, sheetState = state, sheetMaxWidth = 640.dp, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        // A sheet is its own window: shared elements can't measure across windows ("layouts are not part of the same hierarchy")
+        CompositionLocalProvider(LocalSheetClose provides close, LocalShared provides null) { content() }
     }
 }
 
@@ -381,7 +408,7 @@ fun MorphBlob(shapes: List<RoundedPolygon>, index: Int, size: Dp, color: Color, 
     LaunchedEffect(index) { if (index != to) { from = to; to = index; prog.snapTo(0f); prog.animateTo(1f, spec) } }
     val morph = remember(from, to) { Morph(shapes[from % shapes.size], shapes[to % shapes.size]) }
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
-        Box(Modifier.matchParentSize().graphicsLayer { rotationZ = (to + prog.value - 1) * 90f }.clip(MorphShape(morph, prog.value)).background(color))
+        Box(Modifier.matchParentSize().graphicsLayer { rotationZ = (to + prog.value - 1) * 90f }.background(color, MorphShape(morph, prog.value)))
         content()
     }
 }
@@ -404,7 +431,7 @@ fun TonalIcon(icon: ImageVector, c: Color) {
 /** Device tilt from the gravity sensor, low-pass filtered, in roughly -1..1 per axis. Read it inside graphicsLayer/draw lambdas so it only redraws. */
 @Composable
 fun rememberTilt(): State<Offset> {
-    val ctx = LocalContext.current; val off = LocalS.current.disableAnimations
+    val ctx = LocalContext.current; val off = LocalS.current.calm
     val tilt = remember { mutableStateOf(Offset.Zero) }
     DisposableEffect(off) {
         val sm = ctx.getSystemService(android.hardware.SensorManager::class.java)
@@ -465,3 +492,22 @@ fun ThemeRevealHost(content: @Composable () -> Unit) {
 
 /** Center of this element in root coordinates, for reveal origins. */
 fun Modifier.trackCenter(into: MutableState<Offset>) = onGloballyPositioned { into.value = it.boundsInRoot().center }
+
+/** TV: a full-screen overlay pulls D-pad focus in and keeps it. Otherwise the remote keeps moving through the screen underneath,
+ *  so the overlay never scrolls. */
+@Composable
+fun Modifier.trapFocus(): Modifier {
+    if (!Device.isTv) return this
+    val fr = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { androidx.compose.runtime.withFrameNanos { }; runCatching { fr.requestFocus() } }
+    return focusRequester(fr).focusProperties { onExit = { cancelFocusChange() } }.focusGroup()
+}
+
+/** Lets a horizontal scroller inside a column padded by [h] run to the screen edges. Follow it with horizontalScroll and then
+ *  padding(horizontal = h), so the first item still lines up with the column. */
+fun Modifier.bleed(h: androidx.compose.ui.unit.Dp) = layout { m, c ->
+    val px = h.roundToPx()
+    val wide = if (c.hasBoundedWidth) c.copy(minWidth = c.minWidth + 2 * px, maxWidth = c.maxWidth + 2 * px) else c
+    val p = m.measure(wide)
+    layout(if (c.hasBoundedWidth) p.width - 2 * px else p.width, p.height) { p.place(if (c.hasBoundedWidth) -px else 0, 0) }
+}

@@ -19,6 +19,8 @@ import com.orion.store.data.*
 import com.orion.store.platform.AppTracker
 import com.orion.store.platform.DlStatus
 import com.orion.store.platform.Downloads
+import com.orion.store.platform.WirelessAdb
+import com.orion.store.platform.DhizukuBridge
 import com.orion.store.ui.Store
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -41,7 +43,7 @@ import java.util.concurrent.ConcurrentHashMap
 object AutoUpdate {
     private const val JOB_ID = 7340
     private const val CHANNEL = "orion_updates"
-    /** Set by MainActivity: while the store is on screen it handles updates itself, so the job steps aside. */
+    /** Set by OrionActivity: while the store is on screen it handles updates itself, so the job steps aside. */
     @Volatile var uiVisible = false
 
     @Suppress("DEPRECATION")
@@ -86,10 +88,15 @@ object AutoUpdate {
     private suspend fun catalog(ctx: Context, s: Settings): List<AppItem> = withContext(Dispatchers.IO) {
         val repo = Repository(ctx)
         val fresh = runCatching {
-            val r = repo.loadCatalog(s, false); val m = CatalogProcessor.parseMirror(r.mirror)
+            val r = repo.loadCatalog(s, false); val m = r.mirror.orEmpty()
             if (r.failed || m.isEmpty()) null else CatalogProcessor.process(r.rawApps, m) + Store.data.value.importedApps.map { CatalogProcessor.processItem(it, m) }
         }.getOrNull()
-        fresh?.takeIf { it.isNotEmpty() } ?: (repo.cached()?.apps.orEmpty() + Store.data.value.importedApps)
+        val base = fresh?.takeIf { it.isNotEmpty() } ?: (repo.cached()?.apps.orEmpty() + Store.data.value.importedApps)
+        // Orbit apps are checked at their own sources on the same pass, keeping anything the user edited meanwhile
+        val now = System.currentTimeMillis()
+        val orbit = runCatching { Orbit.refreshAll(Store.data.value.orbit, s.orbitTokens(), now) }.getOrNull()?.associateBy { it.id }
+        if (orbit != null) Store.data.update { st -> st.copy(orbit = st.orbit.map { cur -> orbit[cur.id]?.let { f -> cur.copy(versions = f.versions, checkedAt = f.checkedAt, error = f.error) } ?: cur }) }
+        base + Store.data.value.orbit.filter { !it.paused }.map { it.toItem() }
     }
 
     /** One app: download (or reuse a finished download), verify, install. Null = nothing worth reporting (download-only mode). */
@@ -97,7 +104,9 @@ object AutoUpdate {
         val pkg = s.resolvedPackageNames[app.id] ?: app.packageName.orEmpty()
         val version = downloadVersionMeta(app, null, s.streamOf(app.id)).first
         fun result(ok: Boolean, error: String? = null) = AutoResult(app.id, app.name, version, ok, error, System.currentTimeMillis())
-        val url = sanitizeDownloadUrl(app.variants.firstOrNull()?.url ?: app.downloadUrl)
+        // The build of the app's own channel: a Beta user gets the next Beta, not the Stable APK under a Beta version
+        val variants = app.availableVersions.firstOrNull { it.version == version }?.variants?.ifEmpty { null } ?: app.variants
+        val url = sanitizeDownloadUrl(variants.firstOrNull()?.url ?: app.downloadUrl)
         if (url == "#" || !url.startsWith("http")) return result(false, ctx.getString(R.string.autoupdate_no_direct_apk_download_for_this))
         val name = apkFileName(app, version)
         val f = Downloads.file(name) ?: return result(false, ctx.getString(R.string.autoupdate_invalid_file_name))
@@ -115,51 +124,49 @@ object AutoUpdate {
         Store.data.update { if (app.id in it.readyToInstall) it else it.completeDownload(app.id, name, now) }
         if (!s.autoInstall) { notifyReady(ctx, app, name); return null }
 
-        val error = install(ctx, tracker, s, f, actual)
+        val error = install(ctx, tracker, s, f, actual, app.name)
         if (error != null) { notifyReady(ctx, app, name, error); return result(false, error) }
         val ver = tracker.appInfo(actual).version
         Store.settings.update { it.copy(installedVersions = it.installedVersions + (app.id to ver), lastRemoteVersions = it.lastRemoteVersions + (app.id to ver),
-            packageOwners = it.packageOwners + (normalizePackageName(actual) to app.id)) }
+            installedBuilds = it.installedBuilds + (app.id to InstalledBuild(ver, version)), packageOwners = it.packageOwners + (normalizePackageName(actual) to app.id)) }
         Store.data.update { it.recordInstalled(app.id, ver, null, now).copy(readyToInstall = it.readyToInstall - app.id) }
         f.delete()
         return result(true)
     }
 
-    /** Null on success, else why it failed, worded for the user. */
-    private suspend fun install(ctx: Context, tracker: AppTracker, s: Settings, f: File, pkg: String): String? {
-        if (s.rootMode || s.useShizuku) return runCatching { tracker.installShizuku(f.name, s.updateLock) }.exceptionOrNull()?.let { reason(ctx, it.message) }
+    /** Null on success, else why it failed, worded for the user. Also used by the store for auto-updates it downloads itself. */
+    suspend fun install(ctx: Context, tracker: AppTracker, s: Settings, f: File, pkg: String, name: String): String? {
+        tracker.clash(f)?.let { return clashText(ctx, it.second, name).second }
+        if (s.rootMode || s.useShizuku) return runCatching { tracker.installShizuku(f.name, s.updateLock, if (s.installOptions) s.installFlags else emptyList()) }.exceptionOrNull()?.let { installFailureText(ctx, it.message, name).second }
+        if (s.useDhizuku) return runCatching { DhizukuBridge.install(ctx, f) }.exceptionOrNull()?.let { installFailureText(ctx, it.message, name).second }
+        // Skip the 24-hour wait: the same shell-user install as the button, falling back to a session when adbd is unreachable
+        if (s.directInstall && WirelessAdb.supported && runCatching { WirelessAdb.install(ctx, f) }.isSuccess) return null
         if (Build.VERSION.SDK_INT < 31) return ctx.getString(R.string.autoupdate_android_needs_you_to_confirm_installs, Build.VERSION.RELEASE)
         if (!tracker.canRequestInstalls()) return ctx.getString(R.string.autoupdate_allow_orion_to_install_apps_then)
         val (status, msg) = sessionInstall(ctx, f, pkg)
         return when (status) {
             PackageInstaller.STATUS_SUCCESS -> null
             PackageInstaller.STATUS_PENDING_USER_ACTION -> ctx.getString(R.string.autoupdate_android_asked_to_confirm_this_one)
-            else -> reason(ctx, msg)
+            else -> installFailureText(ctx, msg, name).second
         }
-    }
-
-    private fun reason(ctx: Context, m: String?) = when {
-        m == null -> ctx.getString(R.string.autoupdate_install_failed)
-        "UPDATE_INCOMPATIBLE" in m || "signatures do not match" in m.lowercase() -> ctx.getString(R.string.autoupdate_this_update_is_signed_by_a)
-        "INSUFFICIENT_STORAGE" in m -> ctx.getString(R.string.autoupdate_not_enough_storage_to_install)
-        "VERSION_DOWNGRADE" in m -> ctx.getString(R.string.autoupdate_the_installed_version_is_newer_than)
-        "Shizuku" in m -> ctx.getString(R.string.autoupdate_shizuku_is_not_running_so_the)
-        else -> m.take(160)
     }
 
     private val sessions = ConcurrentHashMap<Int, CompletableDeferred<Pair<Int, String?>>>()
 
     /** PackageInstaller session that asks for no user action. Android allows it for apps Orion installed (Android 12+). */
     private suspend fun sessionInstall(ctx: Context, f: File, pkg: String): Pair<Int, String?> = withContext(Dispatchers.IO) {
+        val parts = com.orion.store.platform.Bundles.parts(ctx, f).ifEmpty { listOf(f) }
         val pi = ctx.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-            setAppPackageName(pkg); setSize(f.length()); setInstallReason(PackageManager.INSTALL_REASON_USER)
+            setAppPackageName(pkg); setSize(parts.sumOf { it.length() }); setInstallReason(PackageManager.INSTALL_REASON_USER)
             if (Build.VERSION.SDK_INT >= 31) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
         val id = pi.createSession(params); val done = CompletableDeferred<Pair<Int, String?>>(); sessions[id] = done
         try {
             pi.openSession(id).use { session ->
-                session.openWrite("base.apk", 0, f.length()).use { out -> f.inputStream().use { it.copyTo(out) }; session.fsync(out) }
+                parts.forEachIndexed { i, part ->
+                    session.openWrite(if (i == 0) "base.apk" else "split$i.apk", 0, part.length()).use { out -> part.inputStream().use { it.copyTo(out) }; session.fsync(out) }
+                }
                 val i = Intent(ctx, InstallReceiver::class.java).setPackage(ctx.packageName)
                 session.commit(PendingIntent.getBroadcast(ctx, id, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE).intentSender)
             }
@@ -171,6 +178,7 @@ object AutoUpdate {
 
     /** Session results. A pending confirmation is abandoned: the file stays ready, and the user installs it with one tap from the notification. */
     fun onInstallResult(ctx: Context, i: Intent) {
+        if (com.orion.store.platform.SessionInstall.onResult(ctx, i)) return
         val id = i.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
         val status = i.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) runCatching { ctx.packageManager.packageInstaller.abandonSession(id) }
@@ -183,7 +191,7 @@ object AutoUpdate {
     /** Opens the app's page with the file ready, the same extras the store's own "ready" notification uses. */
     private fun notifyReady(ctx: Context, app: AppItem, file: String, error: String? = null) = runCatching {
         channel(ctx)
-        val i = Intent(ctx, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("appId", app.id).putExtra("fileName", file)
+        val i = Intent(ctx, OrionActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("appId", app.id).putExtra("fileName", file)
         NotificationManagerCompat.from(ctx).notify(app.id.hashCode(), NotificationCompat.Builder(ctx, CHANNEL).setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(if (error == null) ctx.getString(R.string.autoupdate_update_ready, app.name) else ctx.getString(R.string.autoupdate_needs_you, app.name)).setContentText(error ?: ctx.getString(R.string.autoupdate_tap_to_install))
             .setStyle(NotificationCompat.BigTextStyle().bigText(error ?: ctx.getString(R.string.autoupdate_tap_to_install))).setAutoCancel(true)

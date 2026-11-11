@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="assets/orion_logo_512.png" width="310" alt="Orion Store logo">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-hero-dark.svg">
+    <img src="assets/m3-hero-light.svg" alt="Orion Store, the open source app store in Material 3 Expressive" width="100%">
+  </picture>
 </p>
 
-
-<h1 align="center">Orion Store</h1>
-
 <p align="center">
-  <a href="https://github.com/RookieEnough/Orion-Store/stargazers"><img src="https://img.shields.io/github/stars/RookieEnough/Orion-Store?logo=github&color=yellow" alt="Stars"></a>
-  <a href="https://github.com/RookieEnough/Orion-Store/network/members"><img src="https://img.shields.io/github/forks/RookieEnough/Orion-Store?logo=github&color=orange" alt="Forks"></a>
+  <a href="https://github.com/RookieEnough/Orion-Store/stargazers"><img src="https://img.shields.io/github/stars/RookieEnough/Orion-Store?style=flat-square&logo=github&color=7478F8&labelColor=E1E0FF" alt="Stars"></a>
+  <a href="https://github.com/RookieEnough/Orion-Store/network/members"><img src="https://img.shields.io/github/forks/RookieEnough/Orion-Store?style=flat-square&logo=github&color=A3E635&labelColor=E1E0FF" alt="Forks"></a>
 </p>
 
 <p align="center">
@@ -16,10 +16,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin">
-  <img src="https://img.shields.io/badge/Jetpack_Compose-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose">
-  <img src="https://img.shields.io/badge/Material_3_Expressive-6750A4?style=for-the-badge&logo=materialdesign&logoColor=white" alt="Material 3 Expressive">
-  <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-chips-dark.svg">
+    <img src="assets/m3-chips-light.svg" alt="Native Kotlin, Jetpack Compose, Material 3 Expressive, zero trackers, open source" height="40">
+  </picture>
 </p>
 
 <p align="center">
@@ -34,13 +34,13 @@
 
 <p align="center">
   <a href="https://github.com/RookieEnough/Orion-Store/releases">
-    <img src="https://img.shields.io/github/v/release/RookieEnough/Orion-Store?style=for-the-badge&logo=github&label=Version&color=6366f1" alt="Latest Version">
+    <img src="https://img.shields.io/github/v/release/RookieEnough/Orion-Store?style=for-the-badge&logo=github&label=Version&color=7478F8&labelColor=3F40C0" alt="Latest Version">
   </a>
   <a href="https://github.com/RookieEnough/Orion-Store/releases">
-    <img src="https://img.shields.io/github/downloads/RookieEnough/Orion-Store/total?style=for-the-badge&logo=cloud&label=Downloads&color=10b981" alt="Total Downloads">
+    <img src="https://img.shields.io/github/downloads/RookieEnough/Orion-Store/total?style=for-the-badge&logo=cloud&label=Downloads&color=A3E635&labelColor=456900" alt="Total Downloads">
   </a>
   <a href="https://orionstore.pages.dev">
-    <img src="https://img.shields.io/badge/Website-orionstore.pages.dev-6366f1?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website">
+    <img src="https://img.shields.io/badge/Website-orionstore.pages.dev-EC4899?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website">
   </a>
 </p>
 
@@ -59,34 +59,43 @@
 <details>
 <summary><b>🔍 Orion does not have any trackers!</b></summary>
 
-Saw a few people asking about the 5 "trackers" flagged in App Manager or TrackerControl, so wanted to clear up what those actually are.
+Saw a few people asking about "trackers" flagged in App Manager or TrackerControl, so wanted to clear up what those actually are.
 
 **What they actually are:**
 
-- App Manager flags manifest activities from libraries, not active surveillance services.
-- These are literally just the 5 internal screen renderers bundled inside the Unity Ads SDK:
-  - **`AdUnitActivity`**: standard video playback screen
-  - **`FullScreenWebViewDisplay`**: webview player for end cards and interactive screens
-  - **`AdUnitTransparentActivity`**: transparent overlay screen
-  - **`AdUnitSoftwareActivity`** and **`AdUnitTransparentSoftwareActivity`**: fallback renderers for devices that struggle with hardware acceleration
-
-It is 1 single ad library split across its rendering components, not 5 separate tracking networks.
+- Scanners flag library components by name, not active surveillance.
+- Everything flagged comes from one library, the Unity Ads SDK behind the optional "Fuel the Code" quest.
+- Since 2.4.5 Orion strips everything from it that Fuel the Code does not need: its app-start hook, its background service, and the advertising ID and ad-measurement permissions. What is left is **`FullScreenWebViewDisplay`**, the screen that plays the video you chose to watch.
 
 **How it works in Orion:**
 
-- It only ever touches memory if you explicitly tap to watch a rewarded video in the "Fuel the Code" quest for XP.
-- There are zero background services, no banner ads, and no user data collected or sent anywhere.
-- If you do not care about the rewarded XP quest, you can block all 5 of them right there in App Manager. The store will still work completely fine.
+- Unity only starts when you tap to watch a rewarded video in "Fuel the Code" for XP. It never runs at app start.
+- There are zero background services, no banner ads, and no advertising ID. Orion collects and sends no user data.
+- If you do not care about the rewarded XP quest, you can block it right there in App Manager. The store will still work completely fine.
 
 </details>
 
-## Orion Store 2.0 · Native at last :rocket:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## <img src="assets/shape-1.svg" height="26" align="top"> Orion Store 2.0 · Native at last
 
 Orion Store has been **rebuilt from the ground up as a native Android app**. The web app has been rewritten in Kotlin and Jetpack Compose on **Material 3 Expressive**, with spring motion, shape morphing, a new storefront and features that were never possible before. Updating from 1.x is a normal install over the old app, and your profile, XP, badges, favorites and settings come along.
 
 Read the full [2.0.0 release notes](RELEASE_NOTES_2.0.0.md).
 
-## Overview :milky_way:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## <img src="assets/shape-2.svg" height="26" align="top"> Overview
 
 Orion Store is an Android-first store client that leans on public sources instead of hiding everything behind a private service layer. The app pulls catalog data from public JSON, resolves releases from GitHub, GitLab, and Codeberg, and keeps the delivery path understandable enough that users can see where things come from and how updates are discovered.
 
@@ -101,28 +110,42 @@ At a glance:
 - Native install, update, and security tooling
 - Skip Android's 24-hour unverified-app wait with built-in wireless install
 
-## What makes Orion different :sparkles:
+### Orbit and Obtainium
+
+Orbit follows an app from the page it is published on and installs the file that page offers. Following a source that way is the same idea as [Obtainium](https://github.com/ImranR98/Obtainium) by Imran Remtulla. Orion is a separate app. It does not include Obtainium's code. The Obtainium name is used so an Obtainium export, an `obtainium://` link, or the public Obtainium apps directory can be brought into Orbit.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## <img src="assets/shape-3.svg" height="26" align="top"> What makes Orion different
 
 The point of Orion is not to pretend infrastructure does not exist. It is to reduce hidden infrastructure and move as much of the important behavior as possible into public, inspectable layers. Catalog entries are plain data. Release sources stay visible. Automation is handled through workflows and workers that can be reviewed, rather than through a black-box backend that users have to trust on faith.
 
 That design carries through the app. Orion tracks installed packages, surfaces updates, manages download state, installs natively, and exposes developer-facing diagnostics for people who want to see what the store is actually doing under the hood.
 
-## Feature atlas :compass:
-
 <p align="center">
-  <img src="assets/features-pill.svg" width="520" alt="Orion Store features">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
 </p>
+
+## <img src="assets/shape-4.svg" height="26" align="top"> Feature atlas
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="assets/feature-release.svg" width="55" alt="Release intelligence icon"><br>
+      <img src="assets/feature-release.svg" width="64" alt="Release intelligence icon"><br>
       <strong>Release intelligence</strong><br>
       Orion reads public metadata, resolves upstream releases, and keeps source provenance visible instead of burying it behind a store-owned backend. It reads your device architecture and recommends the right APK.<br><br>
       <code>Public JSON</code> <code>Mirrors</code> <code>Multi-source parsing</code> <code>ABI detection</code>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/feature-update.svg" width="55" alt="Update center icon"><br>
+      <img src="assets/feature-update.svg" width="64" alt="Update center icon"><br>
       <strong>Update center</strong><br>
       A native download engine with live notifications, a persistent queue, batch updates, and per-app ignore rules you can undo from My Apps.<br><br>
       <code>Foreground downloads</code> <code>Queue</code> <code>Ignored updates</code>
@@ -130,13 +153,13 @@ That design carries through the app. Orion tracks installed packages, surfaces u
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="assets/feature-install.svg" width="55" alt="Native install flow icon"><br>
+      <img src="assets/feature-install.svg" width="64" alt="Native install flow icon"><br>
       <strong>Native install flow</strong><br>
       System installer, a specific installer, Shizuku silent installs, or the built-in <strong>wireless ADB</strong> installer that skips Android's 24-hour wait for unverified apps. Set it up once through a guided notification.<br><br>
       <code>Wireless ADB</code> <code>Shizuku</code> <code>Installer choice</code>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/feature-sentinel.svg" width="55" alt="Sentinel security icon"><br>
+      <img src="assets/feature-sentinel.svg" width="64" alt="Sentinel security icon"><br>
       <strong>Sentinel security</strong><br>
       Security tooling is built into the product: malware scans for installed apps and VirusTotal checks for any APK before it is installed.<br><br>
       <code>Sentinel</code> <code>VirusTotal</code> <code>Threat database</code>
@@ -144,16 +167,44 @@ That design carries through the app. Orion tracks installed packages, surfaces u
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="assets/feature-tools.svg" width="55" alt="Power tools icon"><br>
+      <img src="assets/feature-tools.svg" width="64" alt="Power tools icon"><br>
       <strong>Guardian power tools</strong><br>
       Revoke risky permissions, pull the APK out of any app, and remove or restore system apps without root, rated by the Universal Android Debloater database.<br><br>
       <code>Permissions</code> <code>APK extraction</code> <code>Debloater</code>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/feature-dev.svg" width="55" alt="Developer visibility icon"><br>
+      <img src="assets/feature-dev.svg" width="64" alt="Developer visibility icon"><br>
       <strong>Developer visibility</strong><br>
       Mirror source, cache state, GitHub API quota, package detective, raw metadata explorer and source switching, all in Settings › Developer.<br><br>
       <code>Developer mode</code> <code>Diagnostics</code> <code>Metadata inspection</code>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="assets/feature-ai.svg" width="64" alt="Orion AI icon"><br>
+      <strong>Orion AI</strong><br>
+      Describe the app you need and Orion AI finds it in the catalog, or ask how any Orion feature works. Bring your own Gemini, ChatGPT or Claude key, or run a model right on the phone, offline.<br><br>
+      <code>Streaming chat</code> <code>On-device models</code> <code>One-tap installs</code>
+    </td>
+    <td width="50%" valign="top">
+      <img src="assets/feature-palette.svg" width="64" alt="Palette maker icon"><br>
+      <strong>Palettes, your way</strong><br>
+      Fourteen tuned palettes plus a palette maker: pick a seed color, a style and preview every tone in Light, Dusk, Dark and OLED before you save it.<br><br>
+      <code>Material You</code> <code>Palette maker</code> <code>Four themes</code>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="assets/feature-orbit.svg" width="64" alt="Orbit icon"><br>
+      <strong>Orbit</strong><br>
+      Follow any app from the page it is published on. Paste a repo, a store page or a direct file, and Orion installs it and checks for updates the same way it does for the catalog.<br><br>
+      <code>Your sources</code> <code>Obtainium import</code> <code>Tokens</code>
+    </td>
+    <td width="50%" valign="top">
+      <img src="assets/feature-files.svg" width="64" alt="Installer files icon"><br>
+      <strong>Open the file you have</strong><br>
+      Install with Orion opens an APK, XAPK, APKM, APKS or a zip of APKs from a file manager. A bundle is read from the APKs inside it, and only the pieces for this phone are installed.<br><br>
+      <code>XAPK</code> <code>APKM</code> <code>APKS</code>
     </td>
   </tr>
 </table>
@@ -166,7 +217,14 @@ That design carries through the app. Orion tracks installed packages, surfaces u
 - **Community:** submit apps straight from a GitHub, GitLab or Codeberg repo, build custom bundles, and climb the leaderboard.
 - **Personalization:** light, dark, dusk and OLED themes, custom fonts, pixel pull-to-refresh characters, layouts and visible tabs.
 
-## Screenshots :framed_picture:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## <img src="assets/shape-5.svg" height="26" align="top"> Screenshots
 
 <table>
   <tr>
@@ -195,7 +253,14 @@ That design carries through the app. Orion tracks installed packages, surfaces u
   </a>
 </p>
 
-## Official Developer Badges :trophy:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## <img src="assets/shape-6.svg" height="26" align="top"> Official developer badges
 
 If you are a developer, you can promote that your application is hosted on Orion Store by adding our official badge to your repository's readme or your product website.
 
@@ -208,7 +273,14 @@ If you are a developer, you can promote that your application is hosted on Orion
 2. **Enable Developer Mode**: Once approved and live in the store, open Orion Store and tap the **Orion Store** title in the header 7 times to unlock Developer Mode.
 3. **Copy Integration Code**: Open your app's detail page, expand **Developer Deep Links**, and copy the **Markdown Badge** for your repository's README or the **HTML Badge** for your website.
 
-## How the project is structured :card_file_box:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## <img src="assets/shape-7.svg" height="26" align="top"> How the project is structured
 
 Orion Store 2.0 is a single-activity Jetpack Compose app in MVVM style. A tour of the code lives in [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -239,7 +311,14 @@ Orion Store 2.0 is a single-activity Jetpack Compose app in MVVM style. A tour o
   </tr>
 </table>
 
-## Building :hammer_and_wrench:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## <img src="assets/shape-8.svg" height="26" align="top"> Building
 
 You need **JDK 21** (the JetBrains Runtime bundled with Android Studio works) and the Android SDK.
 
@@ -273,19 +352,40 @@ npm install
 npm run dev
 ```
 
-## Data, workers, and automation :robot:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## <img src="assets/shape-9.svg" height="26" align="top"> Data, workers and automation
 
 Orion is best understood as backend-light rather than backend-free. The catalog and remote configuration are public, but the project still uses a few narrow pieces of infrastructure where they make sense: Cloudflare worker code for leaderboard relay, image proxying, delta aggregation, submission handling and Sentinel support lives in `Orion Legacy/workers/`, and automation runs through GitHub Actions here and in Orion-Data.
 
 That split is intentional. The app stays focused on the client, while the data and automation layers remain separately inspectable.
 
-## Contributing :handshake:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## <img src="assets/shape-1.svg" height="26" align="top"> Contributing
 
 Contributions are welcome, especially in the areas that matter most to a store client: installer reliability, release resolution, UI polish, Android behavior, security tooling, and documentation. If you are changing catalog entries or store metadata, that work usually belongs in the data repository or the submission flow rather than in this client codebase.
 
 Start with [ARCHITECTURE.md](ARCHITECTURE.md), then `ui/MainViewModel.kt`, `data/CatalogProcessor.kt` and `platform/AppTracker.kt` for how the store loads data, resolves releases and installs apps.
 
-## Community :speech_balloon:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## <img src="assets/shape-2.svg" height="26" align="top"> Community
 
 The project lives across a few public surfaces:
 
@@ -296,7 +396,19 @@ The project lives across a few public surfaces:
 - `PayPal`: [paypal.me/RookieEnough](https://paypal.me/RookieEnough)
 - `UPI ID`: `rookiez@ptyes`
 
----
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">
+    <img src="assets/m3-divider-light.svg" alt="" width="100%">
+  </picture>
+</p>
+
+## Credits
+
+- **[Install with Options](https://github.com/zacharee/InstallWithOptions)** by Zachary Wander (MIT): Orion's "Install with options" sheet is inspired by its set of install options. Orion's version is its own implementation on top of `pm install`.
+- **[Dhizuku](https://github.com/iamr0s/Dhizuku)** and the **[Dhizuku API](https://github.com/iamr0s/Dhizuku-API)** by iamr0s (MIT): device owner installs and uninstalls.
+- **[Shizuku](https://github.com/RikkaApps/Shizuku)** by RikkaApps: silent installs and the Guardian tools.
+- **[Universal Android Debloater Next Generation](https://github.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation)**: the package notes and removal ratings behind Debloat.
 
 <p align="center">
   Made with 💜 by <strong>RookieZ</strong>
