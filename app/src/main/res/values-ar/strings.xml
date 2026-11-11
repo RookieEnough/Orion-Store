@@ -3,7 +3,7 @@
     <string name="app_name">Orion Store</string>
     <string name="about_active_mirror">المرآة النشطة</string>
     <string name="about_add_badge">إضافة شارة</string>
-    <string name="about_alias_secured">"" الاسم المستعار محمي""</string>
+    <string name="about_alias_secured">"\" الاسم المستعار محمي\""</string>
     <string name="about_be_the_first_legend_to_rise">كن أول أسطورة تظهر!</string>
     <string name="about_beam_me_up">انقلني إلى الأعلى!</string>
     <string name="about_buy_me_a_coffee">اشتر لي قهوة</string>
@@ -68,7 +68,7 @@
     <string name="about_secrets_safety">الأسرار والأمان</string>
     <string name="about_show_token">عرض الرمز</string>
     <string name="about_signal_lost">انقطعت الإشارة</string>
-    <string name="about_simulate_protocol_debug">"" محاكاة البروتوكول (تصحيح)""</string>
+    <string name="about_simulate_protocol_debug">"\" محاكاة البروتوكول (تصحيح)\""</string>
     <string name="about_source">المصدر: %1$s</string>
     <string name="about_start_your_journey">ابدأ رحلتك</string>
     <string name="about_submitting_as">الإرسال باسم</string>
@@ -146,7 +146,7 @@
     <string name="common_starting_download">بدء التنزيل</string>
     <string name="common_update_v">تحديث · v%1$s</string>
     <string name="community_15_at_least_3">%1$s/15 · 3 على الأقل</string>
-    <string name="community_1_tap_check_releases_page_below">1. اضغط على \\'Check Releases Page\\' أدناه.\n2. انتقل إلى قسم \\'Assets\\' في أحدث إصدار.\n3. انظر إلى اسم ملف APK.\n4. انسخ كلمة مميزة منه.\n\nمثال:\nالملف: "app-release-arm64.apk"\nالكلمة المفتاحية: "app-release"\n\nإذا كان اسم الملف "app.apk" فقط، استخدم "apk".</string>
+    <string name="community_1_tap_check_releases_page_below">1. اضغط على \\\'Check Releases Page\\\' أدناه.\n2. انتقل إلى قسم \\\'Assets\\\' في أحدث إصدار.\n3. انظر إلى اسم ملف APK.\n4. انسخ كلمة مميزة منه.\n\nمثال:\nالملف: \"app-release-arm64.apk\"\nالكلمة المفتاحية: \"app-release\"\n\nإذا كان اسم الملف \"app.apk\" فقط، استخدم \"apk\".</string>
     <string name="community_a_crate_of_coffee_fell_from">سقط صندوق قهوة من طبقة السحابة. تمت استعادة الطاقة.</string>
     <string name="community_a_forum_troll_blocked_the_bridge">سد متنمر في المنتدى الجسر. حظرته للأبد. أصبح الطريق خاليا.</string>
     <string name="community_a_gate_that_only_opens_for">بوابة لا تنفتح إلا للفروق النظيفة. ضغطت 47 عملية إيداع في واحدة. انفتحت وهي تصر.</string>
@@ -160,7 +160,7 @@
     <string name="community_accept_the_quest">قبول المهمة</string>
     <string name="community_ad_blocker_detected">تم اكتشاف مانع إعلانات</string>
     <string name="community_add_screenshot">إضافة لقطة شاشة</string>
-    <string name="community_an_ancient_readme_speaks_installation_it">يقول ملف README قديم: "التثبيت: يعمل ببساطة." لقد كذب. لن تثق في README مرة أخرى.</string>
+    <string name="community_an_ancient_readme_speaks_installation_it">يقول ملف README قديم: \"التثبيت: يعمل ببساطة.\" لقد كذب. لن تثق في README مرة أخرى.</string>
     <string name="community_ancient_comment">تعليق قديم</string>
     <string name="community_app_id">معرف التطبيق</string>
     <string name="community_app_name_and_package_name_detected">تم اكتشاف اسم التطبيق واسم الحزمة بشكل تلقائي.</string>
@@ -261,7 +261,7 @@
     <string name="community_leviathan_untangled">تم فك تشابك اللوياثان!</string>
     <string name="community_lightning_bolt">صاعقة برق</string>
     <string name="community_link_people_straight_to_this_app">وجه الناس مباشرة إلى هذا التطبيق في Orion</string>
-    <string name="community_listen_to_me_the_entropy_legion">""«اسمعني! فيلق الإنتروبيا اخترق الجدار الناري. وهم يفسدون الكود المصدري! لا أستطيع صدهم وحدي. أحتاج منك أن توجه الطاقة ""</string>
+    <string name="community_listen_to_me_the_entropy_legion">"\"«اسمعني! فيلق الإنتروبيا اخترق الجدار الناري. وهم يفسدون الكود المصدري! لا أستطيع صدهم وحدي. أحتاج منك أن توجه الطاقة \""</string>
     <string name="community_loading_boss_assets">جارٍ تحميل ملفات الزعيم...</string>
     <string name="community_loot_found">تم العثور على غنيمة</string>
     <string name="community_lucky_find">ضربة حظ</string>
@@ -358,7 +358,7 @@
     <string name="community_the_ad_was_skipped_watch_it">تم تخطي الإعلان. شاهده حتى النهاية لدعم التطوير.</string>
     <string name="community_the_developer_s_quest">مهمة المطور</string>
     <string name="community_the_diff_gate">بوابة الفروقات</string>
-    <string name="community_the_emperor_s_guards_block_every">حراس الإمبراطور يسدون كل الطرق برسالة "Permission denied". وأنت تبتسم، لأنك أحضرت ADB.</string>
+    <string name="community_the_emperor_s_guards_block_every">حراس الإمبراطور يسدون كل الطرق برسالة \"Permission denied\". وأنت تبتسم، لأنك أحضرت ADB.</string>
     <string name="community_the_forkening">الفوركننغ</string>
     <string name="community_the_forks_you_united_cook_dinner">الفوركات التي جمعتها تطبخ العشاء معا. ولا أحد يتجادل بشأن المسافات والتابات. إنها معجزة.</string>
     <string name="community_the_gate">البوابة</string>
@@ -451,7 +451,7 @@
     <string name="detail_ignore_update">تجاهل التحديث</string>
     <string name="detail_ignore_update_options">خيارات تجاهل التحديث</string>
     <string name="detail_install_microg">تثبيت MicroG</string>
-    <string name="detail_is_no_longer_needed">"" لم يعد مطلوبا.""</string>
+    <string name="detail_is_no_longer_needed">"\" لم يعد مطلوبا.\""</string>
     <string name="detail_keep_for_now">تركه الآن</string>
     <string name="detail_launches_orion_store_directly_to_this">يفتح Orion Store مباشرة على هذا التطبيق</string>
     <string name="detail_learn_about_microg">تعرف على MicroG</string>
@@ -462,7 +462,7 @@
     <string name="detail_more_options">خيارات إضافية</string>
     <string name="detail_never_show_again">لا تظهر مرة أخرى</string>
     <string name="detail_open">فتح %1$s</string>
-    <string name="detail_open_one_item_at_a_time">""افتح عنصرا واحدا في كل مرة لنسخ الروابط وأكواد الشارات لـ ""</string>
+    <string name="detail_open_one_item_at_a_time">"\"افتح عنصرا واحدا في كل مرة لنسخ الروابط وأكواد الشارات لـ \""</string>
     <string name="detail_pending_cleanup">بانتظار التنظيف</string>
     <string name="detail_read_more">قراءة المزيد</string>
     <string name="detail_reclaiming_space_for_you">يتم تحرير مساحة لك</string>
@@ -478,7 +478,7 @@
     <string name="detail_source_safety">المصدر والأمان</string>
     <string name="detail_stop_ignoring_this_update">التوقف عن تجاهل هذا التحديث</string>
     <string name="detail_tap_to_hide">اضغط للإخفاء</string>
-    <string name="detail_the_apk_for">""ملف APK لـ "</string>
+    <string name="detail_the_apk_for">"\"ملف APK لـ "</string>
     <string name="detail_this_app_requires_microg_to_sign">هذا التطبيق يحتاج إلى MicroG لتسجيل الدخول إلى حساب Google الخاص بك. تأكد من تثبيته أولا.</string>
     <string name="detail_until_next_version">حتى الإصدار التالي</string>
     <string name="detail_update_now">التحديث الآن</string>
@@ -860,7 +860,7 @@
     <string name="settings_installs_now_skip_the_24_hour">عمليات التثبيت الآن تتخطى انتظار 24 ساعة</string>
     <string name="settings_janitor_and_saved_apks">Janitor وملفات APK المحفوظة</string>
     <string name="settings_janitor_mode_clears_installed_apk_files">وضع Janitor يمسح ملفات APK المثبتة عند بدء التطبيق في المرة التالية.</string>
-    <string name="settings_last_backup">""آخر نسخة احتياطية ""</string>
+    <string name="settings_last_backup">"\"آخر نسخة احتياطية \""</string>
     <string name="settings_last_loaded">آخر تحميل: %1$s</string>
     <string name="settings_library_and_download_history">المكتبة وسجل التنزيلات</string>
     <string name="settings_load_an_isolated_config_json_url">حمل رابط config.json معزولا بدلا من إعدادات الإنتاج</string>
@@ -1077,7 +1077,7 @@
     <string name="store_1_app">تطبيق واحد</string>
     <string name="store_1_update_ready">تحديث واحد جاهز</string>
     <string name="store_add_to_favorites">إضافة إلى المفضلة</string>
-    <string name="store_apps">""%1$s تطبيقات · ""</string>
+    <string name="store_apps">"\"%1$s تطبيقات · \""</string>
     <string name="store_apps_2">%1$s تطبيقات</string>
     <string name="store_apps_3">%1$s تطبيقات</string>
     <string name="store_create_bundle">إنشاء حزمة</string>
@@ -1192,7 +1192,7 @@
     <string name="xtra_access_required">الوصول مطلوب</string>
     <string name="xtra_adb_watchdog">مراقب ADB</string>
     <string name="xtra_analyzes_file_storage_downloads">يحلّل تخزين الملفات والتنزيلات</string>
-    <string name="xtra_antivirus_scanners_sometimes_use_heuristic_analy">تستخدم برامج فحص الفيروسات أحيانًا التحليل "heuristic"، أي أنها تبحث عن سلوكيات مشبوهة. التطبيقات التي تحتاج أذونات متقدمة (مثل الروت) أو تعدّل تطبيقات أخرى (مثل ReVanced) قد تطلق هذه التحذيرات، حتى لو كانت آمنة تمامًا.</string>
+    <string name="xtra_antivirus_scanners_sometimes_use_heuristic_analy">تستخدم برامج فحص الفيروسات أحيانًا التحليل \"heuristic\"، أي أنها تبحث عن سلوكيات مشبوهة. التطبيقات التي تحتاج أذونات متقدمة (مثل الروت) أو تعدّل تطبيقات أخرى (مثل ReVanced) قد تطلق هذه التحذيرات، حتى لو كانت آمنة تمامًا.</string>
     <string name="xtra_auditing_network">جارٍ تدقيق الشبكة...</string>
     <string name="xtra_bribing_the_cpu">جارٍ رشوة المعالج...</string>
     <string name="xtra_calculating_pi">جارٍ حساب قيمة باي...</string>
@@ -1680,7 +1680,7 @@
     <string name="apkinstall_16kb_pages">صفحات 16 KB</string>
     <string name="apkinstall_16kb_ready">جاهز لـ 16 KB</string>
     <string name="apkinstall_16kb_ready_sub">كل مكتبة 64-bit تعمل على هواتف Android 15+ بصفحات ذاكرة 16 KB</string>
-    <string name="apkinstall_allow_from_source">فعّل "السماح من هذا المصدر" لـ Orion Store، ثم عد واضغط تثبيت مرة أخرى.</string>
+    <string name="apkinstall_allow_from_source">فعّل \"السماح من هذا المصدر\" لـ Orion Store، ثم عد واضغط تثبيت مرة أخرى.</string>
     <string name="apkinstall_allow_orion_install">اسمح لـ Orion بتثبيت التطبيقات</string>
     <string name="apkinstall_android_api">Android %1$s (API %2$d)</string>
     <string name="apkinstall_any">أي</string>
@@ -2011,7 +2011,7 @@
     <string name="logic_fail_no_reason">لم يذكر Android السبب.</string>
     <string name="logic_fail_old_android_body">هذا %1$s يحتاج إصدار Android أحدث مما في هاتفك.</string>
     <string name="logic_fail_old_android_title">إصدار Android لديك قديم جدًا لهذا</string>
-    <string name="logic_fail_restricted_body">إعداد في الهاتف أوقفه. على Xiaomi، فعّل "التثبيت عبر USB" في خيارات المطوّر. قواعد العمل أو الأهل قد تحجب التثبيت أيضًا.</string>
+    <string name="logic_fail_restricted_body">إعداد في الهاتف أوقفه. على Xiaomi، فعّل \"التثبيت عبر USB\" في خيارات المطوّر. قواعد العمل أو الأهل قد تحجب التثبيت أيضًا.</string>
     <string name="logic_fail_restricted_title">حجب هاتفك التثبيت</string>
     <string name="logic_fail_shizuku_body">التثبيت الصامت يحتاج Shizuku يعمل ومسموحًا به. افتح Shizuku، شغّله، ثم حاول مرة أخرى.</string>
     <string name="logic_fail_shizuku_title">Shizuku غير جاهز</string>

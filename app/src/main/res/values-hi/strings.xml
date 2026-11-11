@@ -146,8 +146,8 @@
     <string name="common_starting_download">डाउनलोड शुरू हो रहा है</string>
     <string name="common_update_v">अपडेट · v%1$s</string>
     <string name="community_15_at_least_3">%1$s/15 · कम से कम 3</string>
-    <string name="community_1_tap_check_releases_page_below">1. नीचे \\'Check Releases Page\\' पर टैप करें।
-2. ताज़ा वर्शन के \\'Assets\\' सेक्शन में जाएँ।
+    <string name="community_1_tap_check_releases_page_below">1. नीचे \\\'Check Releases Page\\\' पर टैप करें।
+2. ताज़ा वर्शन के \\\'Assets\\\' सेक्शन में जाएँ।
 3. APK फ़ाइल का नाम देखें।
 4. उसमें से कोई ख़ास शब्द कॉपी करें।
 
@@ -291,7 +291,7 @@
     <string name="community_noodle_tentacles">नूडल टेंटेकल्स</string>
     <string name="community_not_yet">अभी नहीं</string>
     <string name="community_null_throne">नल थ्रोन</string>
-    <string name="community_obtained_the_crystal_of_uptime_stability">\\'अपटाइम क्रिस्टल\\' मिल गया. स्टेबिलिटी +500%%.</string>
+    <string name="community_obtained_the_crystal_of_uptime_stability">\\\'अपटाइम क्रिस्टल\\\' मिल गया. स्टेबिलिटी +500%%.</string>
     <string name="community_obtainium_export">Obtainium एक्सपोर्ट</string>
     <string name="community_obtainium_json">Obtainium JSON</string>
     <string name="community_of_unlocked">%2$s में से %1$s अनलॉक हुए</string>
@@ -409,10 +409,10 @@
     <string name="community_you_broke_the_seal_of_greed">आपने लालच की मुहर तोड़ दी. सब कुछ मुफ़्त रहेगा.</string>
     <string name="community_you_broke_the_seal_of_neglect">आपने लापरवाही की मुहर तोड़ दी. अपडेट फिर से आने लगे.</string>
     <string name="community_you_climb_using_answers_marked_duplicate">आप duplicate मार्क किए जवाबों के सहारे चढ़ते हैं. हर पकड़ off-topic कहकर बंद है.</string>
-    <string name="community_you_found_the_shield_of_syntax">आपको \\'Shield of Syntax\\' मिली. कंपाइलेशन मज़बूती +20%%.</string>
+    <string name="community_you_found_the_shield_of_syntax">आपको \\\'Shield of Syntax\\\' मिली. कंपाइलेशन मज़बूती +20%%.</string>
     <string name="community_you_harnessed_the_power_of_raw">आपने कच्ची बिजली की ताक़त को क़ाबू में किया.</string>
     <string name="community_you_helped_a_lost_pull_request">आपने एक भटकी हुई pull request को उसका reviewer ढूँढने में मदद की.</string>
-    <string name="community_you_learned_dark_mode_vision_you">आपने \\'Dark Mode Vision\\' सीख लिया. अब आप गहरे कोड में भी साफ़ देख सकते हैं.</string>
+    <string name="community_you_learned_dark_mode_vision_you">आपने \\\'Dark Mode Vision\\\' सीख लिया. अब आप गहरे कोड में भी साफ़ देख सकते हैं.</string>
     <string name="community_you_open_the_file_the_scrollbar">आप फ़ाइल खोलते हैं. स्क्रॉलबार सिर्फ़ एक pixel ऊँचा है. आप उँगलियाँ चटकाते हैं.</string>
     <string name="community_you_open_your_eyes_the_digital">आप आँखें खोलते हैं. डिजिटल दुनिया को बचाना है. आप एक ज़ंग लगा कीबोर्ड उठाते हैं.</string>
     <string name="community_you_patched_a_massive_leak_in">आपने बाँध की एक बड़ी दरार भर दी. घाटी बच गई.</string>
@@ -807,7 +807,7 @@
     <string name="settings_ask_every_time">हर बार पूछें</string>
     <string name="settings_auto_cleanup_installer">ऑटो-क्लीनअप इंस्टॉलर</string>
     <string name="settings_auto_update_apps">ऐप्स ऑटो-अपडेट करें</string>
-    <string name="settings_auto_update_queues_new_versions_whenever">कैटलॉग रिफ्रेश होते ही ऑटो-अपडेट नए वर्शन कतार में लगा देता है। \\'सिर्फ़ Wi-Fi\\' वाला ऑप्शन मोबाइल डेटा पर डाउनलोड रोक देता है।</string>
+    <string name="settings_auto_update_queues_new_versions_whenever">कैटलॉग रिफ्रेश होते ही ऑटो-अपडेट नए वर्शन कतार में लगा देता है। \\\'सिर्फ़ Wi-Fi\\\' वाला ऑप्शन मोबाइल डेटा पर डाउनलोड रोक देता है।</string>
     <string name="settings_back_up">बैकअप लें</string>
     <string name="settings_back_up_now">अभी बैकअप लें</string>
     <string name="settings_backed_up_just_now">अभी-अभी बैकअप हुआ</string>
@@ -819,7 +819,7 @@
     <string name="settings_check_your_files">अपनी फ़ाइलें चेक करें</string>
     <string name="settings_choose_a_ttf_otf_or_woff2">एक TTF, OTF, या WOFF2 फ़ाइल चुनें।</string>
     <string name="settings_choose_installer">इंस्टॉलर चुनें</string>
-    <string name="settings_classic_rows_preview_each_app_s">क्लासिक रोज़ में हर ऐप की जानकारी का प्रीव्यू दिखता है, पूरा पढ़ने के लिए \\'और देखें\\' पर टैप करें</string>
+    <string name="settings_classic_rows_preview_each_app_s">क्लासिक रोज़ में हर ऐप की जानकारी का प्रीव्यू दिखता है, पूरा पढ़ने के लिए \\\'और देखें\\\' पर टैप करें</string>
     <string name="settings_clean_now">अभी साफ़ करें</string>
     <string name="settings_clear_system_cache">सिस्टम कैश साफ़ करें</string>
     <string name="settings_close_developer_options_from_the_bottom">काम हो जाए तो इस पेज के सबसे नीचे से डेवलपर ऑप्शन बंद कर दें।</string>
@@ -1689,7 +1689,7 @@
     <string name="apkinstall_16kb_pages">16 KB पेज</string>
     <string name="apkinstall_16kb_ready">16 KB के लिए तैयार</string>
     <string name="apkinstall_16kb_ready_sub">हर 64-बिट लाइब्रेरी Android 15+ वाले उन फ़ोन पर काम करती है जिनमें 16 KB मेमोरी पेज हैं</string>
-    <string name="apkinstall_allow_from_source">Orion Store के लिए "इस सोर्स से इजाज़त दें" चालू करें, फिर वापस आकर फिर से इंस्टॉल पर टैप करें.</string>
+    <string name="apkinstall_allow_from_source">Orion Store के लिए \"इस सोर्स से इजाज़त दें\" चालू करें, फिर वापस आकर फिर से इंस्टॉल पर टैप करें.</string>
     <string name="apkinstall_allow_orion_install">Orion को ऐप्स इंस्टॉल करने दें</string>
     <string name="apkinstall_android_api">Android %1$s (API %2$d)</string>
     <string name="apkinstall_any">कोई भी</string>
@@ -2020,7 +2020,7 @@
     <string name="logic_fail_no_reason">Android ने वजह नहीं बताई.</string>
     <string name="logic_fail_old_android_body">इस %1$s को आपके फ़ोन से नया Android वर्शन चाहिए.</string>
     <string name="logic_fail_old_android_title">आपका Android इसके लिए बहुत पुराना है</string>
-    <string name="logic_fail_restricted_body">फ़ोन की किसी सेटिंग ने इसे रोक दिया. Xiaomi पर, डेवलपर ऑप्शन में "Install via USB" चालू करें. Work या माता-पिता के नियम भी इंस्टॉल रोक सकते हैं.</string>
+    <string name="logic_fail_restricted_body">फ़ोन की किसी सेटिंग ने इसे रोक दिया. Xiaomi पर, डेवलपर ऑप्शन में \"Install via USB\" चालू करें. Work या माता-पिता के नियम भी इंस्टॉल रोक सकते हैं.</string>
     <string name="logic_fail_restricted_title">आपके फ़ोन ने इंस्टॉल रोक दिया</string>
     <string name="logic_fail_shizuku_body">चुपचाप इंस्टॉल के लिए Shizuku का चलना और इजाज़त मिला होना ज़रूरी है. Shizuku खोलें, उसे शुरू करें, फिर से कोशिश करें.</string>
     <string name="logic_fail_shizuku_title">Shizuku तैयार नहीं है</string>

@@ -3,7 +3,7 @@
     <string name="app_name">Orion Store</string>
     <string name="about_active_mirror">Espejo activo</string>
     <string name="about_add_badge">Añadir insignia</string>
-    <string name="about_alias_secured">"" Alias asegurado""</string>
+    <string name="about_alias_secured">"\" Alias asegurado\""</string>
     <string name="about_be_the_first_legend_to_rise">¡Sé la primera leyenda en alzarse!</string>
     <string name="about_beam_me_up">¡Teletranspórtame!</string>
     <string name="about_buy_me_a_coffee">Invítame a un café</string>
@@ -68,7 +68,7 @@
     <string name="about_secrets_safety">Secretos y seguridad</string>
     <string name="about_show_token">Mostrar token</string>
     <string name="about_signal_lost">Señal perdida</string>
-    <string name="about_simulate_protocol_debug">"" Simular protocolo (depuración)""</string>
+    <string name="about_simulate_protocol_debug">"\" Simular protocolo (depuración)\""</string>
     <string name="about_source">Fuente: %1$s</string>
     <string name="about_start_your_journey">Empieza tu aventura</string>
     <string name="about_submitting_as">Enviando como</string>
@@ -146,7 +146,7 @@
     <string name="common_starting_download">Iniciando descarga</string>
     <string name="common_update_v">Actualizar · v%1$s</string>
     <string name="community_15_at_least_3">%1$s/15 · al menos 3</string>
-    <string name="community_1_tap_check_releases_page_below">1. Toca \\'Ver página de versiones\\' abajo.\n2. Ve a la sección \\'Assets\\' de la última versión.\n3. Mira el nombre del archivo APK.\n4. Copia una palabra única de ese nombre.\n\nEJEMPLO:\nArchivo: "app-release-arm64.apk"\nPalabra clave: "app-release"\n\nSi el archivo es solo "app.apk", usa simplemente "apk".</string>
+    <string name="community_1_tap_check_releases_page_below">1. Toca \\\'Ver página de versiones\\\' abajo.\n2. Ve a la sección \\\'Assets\\\' de la última versión.\n3. Mira el nombre del archivo APK.\n4. Copia una palabra única de ese nombre.\n\nEJEMPLO:\nArchivo: \"app-release-arm64.apk\"\nPalabra clave: \"app-release\"\n\nSi el archivo es solo \"app.apk\", usa simplemente \"apk\".</string>
     <string name="community_a_crate_of_coffee_fell_from">Una caja de café ha caído de la capa de nubes. Energía recuperada.</string>
     <string name="community_a_forum_troll_blocked_the_bridge">Un trol del foro ha bloqueado el puente. Lo has baneado para siempre. El camino está libre.</string>
     <string name="community_a_gate_that_only_opens_for">Una puerta que solo se abre con cambios limpios. Juntas 47 commits en uno solo. Se abre chirriando.</string>
@@ -160,7 +160,7 @@
     <string name="community_accept_the_quest">ACEPTAR LA MISIÓN</string>
     <string name="community_ad_blocker_detected">Bloqueador de anuncios detectado</string>
     <string name="community_add_screenshot">Añadir captura de pantalla</string>
-    <string name="community_an_ancient_readme_speaks_installation_it">Un README antiguo dice: "Instalación: simplemente funciona". Mentía. Nunca más volverás a fiarte de un README.</string>
+    <string name="community_an_ancient_readme_speaks_installation_it">Un README antiguo dice: \"Instalación: simplemente funciona\". Mentía. Nunca más volverás a fiarte de un README.</string>
     <string name="community_ancient_comment">Comentario antiguo</string>
     <string name="community_app_id">ID de la app</string>
     <string name="community_app_name_and_package_name_detected">Nombre de la app y nombre del paquete detectados automáticamente.</string>
@@ -261,7 +261,7 @@
     <string name="community_leviathan_untangled">¡Leviatán desenredado!</string>
     <string name="community_lightning_bolt">Rayo</string>
     <string name="community_link_people_straight_to_this_app">Enlazar directamente a esta app en Orion</string>
-    <string name="community_listen_to_me_the_entropy_legion">""“¡Escúchame! La Legión de la Entropía ha roto el cortafuegos. ¡Están corrompiendo el código fuente! No puedo contenerlos solo. Necesito que canalices la energía ""</string>
+    <string name="community_listen_to_me_the_entropy_legion">"\"“¡Escúchame! La Legión de la Entropía ha roto el cortafuegos. ¡Están corrompiendo el código fuente! No puedo contenerlos solo. Necesito que canalices la energía \""</string>
     <string name="community_loading_boss_assets">Cargando los recursos del jefe...</string>
     <string name="community_loot_found">Botín encontrado</string>
     <string name="community_lucky_find">Hallazgo afortunado</string>
@@ -282,7 +282,7 @@
     <string name="community_noodle_tentacles">Tentáculos de fideos</string>
     <string name="community_not_yet">Todavía no</string>
     <string name="community_null_throne">Trono Nulo</string>
-    <string name="community_obtained_the_crystal_of_uptime_stability">Has conseguido el \\'Cristal de Uptime\\'. Estabilidad +500%%.</string>
+    <string name="community_obtained_the_crystal_of_uptime_stability">Has conseguido el \\\'Cristal de Uptime\\\'. Estabilidad +500%%.</string>
     <string name="community_obtainium_export">Exportación de Obtainium</string>
     <string name="community_obtainium_json">Obtainium JSON</string>
     <string name="community_of_unlocked">%1$s de %2$s desbloqueadas</string>
@@ -451,7 +451,7 @@
     <string name="detail_ignore_update">Ignorar actualización</string>
     <string name="detail_ignore_update_options">Opciones para ignorar la actualización</string>
     <string name="detail_install_microg">Instalar MicroG</string>
-    <string name="detail_is_no_longer_needed">"" ya no es necesario.""</string>
+    <string name="detail_is_no_longer_needed">"\" ya no es necesario.\""</string>
     <string name="detail_keep_for_now">Mantener por ahora</string>
     <string name="detail_launches_orion_store_directly_to_this">Abre Orion Store directamente en esta app</string>
     <string name="detail_learn_about_microg">Más información sobre MicroG</string>
@@ -462,7 +462,7 @@
     <string name="detail_more_options">Más opciones</string>
     <string name="detail_never_show_again">No volver a mostrar</string>
     <string name="detail_open">Abrir %1$s</string>
-    <string name="detail_open_one_item_at_a_time">""Abre un elemento cada vez para copiar enlaces y fragmentos de insignia de ""</string>
+    <string name="detail_open_one_item_at_a_time">"\"Abre un elemento cada vez para copiar enlaces y fragmentos de insignia de \""</string>
     <string name="detail_pending_cleanup">Limpieza pendiente</string>
     <string name="detail_read_more">Leer más</string>
     <string name="detail_reclaiming_space_for_you">Liberando espacio para ti</string>
@@ -478,7 +478,7 @@
     <string name="detail_source_safety">Origen y seguridad</string>
     <string name="detail_stop_ignoring_this_update">Dejar de ignorar esta actualización</string>
     <string name="detail_tap_to_hide">Toca para ocultar</string>
-    <string name="detail_the_apk_for">""El APK de ""</string>
+    <string name="detail_the_apk_for">"\"El APK de \""</string>
     <string name="detail_this_app_requires_microg_to_sign">Esta app necesita MicroG para iniciar sesión en tu cuenta de Google. Asegúrate de tenerlo instalado antes.</string>
     <string name="detail_until_next_version">Hasta la próxima versión</string>
     <string name="detail_update_now">Actualizar ahora</string>
@@ -860,7 +860,7 @@
     <string name="settings_installs_now_skip_the_24_hour">Las instalaciones ahora se saltan la espera de 24 horas</string>
     <string name="settings_janitor_and_saved_apks">Janitor y APK guardados</string>
     <string name="settings_janitor_mode_clears_installed_apk_files">El modo Janitor borra los archivos APK instalados la próxima vez que abras la app.</string>
-    <string name="settings_last_backup">""Última copia ""</string>
+    <string name="settings_last_backup">"\"Última copia \""</string>
     <string name="settings_last_loaded">Última carga: %1$s</string>
     <string name="settings_library_and_download_history">Biblioteca e historial de descargas</string>
     <string name="settings_load_an_isolated_config_json_url">Cargar una URL de config.json aislada en vez de la configuración de producción</string>
@@ -1062,7 +1062,7 @@
     <string name="sheets_the_web_app_you_knew_has">La app web que conocías se ha rehecho desde cero como una app de Android de verdad. El mismo Orion, con un motor totalmente nuevo.</string>
     <string name="sheets_tip_one_scan_may_need_report">Consejo: un escaneo puede necesitar llamadas de informe, subida y comprobación. Reserva tu cuota gratuita para las apps que de verdad vayas a instalar.</string>
     <string name="sheets_tip_scan_only_apps_you_plan">Consejo: escanea solo las apps que vayas a instalar.</string>
-    <string name="sheets_toggle_on_modern_ui_to_unlock">Activa "Modern UI" para desbloquear el nuevo diseño</string>
+    <string name="sheets_toggle_on_modern_ui_to_unlock">Activa \"Modern UI\" para desbloquear el nuevo diseño</string>
     <string name="sheets_try_new_ui">Probar la nueva interfaz</string>
     <string name="sheets_update_issue_ready">Problema de actualización listo</string>
     <string name="sheets_use_sparingly">Úsalo con moderación</string>
@@ -1077,7 +1077,7 @@
     <string name="store_1_app">1 app</string>
     <string name="store_1_update_ready">1 actualización lista</string>
     <string name="store_add_to_favorites">Añadir a favoritos</string>
-    <string name="store_apps">""%1$s apps · ""</string>
+    <string name="store_apps">"\"%1$s apps · \""</string>
     <string name="store_apps_2">%1$s apps</string>
     <string name="store_apps_3">%1$s apps</string>
     <string name="store_create_bundle">Crear paquete</string>
