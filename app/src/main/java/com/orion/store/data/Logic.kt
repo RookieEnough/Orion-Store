@@ -249,11 +249,11 @@ enum class Arch { ARM64, ARMv7, x64, x86, Universal, Unknown }
 fun normalizeArch(arch: String?): Arch {
     val l = arch?.lowercase()?.trim() ?: return Arch.Unknown
     return when {
-        "arm64" in l || "aarch64" in l || "v8a" in l -> Arch.ARM64
-        "armeabi" in l || "armv7" in l || "v7a" in l || l == "arm" -> Arch.ARMv7
-        "x86_64" in l || "x64" in l || "amd64" in l -> Arch.x64
+        "arm64" in l || "aarch64" in l || "v8a" in l || "armv8" in l || "arm-v8" in l || "arm8" in l -> Arch.ARM64
+        "armeabi" in l || "armv7" in l || "arm-v7" in l || "arm7" in l || "v7a" in l || l == "arm" -> Arch.ARMv7
+        "x86_64" in l || "x86-64" in l || "x64" in l || "amd64" in l -> Arch.x64
         "x86" in l || "i386" in l || "i686" in l -> Arch.x86
-        "universal" in l || "all" in l || l == "any" -> Arch.Universal
+        "universal" in l || "all" in l || l == "any" || "tv" in l -> Arch.Universal
         else -> Arch.Unknown
     }
 }
@@ -723,7 +723,7 @@ fun releaseHighlights(body: String): List<ReleaseSection> {
             l.startsWith("- ") || l.startsWith("* ") -> {
                 val t = l.drop(2).trim()
                 val head = BOLD_LEAD.find(t)?.groupValues?.get(1) ?: t.substringBefore(". ")
-                val line = plainNote(head).trimEnd(':', '.')
+                val line = plainNote(head).trimEnd(':', '.').trim()
                 if (line.isNotEmpty()) items += if (line.length <= 90) line else line.take(88).substringBeforeLast(' ') + "…"
             }
         }

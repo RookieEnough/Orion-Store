@@ -36,6 +36,10 @@ import java.net.URLEncoder
     val includePre: Boolean = false,
     /** Obtainium's versionExtractionRegEx: the version is read from the release tag with it (first group, or the whole match). */
     val versionRegex: String = "",
+    /** Obtainium's filterReleaseTitlesByRegEx: only releases whose titles match. */
+    val releaseFilter: String = "",
+    /** Obtainium's verifyLatestTag: strictly follow the release carrying GitHub's Latest badge. */
+    val verifyLatestTag: Boolean = false,
     val screenshots: List<String> = emptyList(),
     val category: String = "Utility",
     /** Labels the user adds, the same idea as Obtainium's categories. */
@@ -224,9 +228,9 @@ object Orbit {
     private fun CatalogProcessor.Release.pastLatest(latest: String): CatalogProcessor.Release {
         if (tag == latest) return this
         val file = assets.firstOrNull()?.first.orEmpty()
-        if (CatalogProcessor.detectStream(file, tag, prerelease) != "Stable") return this
+        if (CatalogProcessor.detectStream(file, tag, prerelease, name) != "Stable") return this
         val newer = compareVersions(CatalogProcessor.extractVersion(tag) ?: tag, CatalogProcessor.extractVersion(latest) ?: latest) > 0
-        return if (newer) CatalogProcessor.Release(tag, name, prerelease, date, assets, downloads, "Nightly") else this
+        return if (newer) CatalogProcessor.Release(tag, name, true, date, assets, downloads, "Nightly") else this
     }
 
     /** GitHub and Codeberg releases. An APK linked from the release note counts when nothing was uploaded as an asset. */
@@ -625,14 +629,22 @@ object Orbit {
     fun versionsOf(o: OrbitApp, rel: List<CatalogProcessor.Release>): List<VersionOption> {
         val filter = o.apkFilter.takeIf { it.isNotBlank() }?.let { runCatching { Regex(it, RegexOption.IGNORE_CASE) }.getOrNull() }
         val vre = o.versionRegex.takeIf { it.isNotBlank() }?.let { runCatching { Regex(it) }.getOrNull() }
-        return rel.filter { o.includePre || !it.prerelease || channelBuild(it) }.mapNotNull { r ->
+        val rFilter = o.releaseFilter.takeIf { it.isNotBlank() }?.let { runCatching { Regex(it, RegexOption.IGNORE_CASE) }.getOrNull() }
+        return rel.filter { r ->
+            if (rFilter != null && !rFilter.containsMatchIn(r.name) && !rFilter.containsMatchIn(r.tag)) return@filter false
+            if (o.verifyLatestTag && !o.includePre) {
+                val stream = r.channel ?: CatalogProcessor.detectStream(r.assets.firstOrNull()?.first.orEmpty(), r.tag, r.prerelease, r.name)
+                if (stream != "Stable" || r.prerelease) return@filter false
+            }
+            o.includePre || !r.prerelease || channelBuild(r)
+        }.mapNotNull { r ->
             val apks = r.assets.filter { (n, u) -> pkgFile(n) || pkgFile(u) }
                 .filter { (n, _) -> filter == null || filter.containsMatchIn(n) }
             if (apks.isEmpty()) return@mapNotNull null
             val fromTag = vre?.find(r.tag)?.let { m -> m.groupValues.getOrNull(1)?.ifEmpty { null } ?: m.value }
             val ver = fromTag ?: CatalogProcessor.extractVersion(r.tag) ?: r.tag.removePrefix("v").ifBlank { null } ?: CatalogProcessor.extractVersion(apks[0].first) ?: r.date.substringBefore('T')
-            val variants = apks.map { (n, u, s) -> AppVariant(CatalogProcessor.determineArch(n), u, s) }.distinctBy { it.url }
-            VersionOption(r.channel ?: CatalogProcessor.detectStream(apks[0].first, r.tag, r.prerelease), ver, r.date.substringBefore('T'), variants, r.tag)
+            val variants = apks.map { (n, u, s) -> AppVariant(CatalogProcessor.determineArch(n), u, s, n) }.distinctBy { it.url }
+            VersionOption(r.channel ?: CatalogProcessor.detectStream(apks[0].first, r.tag, r.prerelease, r.name), ver, r.date.substringBefore('T'), variants, r.tag)
         }.take(15)
     }
 
@@ -722,9 +734,12 @@ object Orbit {
             return (v as? JsonPrimitive)?.let { it.booleanOrNull == true || it.contentOrNull == "true" } == true
         }
         val age = x("minimumUpdateAgeDays").ifEmpty { o.str("minimumUpdateAgeDays") }.toIntOrNull() ?: -1
+        val relFilter = x("filterReleaseTitlesByRegEx").ifEmpty { x("releaseFilter") }
+        val vLatest = flag("verifyLatestTag") || flag("verifyLatestVersion")
         return OrbitApp(idFor(url), url, name = o.str("name").ifBlank { x("appName") }, author = o.str("author").ifBlank { x("appAuthor") },
             icon = icon, about = about.ifBlank { x("about") }, packageName = id.takeIf { '.' in it && ' ' !in it },
-            apkFilter = x("apkFilterRegEx"), includePre = x("includePrereleases") == "true", versionRegex = x("versionExtractionRegEx"), tags = tags, addedAt = now,
+            apkFilter = x("apkFilterRegEx"), includePre = x("includePrereleases") == "true", versionRegex = x("versionExtractionRegEx"),
+            releaseFilter = relFilter, verifyLatestTag = vLatest, tags = tags, addedAt = now,
             trackOnly = flag("trackOnly"), minAgeDays = age)
     }
 
@@ -774,6 +789,7 @@ object Orbit {
                 put("additionalSettings", json.encodeToString(JsonObject.serializer(), buildJsonObject {
                     if (o.apkFilter.isNotBlank()) put("apkFilterRegEx", o.apkFilter); if (o.includePre) put("includePrereleases", true)
                     if (o.versionRegex.isNotBlank()) put("versionExtractionRegEx", o.versionRegex); if (o.about.isNotBlank()) put("about", o.about)
+                    if (o.releaseFilter.isNotBlank()) put("filterReleaseTitlesByRegEx", o.releaseFilter); if (o.verifyLatestTag) put("verifyLatestTag", true)
                     if (o.trackOnly) put("trackOnly", true); if (o.minAgeDays >= 0) put("minimumUpdateAgeDays", o.minAgeDays)
                 }))
             }
@@ -1008,6 +1024,33 @@ object Orbit {
         if (a.repoUrl?.trim()?.trimEnd('/')?.equals(repo, true) == true) return true
         val path = parseRepoSource(o.url)?.repoPath?.lowercase() ?: return false
         return listOf(a.githubRepo, a.gitlabRepo, a.codebergRepo).any { it?.trim()?.trimEnd('/')?.lowercase() == path }
+    }
+
+    /** Pre-computes library twins for all Orbit entries in O(N + M) using indexed lookups, avoiding O(N * M) per-card scans. */
+    fun findTwins(orbit: List<OrbitApp>, apps: List<AppItem>): Map<String, AppItem> {
+        if (apps.isEmpty() || orbit.isEmpty()) return emptyMap()
+        val byPkg = HashMap<String, AppItem>(apps.size)
+        val byRepo = HashMap<String, AppItem>(apps.size)
+        val byPath = HashMap<String, AppItem>(apps.size)
+        for (a in apps) {
+            if (owns(a.id)) continue
+            a.packageName?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { byPkg.putIfAbsent(it, a) }
+            a.repoUrl?.trim()?.trimEnd('/')?.lowercase()?.takeIf { it.isNotEmpty() }?.let { byRepo.putIfAbsent(it, a) }
+            a.githubRepo?.trim()?.trimEnd('/')?.lowercase()?.takeIf { it.isNotEmpty() }?.let { byPath.putIfAbsent(it, a) }
+            a.gitlabRepo?.trim()?.trimEnd('/')?.lowercase()?.takeIf { it.isNotEmpty() }?.let { byPath.putIfAbsent(it, a) }
+            a.codebergRepo?.trim()?.trimEnd('/')?.lowercase()?.takeIf { it.isNotEmpty() }?.let { byPath.putIfAbsent(it, a) }
+        }
+        val result = HashMap<String, AppItem>(orbit.size)
+        for (o in orbit) {
+            val pkg = o.packageName?.trim()?.lowercase()
+            val repo = o.url.trim().trimEnd('/').lowercase()
+            val path = parseRepoSource(o.url)?.repoPath?.lowercase()
+            val match = (if (!pkg.isNullOrEmpty()) byPkg[pkg] else null)
+                ?: byRepo[repo]
+                ?: (if (path != null) byPath[path] else null)
+            if (match != null) result[o.id] = match
+        }
+        return result
     }
 }
 

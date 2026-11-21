@@ -663,8 +663,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 set { it.copy(appStreams = it.appStreams + (app.id to meta.second)) }
-                val fromStream = app.availableVersions.firstOrNull { it.type == meta.second }?.variants?.firstOrNull()?.url
-                val target = url ?: fromStream ?: app.variants.firstOrNull()?.url ?: app.downloadUrl
+                val candidateVariants = app.availableVersions.firstOrNull { it.type == meta.second }?.variants.orEmpty().ifEmpty { app.variants }
+                val (rawArch, abis) = tracker.deviceArch()
+                val best = candidateVariants.firstOrNull { archCompat(it.arch, rawArch, abis).second }?.url
+                    ?: candidateVariants.firstOrNull { archCompat(it.arch, rawArch, abis).first }?.url
+                    ?: candidateVariants.firstOrNull()?.url
+                val target = url ?: best ?: app.downloadUrl
                 if (target.isEmpty() || target == "#") return@launch
                 if ((auto && (s.wifiOnly || s.autoWifiOnly) || !auto && s.wifiOnly && !allowMobile) && !onWifi()) {
                     if (!auto) { wifiAsk = app to url; haptic(H.WARNING) }

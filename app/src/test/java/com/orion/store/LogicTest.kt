@@ -374,6 +374,41 @@ class LogicTest {
         assertEquals(listOf("1"), held.offered(2, now).map { it.version })
         val asset = """{"assets":[{"name":"app.apk","url":"https://api.github.com/repos/o/r/releases/assets/5"}]}"""
         assertEquals("https://api.github.com/repos/o/r/releases/assets/5", githubAssetApiUrl(json.parseToJsonElement(asset), "app.apk"))
+
+        // Revera multi-variant & architecture detection
+        assertEquals("ARMv7", CatalogProcessor.determineArch("Revera-1.0.8-ARMv7.apk"))
+        assertEquals("ARM64", CatalogProcessor.determineArch("Revera-1.0.8-ARMv8.apk"))
+        assertEquals("TV", CatalogProcessor.determineArch("Revera-1.0.8-TV.apk"))
+        assertEquals("Universal", CatalogProcessor.determineArch("Revera-1.0.8-universal.apk"))
+        val reveraAssets = listOf(
+            Triple("Revera-1.0.8-ARMv7.apk", "https://x/armv7.apk", 100L),
+            Triple("Revera-1.0.8-ARMv8.apk", "https://x/armv8.apk", 110L),
+            Triple("Revera-1.0.8-TV.apk", "https://x/tv.apk", 105L),
+            Triple("Revera-1.0.8-universal.apk", "https://x/uni.apk", 200L)
+        )
+        val reveraRel = CatalogProcessor.Release("v1.0.8", "Revera 1.0.8", false, "2026-11-20", reveraAssets)
+        val reveraOpts = Orbit.versionsOf(OrbitApp("orbit:revera", "https://github.com/caruno-git/Revera"), listOf(reveraRel)).single()
+        assertEquals(4, reveraOpts.variants.size)
+        assertEquals(listOf("ARMv7", "ARM64", "TV", "Universal"), reveraOpts.variants.map { it.arch })
+        assertEquals(listOf("Revera-1.0.8-ARMv7.apk", "Revera-1.0.8-ARMv8.apk", "Revera-1.0.8-TV.apk", "Revera-1.0.8-universal.apk"), reveraOpts.variants.map { it.name })
+
+        // Issue 212: Nightly in release title & release title filter
+        assertEquals("Nightly", CatalogProcessor.detectStream("Bravearm64.apk", "v1.102.3", false, "Nightly v1.102.3"))
+        assertEquals("Beta", CatalogProcessor.detectStream("Bravearm64.apk", "v1.101.47", false, "Beta v1.101.47"))
+        val braveReleases = listOf(
+            CatalogProcessor.Release("v1.102.3", "Nightly v1.102.3", false, "2026-11-12", listOf(Triple("Brave.apk", "u1", 1L))),
+            CatalogProcessor.Release("v1.99.57", "Release v1.99.57", false, "2026-11-01", listOf(Triple("Brave.apk", "u2", 1L)))
+        )
+        val braveFiltered = Orbit.versionsOf(OrbitApp("orbit:brave", "https://github.com/brave/brave-browser", releaseFilter = "^Release v"), braveReleases)
+        assertEquals(listOf("1.99.57"), braveFiltered.map { it.version })
+        val braveVerified = Orbit.versionsOf(OrbitApp("orbit:brave", "https://github.com/brave/brave-browser", verifyLatestTag = true, includePre = false), braveReleases)
+        assertEquals(listOf("1.99.57"), braveVerified.map { it.version })
+
+        // findTwins performance index
+        val testOrbit = listOf(OrbitApp("orbit:rev", "https://github.com/caruno-git/Revera", packageName = "com.caruno.revera"))
+        val testApps = listOf(AppItem(id = "revera", packageName = "com.caruno.revera", repoUrl = "https://github.com/caruno-git/Revera"))
+        val twinMap = Orbit.findTwins(testOrbit, testApps)
+        assertEquals("revera", twinMap["orbit:rev"]?.id)
     }
 
     @Test fun appGalleryFetch() = kotlinx.coroutines.runBlocking {

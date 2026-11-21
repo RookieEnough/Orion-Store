@@ -465,12 +465,12 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     if (variants) OrionSheet({ variants = false }) {
         val (raw, abis) = remember { vm.tracker.deviceArch() }
         val list2 = remember(target) {
-            (target?.variants ?: app.variants).distinctBy { it.arch }.map { it to archCompat(it.arch, raw, abis) }
+            (target?.variants ?: app.variants).distinctBy { it.url }.map { it to archCompat(it.arch, raw, abis) }
                 .sortedWith(compareByDescending<Pair<AppVariant, Pair<Boolean, Boolean>>> { it.second.second }.thenByDescending { it.second.first })
         }
         Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Select architecture", style = MaterialTheme.typography.headlineSmallEmphasized)
+                Text("Select download option", style = MaterialTheme.typography.headlineSmallEmphasized)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Target:", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant); Spacer(Modifier.width(6.dp))
                     Text(target?.version ?: app.latestVersion, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.width(6.dp))
@@ -491,18 +491,27 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
         Column(Modifier.weight(1f, false).heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.5f).dp).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
             list2.forEachIndexed { i, (v, c) ->
                 val (compat, rec) = c
+                val displayName = v.name.ifBlank { v.url.substringBefore('?').substringAfterLast('/') }.ifBlank { v.arch }
+                val sizeStr = v.size?.let(CatalogProcessor::formatSize)
+                val subText = listOfNotNull(
+                    if (rec) "Recommended for your phone" else if (compat) "Compatible" else "May not be compatible",
+                    sizeStr
+                ).joinToString(" · ")
                 SegmentedListItem({ variants = false; action(v.url) }, ListItemDefaults.segmentedShapes(i, list2.size),
                     colors = if (rec) ListItemDefaults.segmentedColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer) else ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh),
                     leadingContent = {
+                        val isTv = "tv" in v.arch.lowercase() || "tv" in displayName.lowercase()
                         Box(Modifier.size(40.dp).clip(if (rec) MaterialShapes.Cookie6Sided.toShape() else CircleShape).background(cs.primary.copy(if (rec) .2f else .1f)), contentAlignment = Alignment.Center) {
-                            Icon(Sym.DeveloperBoard, null, tint = cs.primary)
+                            Icon(if (isTv) Sym.Tv else Sym.DeveloperBoard, null, tint = cs.primary)
                         }
                     },
                     trailingContent = { Icon(Sym.Download, null) },
-                    supportingContent = { Text(if (rec) "Best match for your phone" else "APK") }) {
+                    supportingContent = { Text(subText, maxLines = 1, overflow = TextOverflow.Ellipsis) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(v.arch, fontWeight = FontWeight.Bold); Spacer(Modifier.width(8.dp))
-                        if (rec) Tag("Recommended", cs.primary) else if (compat && v.arch.equals("universal", true)) Tag("Universal", Safe)
+                        Text(displayName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, false))
+                        Spacer(Modifier.width(8.dp))
+                        Tag(v.arch, if (rec) cs.primary else cs.secondary)
+                        if (rec) { Spacer(Modifier.width(6.dp)); Tag("Recommended", cs.primary) }
                     }
                 }
             }

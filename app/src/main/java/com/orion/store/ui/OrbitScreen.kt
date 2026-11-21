@@ -89,8 +89,10 @@ fun OrbitTab(vm: MainViewModel, padding: PaddingValues) {
         if (inc.size == 1) { add = inc[0]; adding = true } else importing = inc
     }
     val q = vm.orbitQuery.trim()
-    val updates = vm.updates.filter { Orbit.owns(it.id) && it.id !in d.activeDownloads && it.id !in d.readyToInstall }
-    val updateIds = updates.map { it.id }.toSet()
+    val updates = remember(vm.updates, d.activeDownloads, d.readyToInstall) {
+        vm.updates.filter { Orbit.owns(it.id) && it.id !in d.activeDownloads && it.id !in d.readyToInstall }
+    }
+    val updateIds = remember(updates) { updates.map { it.id }.toSet() }
     val sources = remember(orbit) { orbit.map { Orbit.sourceOf(it.url) }.distinct() }
     val tags = remember(orbit) { orbit.flatMap { it.tags }.map { it.trim() }.filter { it.isNotEmpty() }.distinct().sorted() }
     val shown = remember(orbit, q, pickedSources, pickedTags, updatesOnly, updateIds) {
@@ -105,6 +107,7 @@ fun OrbitTab(vm: MainViewModel, padding: PaddingValues) {
     val groups = remember(shown, pickedSources, pickedTags, updatesOnly, q) {
         if (pickedSources.isNotEmpty() || pickedTags.isNotEmpty() || updatesOnly || q.isNotEmpty()) listOf("" to shown) else shown.groupBy { Orbit.sourceOf(it.url).label }.entries.map { it.key to it.value }
     }
+    val twinMap = remember(d.apps, orbit) { Orbit.findTwins(orbit, d.apps) }
     val ptr = rememberPullToRefreshState()
     var shareNow by remember { mutableStateOf(false) }
     LaunchedEffect(vm.orbitShareFocus) {
@@ -128,7 +131,7 @@ fun OrbitTab(vm: MainViewModel, padding: PaddingValues) {
                 if (title.isNotEmpty() && groups.size > 1) item("h-$title", span = full) { SectionTitle(title, Modifier.padding(start = 16.dp, top = 6.dp)) }
                 items(apps, key = { it.id }) { o ->
                     val item = items[o.id] ?: return@items
-                    OrbitCard(vm, o, item, Modifier.padding(horizontal = 16.dp).animateItem(fadeInSpec = null, fadeOutSpec = null), onOpen = { vm.selectApp(item, "orbit") }) { shareNow = false; acting = o.id }
+                    OrbitCard(vm, o, item, twinMap[o.id], Modifier.padding(horizontal = 16.dp), onOpen = { vm.selectApp(item, "orbit") }) { shareNow = false; acting = o.id }
                 }
             }
         }
@@ -344,13 +347,12 @@ private fun OrbitEmpty() = Column(Modifier.fillMaxWidth().padding(horizontal = 4
 
 /** One Orbit app: icon with its install state, name, where it stands, and the single action it needs now. */
 @Composable
-private fun OrbitCard(vm: MainViewModel, o: OrbitApp, item: AppItem, modifier: Modifier, onOpen: () -> Unit, onMore: () -> Unit) {
+private fun OrbitCard(vm: MainViewModel, o: OrbitApp, item: AppItem, twin: AppItem?, modifier: Modifier, onOpen: () -> Unit, onMore: () -> Unit) {
     val s = LocalS.current; val cs = MaterialTheme.colorScheme
     val (st, p) = cardState(item)
     val local = s.installedVersions[item.id]
     val src = Orbit.sourceOf(o.url)
     val waiting = o.versions.isNotEmpty() && item.availableVersions.isEmpty()
-    val twin = LocalD.current.apps.firstOrNull { Orbit.sameCatalog(o, it) }
     val line = when {
         o.error != null && o.versions.isEmpty() -> o.error to cs.error
         st == CardState.DOWNLOADING -> (if (p > 0f) "Downloading ${p.toInt()}%" else "Starting download") to cs.primary
@@ -416,7 +418,7 @@ fun OrbitAddSheet(vm: MainViewModel, base: OrbitApp?, onDismiss: () -> Unit) = O
     var probing by remember { mutableStateOf(false) }
     var fine by remember { mutableStateOf(false) }
     // Typing a link reads it after a pause; changing the filters re-reads the releases with the new rules
-    val key = "$url|${draft?.apkFilter}|${draft?.includePre}|${draft?.versionRegex}"
+    val key = "$url|${draft?.apkFilter}|${draft?.includePre}|${draft?.versionRegex}|${draft?.releaseFilter}|${draft?.verifyLatestTag}"
     LaunchedEffect(key) {
         val u = url.trim(); if (!u.startsWith("http")) return@LaunchedEffect
         Orbit.refused(u)?.let { vm.orbitRefuse(it); draft = null; return@LaunchedEffect }
@@ -464,10 +466,19 @@ fun OrbitAddSheet(vm: MainViewModel, base: OrbitApp?, onDismiss: () -> Unit) = O
                     OrbitField(dr.icon, { draft = draft?.copy(icon = it.trim()) }, "Icon link", uri = true)
                     OrbitField(dr.apkFilter, { draft = draft?.copy(apkFilter = it) }, "APK filter", hint = "Pattern the APK file name must match, like arm64|universal")
                     OrbitField(dr.versionRegex, { draft = draft?.copy(versionRegex = it) }, "Version pattern", hint = "Reads the version out of the release tag")
+                    OrbitField(dr.releaseFilter, { draft = draft?.copy(releaseFilter = it) }, "Release title filter", hint = "Pattern the release title or tag must match, like ^Release v")
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(cs.surfaceContainerHigh).clickable { draft = draft?.copy(includePre = !dr.includePre) }
                         .padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Pre-releases", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                         Switch(dr.includePre, { draft = draft?.copy(includePre = it) })
+                    }
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(cs.surfaceContainerHigh).clickable { draft = draft?.copy(verifyLatestTag = !dr.verifyLatestTag) }
+                        .padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Verify latest tag", style = MaterialTheme.typography.titleSmall)
+                            Text("Strictly follow GitHub's Latest badge, ignoring unflagged preview builds", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                        }
+                        Switch(dr.verifyLatestTag, { draft = draft?.copy(verifyLatestTag = it) })
                     }
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(cs.surfaceContainerHigh).clickable { draft = draft?.copy(trackOnly = !dr.trackOnly) }
                         .padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

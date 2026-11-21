@@ -33,7 +33,19 @@ object CatalogProcessor {
     private val PC_TAGS = setOf("windows", "pc", "desktop", "win32", "win64")
 
     fun determineArch(name: String): String = name.lowercase().let {
-        when { "arm64" in it || "v8a" in it -> "ARM64"; "armeabi" in it || "v7a" in it -> "ARMv7"; "x86_64" in it || "x64" in it -> "x64"; "x86" in it -> "x86"; else -> "Universal" }
+        val hasTv = "tv" in it || "atv" in it || "androidtv" in it || "android-tv" in it
+        val isArm64 = "arm64" in it || "aarch64" in it || "v8a" in it || "armv8" in it || "arm-v8" in it || "arm8" in it
+        val isArmv7 = "armeabi" in it || "armv7" in it || "arm-v7" in it || "arm7" in it || "v7a" in it
+        val isX64 = "x86_64" in it || "x86-64" in it || "x64" in it || "amd64" in it
+        val isX86 = ("x86" in it || "i386" in it || "i686" in it) && !isX64
+        when {
+            isArm64 -> if (hasTv) "ARM64 (TV)" else "ARM64"
+            isArmv7 -> if (hasTv) "ARMv7 (TV)" else "ARMv7"
+            isX64 -> if (hasTv) "x64 (TV)" else "x64"
+            isX86 -> if (hasTv) "x86 (TV)" else "x86"
+            hasTv -> "TV"
+            else -> "Universal"
+        }
     }
 
     private val VERSION_NOISE = listOf("armeabi-v7a", "arm64-v8a", "x86_64", "x86", "v7a", "v8a", "-all", "_all", "-universal", "_universal", "universal", ".apks", ".xapk", ".apkm", ".apk", "release", "mod", "beta", "alpha", "nightly", "debug")
@@ -52,8 +64,8 @@ object CatalogProcessor {
         return "${if (v % 1.0 == 0.0) v.toLong().toString() else v.toString()} ${units[i]}"
     }
 
-    fun detectStream(file: String, tag: String, prerelease: Boolean): String {
-        val t = "$file $tag".lowercase()
+    fun detectStream(file: String, tag: String, prerelease: Boolean, title: String = ""): String {
+        val t = "$file $tag $title".lowercase()
         return when {
             listOf("nightly", "daily", "snapshot").any { it in t } -> "Nightly"
             listOf("alpha", "canary", "debug").any { it in t } -> "Alpha"
@@ -141,7 +153,7 @@ object CatalogProcessor {
     }
 
     private fun dateMillis(d: String) = runCatching { Instant.parse(d).toEpochMilli() }.getOrElse { runCatching { LocalDate.parse(d.take(10)).toEpochDay() * 86_400_000 }.getOrDefault(0) }
-    private val ARCH_ORDER = mapOf("Universal" to 1, "ARM64" to 2, "ARMv7" to 3)
+    private val ARCH_ORDER = mapOf("Universal" to 1, "ARM64" to 2, "ARMv7" to 3, "x64" to 4, "x86" to 5, "TV" to 6, "ARM64 (TV)" to 7, "ARMv7 (TV)" to 8)
 
     fun processItem(app: AppItem, mirror: Map<String, List<Release>>): AppItem {
         val url = app.repoUrl.orEmpty()
@@ -172,10 +184,10 @@ object CatalogProcessor {
             val assets = if (kw == null) cands else cands.filter { (n, u) -> kw in n.lowercase() || kw in u.lowercase() }
                 .ifEmpty { if (kw in r.name.lowercase() || kw in r.tag.lowercase()) cands else emptyList() }
             if (assets.isEmpty()) return@mapNotNull null
-            val stream = detectStream(assets[0].first, r.tag, r.prerelease)
+            val stream = detectStream(assets[0].first, r.tag, r.prerelease, r.name)
             val tagV = r.tag.takeIf { it.lowercase() !in setOf("latest", "all") }?.let(::extractVersion)
             val ver = extractVersion(assets[0].first) ?: tagV ?: extractVersion(r.name) ?: r.date.ifEmpty { now }.substringBefore('T')
-            val variants = assets.map { (n, u, s) -> AppVariant(determineArch(n), u, s) }.sortedBy { ARCH_ORDER[it.arch] ?: 4 }
+            val variants = assets.map { (n, u, s) -> AppVariant(determineArch(n), u, s, n) }.sortedBy { ARCH_ORDER[it.arch] ?: 4 }
             VersionOption(stream, ver, r.date.substringBefore('T'), variants, r.tag) to dateMillis(r.date)
         }
         if (versions.isEmpty()) return app
