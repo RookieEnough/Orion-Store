@@ -24,7 +24,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,16 +73,18 @@ fun MyAppsTab(vm: MainViewModel, padding: PaddingValues) {
     val removable = visible.filter { it.isInstalledNow && it.app.installsHere() }
     LaunchedEffect(rows) { picked = picked.filterTo(mutableSetOf()) { id -> rows.any { it.app.id == id && it.isInstalledNow } } }
     androidx.activity.compose.BackHandler(picked.isNotEmpty()) { picked = emptySet() }
+    val pills = rememberScrollState(); var pillAt by remember { mutableIntStateOf(0) }
+    LaunchedEffect(pager.currentPage, pillAt) { pills.animateScrollTo((pillAt - 24).coerceAtLeast(0)) }
     Column(Modifier.fillMaxSize().readableWidth()) {
         Column(Modifier.padding(top = padding.calculateTopPadding())) {
             Header(vm)
-            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.horizontalScroll(pills).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 FilledTonalButton({ vm.haptic(H.SELECTION); vm.openSettings("queue") }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) {
                     Icon(Sym.Downloading, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Queue")
                     if (queue > 0) { Spacer(Modifier.width(6.dp)); Badge { Text("$queue") } }
                 }
                 VerticalDivider(Modifier.height(28.dp).padding(horizontal = 4.dp), color = cs.outlineVariant)
-                FilterPills(vm, s.myAppsFilters) { f -> Choice(pageFilter == f, "${f.label} · ${rows.count { it.matches(f) }}", filterIcon(f)) {
+                FilterPills(vm, s.myAppsFilters, pageFilter, { pillAt = it }) { f -> Choice(pageFilter == f, "${f.label} · ${rows.count { it.matches(f) }}", filterIcon(f)) {
                     scope.launch { pager.animateScrollToPage(filters.indexOf(f).coerceAtLeast(0)) }
                 } }
             }
@@ -165,7 +169,7 @@ private fun LazyItemScope.SideRow(a: AppItem, i: Int, n: Int, supporting: String
 
 /** Filter pills in the saved order. Long-press a pill and drag it sideways to move it; the order saves on release. */
 @Composable
-private fun FilterPills(vm: MainViewModel, saved: List<String>, pill: @Composable (MyAppsFilter) -> Unit) {
+private fun FilterPills(vm: MainViewModel, saved: List<String>, selected: MyAppsFilter, onX: (Int) -> Unit, pill: @Composable (MyAppsFilter) -> Unit) {
     var order by remember(saved) { mutableStateOf(myAppsFilterOrder(saved)) }
     var dragged by remember { mutableStateOf<MyAppsFilter?>(null) }; var dx by remember { mutableFloatStateOf(0f) }
     val widths = remember { mutableMapOf<MyAppsFilter, Int>() }; val gap = with(LocalDensity.current) { 6.dp.toPx() }
@@ -173,7 +177,7 @@ private fun FilterPills(vm: MainViewModel, saved: List<String>, pill: @Composabl
     order.forEach { f ->
         key(f) {
             val on = dragged == f
-            Box(Modifier.onSizeChanged { widths[f] = it.width }.zIndex(if (on) 1f else 0f)
+            Box(Modifier.onSizeChanged { widths[f] = it.width }.onGloballyPositioned { if (f == selected) onX(it.positionInParent().x.toInt()) }.zIndex(if (on) 1f else 0f)
                 .graphicsLayer { if (on) { translationX = dx; scaleX = 1.06f; scaleY = 1.06f } }
                 .pointerInput(f) {
                     detectDragGesturesAfterLongPress({ dragged = f; dx = 0f; vm.haptic(H.MEDIUM) }, ::end, ::end) { c, delta ->
@@ -230,6 +234,10 @@ private fun LibraryRow(vm: MainViewModel, r: MyAppRow, modifier: Modifier, picke
                     if (pkg != null) DropdownMenuItem({ Text("Open") }, { menu = false; runCatching { vm.tracker.launch(pkg) }.onFailure { vm.error("Could not launch app. It may be restricted.") } },
                         leadingIcon = { Icon(Sym.OpenInNew, null) })
                     DropdownMenuItem({ Text("Uninstall") }, { menu = false; vm.uninstall(r.app) }, leadingIcon = { Icon(Sym.Delete, null) })
+                    val skip = r.app.id in LocalS.current.autoSkip
+                    DropdownMenuItem({ Text(if (skip) "Include in auto-update" else "Skip auto-update") }, {
+                        menu = false; vm.haptic(H.SUCCESS); vm.set { it.copy(autoSkip = if (skip) it.autoSkip - r.app.id else it.autoSkip + r.app.id) }
+                    }, leadingIcon = { Icon(Sym.Autorenew, null) })
                 }
             }
         }

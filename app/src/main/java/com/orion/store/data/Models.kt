@@ -55,6 +55,8 @@ val STREAMS = listOf("Stable", "Beta", "Alpha", "Nightly")
     val patches: List<String> = emptyList(),
     /** GitHub stars from the data branch's stars.json, null when unknown. */
     val stars: Int? = null,
+    /** Times the release files were downloaded, from the host, when it reports a count. */
+    val downloadCount: Long? = null,
 )
 
 @Serializable data class SocialLinks(val github: String = "", val x: String = "", val discord: String = "", val coffee: String = "")

@@ -14,7 +14,7 @@ const val ONE_WEEK_MS = 7L * 24 * 60 * 60 * 1000
 val collator: Collator = Collator.getInstance().apply { strength = Collator.SECONDARY }
 
 fun enc(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", "%20").replace("%21", "!").replace("%27", "'")
-    .replace("%28", "(").replace("%29", ")").replace("%7E", "~")
+    .replace("%28", "(").replace("%29", ")").replace("%7E", "~").replace("*", "%2A")
 
 fun sha256Hex(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
@@ -73,6 +73,8 @@ fun isUpdateIgnored(app: AppItem, s: Settings, now: Long): Boolean {
         "week" -> ig.timestamp != null && now - ig.timestamp < ONE_WEEK_MS
         // Older builds stored latestVersion, which differs from the offered build when an app lists several versions
         "version" -> isSameVersion(ig.version, preferredVersion(app, s.streamOf(app.id))) || isSameVersion(ig.version, app.latestVersion)
+        // Stay on this version: anything newer than the saved cap stays hidden
+        "cap" -> compareVersions(preferredVersion(app, s.streamOf(app.id)), ig.version) > 0
         else -> false
     }
 }
@@ -85,9 +87,32 @@ fun otherStore(id: String, s: Settings): String? = s.installSources[id]?.takeIf 
 /** Orbit apps are ones the user added on purpose, so the other-stores filter never drops them. */
 fun isManaged(id: String, s: Settings) = s.appManage[id] ?: (Orbit.owns(id) || !(s.skipOtherStores && otherStore(id, s) != null))
 
-fun availableUpdates(apps: List<AppItem>, s: Settings, now: Long) = apps.filter { a ->
-    val inst = s.installedVersions[a.id]
-    !inst.isNullOrEmpty() && isManaged(a.id, s) && hasAvailableUpdate(a, inst, s.streamOf(a.id), s.installedBuilds[a.id]) && !isUpdateIgnored(a, s, now)
+fun availableUpdates(apps: List<AppItem>, s: Settings, now: Long): List<AppItem> {
+    val raw = apps.filter { a ->
+        if (TRACK_ONLY_TAG in a.tags) return@filter false
+        val inst = s.installedVersions[a.id]
+        !inst.isNullOrEmpty() && isManaged(a.id, s) && hasAvailableUpdate(a, inst, s.streamOf(a.id), s.installedBuilds[a.id]) && !isUpdateIgnored(a, s, now)
+    }
+    // One update per package. The library copy wins when the same install is also followed in Orbit.
+    val byPkg = LinkedHashMap<String, AppItem>()
+    for (a in raw) {
+        val k = normalizePackageName(a.packageName).ifEmpty { a.id }
+        val prev = byPkg[k]
+        if (prev == null || (Orbit.owns(prev.id) && !Orbit.owns(a.id))) byPkg[k] = a
+    }
+    return byPkg.values.toList()
+}
+
+/** The API address of one file inside a GitHub release payload. Private repos serve this, not the public download link. */
+fun githubAssetApiUrl(root: kotlinx.serialization.json.JsonElement, fileName: String): String? {
+    val o = root as? kotlinx.serialization.json.JsonObject ?: return null
+    val want = java.net.URLDecoder.decode(fileName.substringBefore('?').substringAfterLast('/'), "UTF-8").lowercase()
+    if (want.isEmpty()) return null
+    return (o["assets"] as? kotlinx.serialization.json.JsonArray).orEmpty().firstNotNullOfOrNull { e ->
+        val a = e as? kotlinx.serialization.json.JsonObject ?: return@firstNotNullOfOrNull null
+        val n = (a["name"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        if (n.equals(want, true)) (a["url"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.startsWith("http") } else null
+    }
 }
 // endregion
 
@@ -127,6 +152,8 @@ fun installFailureText(msg: String?, name: String): Pair<String, String> {
             "A phone setting stopped it. On Xiaomi, turn on \"Install via USB\" in Developer options. Work or parental rules can block installs too."
         has("VERIFICATION_FAILURE", "ABORTED", "VERIFICATION_TIMEOUT") -> "Android's security check stopped it" to "Play Protect or your phone's own scanner blocked $name. You can try again and choose Install anyway if it asks."
         has("PARSE", "CORRUPT", "invalid", "INVALID_APK") -> "The file is damaged" to "The downloaded file isn't a working app. Delete it and download again."
+        has("stream closed", "stream error", "broken pipe") -> "The install connection dropped" to
+            "The APK for $name is still saved. The silent install closed before Android finished reading the file.\n\nFix: install it with the system installer. The saved file is used, so it is not downloaded again."
         has("Shizuku") -> "Shizuku isn't ready" to "The silent install needs Shizuku running and allowed. Open Shizuku, start it, then try again."
         else -> "$name could not be installed" to (Regex("INSTALL_[A-Z_]+").find(m)?.value?.let { "Android said: $it" } ?: m.ifBlank { "Android did not say why." }).take(200)
     }
@@ -431,7 +458,7 @@ data class MyAppRow(
     val savedFile get() = readyFile ?: cleanupFile ?: libraryFile
     val primaryAction get() = when {
         status == "downloading" -> "view"; status == "ready" -> "install"; hasUpdate -> "update"
-        isInstalledNow && hasSavedApk -> "delete"; libraryStatus == "downloaded" -> if (hasSavedApk) "install" else "download"; else -> "view"
+        isInstalledNow && hasSavedApk -> "delete"; libraryStatus == "downloaded" && hasSavedApk -> "install"; else -> "view"
     }
     val statusLabel get() = when (status) {
         "downloading" -> "${Math.round(progress)}%"; "ready" -> "Ready to install"; "update" -> "Update available"
@@ -449,7 +476,8 @@ fun buildMyAppsRows(apps: List<AppItem>, s: Settings, d: DataState, updateIds: S
     val ready = d.readyToInstall[a.id]; val cleanup = d.pendingCleanup[a.id]; val key = d.activeDownloads[a.id]
     val saved = ready != null || cleanup != null || lib?.fileName != null
     val upd = a.id in updateIds; val dl = key != null; val now = inst != null
-    if (lib == null && !now && !saved && !dl && !upd) return@mapNotNull null
+    // Uninstalled apps leave My Apps. A file that is still waiting to install stays, with Install rather than Download.
+    if (!now && !dl && ready == null && !upd) return@mapNotNull null
     if (!dl && ready == null && !isManaged(a.id, s)) return@mapNotNull null
     val status = when { dl -> "downloading"; ready != null -> "ready"; upd -> "update"; now || lib?.status == "installed" -> "installed"; else -> "downloaded" }
     MyAppRow(a, status, inst, s.lastRemoteVersions[a.id], ready, cleanup?.fileName, lib?.fileName, key, saved, upd, now, lib?.status,
@@ -459,7 +487,7 @@ fun buildMyAppsRows(apps: List<AppItem>, s: Settings, d: DataState, updateIds: S
 fun myAppsFilterOrder(saved: List<String>) = saved.mapNotNull { n -> MyAppsFilter.entries.firstOrNull { it.name == n } }.distinct().let { it + (MyAppsFilter.entries - it.toSet()) }
 
 fun MyAppRow.matches(f: MyAppsFilter) = when (f) {
-    MyAppsFilter.ALL -> true; MyAppsFilter.INSTALLED -> status == "installed" || hasUpdate
+    MyAppsFilter.ALL -> true; MyAppsFilter.INSTALLED -> isInstalledNow
     MyAppsFilter.DOWNLOADED -> status in setOf("downloading", "ready", "downloaded"); MyAppsFilter.UPDATES -> hasUpdate
 }
 
@@ -682,17 +710,20 @@ data class ReleaseSection(val title: String, val items: List<String>)
 private val BOLD_LEAD = Regex("""^\*\*(.+?)\*\*""")
 private val MD_LINK = Regex("""\[([^\]]+)]\([^)]*\)""")
 
+/** Headlines for the What's new sheet, with the Markdown markers taken off. */
+private fun plainNote(s: String) = s.replace(MD_LINK, "$1").replace(Regex("""[*_`#>]+"""), " ").replace(Regex("""\s+"""), " ").trim()
+
 /** Markdown body → headlines. A bullet's bold lead is its headline; without one, its first sentence, trimmed to fit a line or two. */
 fun releaseHighlights(body: String): List<ReleaseSection> {
     val out = mutableListOf<ReleaseSection>(); var title = ""; var items = mutableListOf<String>()
     fun flush() { if (items.isNotEmpty()) out += ReleaseSection(title, items); items = mutableListOf() }
     body.lineSequence().map { it.trim() }.forEach { l ->
         when {
-            l.startsWith("#") -> { flush(); title = l.trimStart('#').trim().replace("**", "") }
+            l.startsWith("#") -> { flush(); title = plainNote(l.trimStart('#').trim()) }
             l.startsWith("- ") || l.startsWith("* ") -> {
                 val t = l.drop(2).trim()
                 val head = BOLD_LEAD.find(t)?.groupValues?.get(1) ?: t.substringBefore(". ")
-                val line = head.replace(MD_LINK, "$1").replace("**", "").replace("`", "").trim().trimEnd(':', '.')
+                val line = plainNote(head).trimEnd(':', '.')
                 if (line.isNotEmpty()) items += if (line.length <= 90) line else line.take(88).substringBeforeLast(' ') + "…"
             }
         }

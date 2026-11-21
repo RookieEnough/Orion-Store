@@ -397,7 +397,29 @@ fun SettingsScreen(vm: MainViewModel) {
                     }
                     "network" -> Section("Downloads") {
                         Toggle(Sym.Wifi, "Wi-Fi only", "Skip downloads on cellular data", s.wifiOnly) { vm.set { it.copy(wifiOnly = !it.wifiOnly) } }
-                        Toggle(Sym.Autorenew, "Auto-update apps", "Check and download updates every few hours, even with Orion closed", s.autoUpdateEnabled) { vm.set { it.copy(autoUpdateEnabled = !it.autoUpdateEnabled) } }
+                        Toggle(Sym.Autorenew, "Auto-update apps", "Installed apps Orion manages, including Orbit apps that are not paused or track-only. Skip one from its page menu.", s.autoUpdateEnabled) { vm.set { it.copy(autoUpdateEnabled = !it.autoUpdateEnabled) } }
+                        Toggle(Sym.Wifi, "Auto-update on Wi-Fi only", "Background updates wait for Wi-Fi. Downloads you start still follow Wi-Fi only above.", s.autoWifiOnly) { vm.set { it.copy(autoWifiOnly = !it.autoWifiOnly) } }
+                        InfoCard("Auto-update covers apps in My Apps that Orion manages, and Orbit apps that are not paused or set to track only. When an Orbit app is also in the library, the library copy is the one updated. Skip auto-update on an app's page, or choose Don't manage, to leave it out. A manual Update still works.")
+                        var checkMenu by remember { mutableStateOf(false) }
+                        val checks = listOf(0 to "Only while Orion is open", 15 to "Every 15 minutes", 30 to "Every 30 minutes", 60 to "Every hour", 180 to "Every 3 hours", 360 to "Every 6 hours", 720 to "Every 12 hours", 1440 to "Every day", 10080 to "Every week")
+                        SRow(Sym.Schedule, "Check for updates", checks.firstOrNull { it.first == s.checkEveryMin }?.second ?: "Every ${s.checkEveryMin} minutes", onClick = { checkMenu = true }) {
+                            Box {
+                                Icon(Sym.ExpandMore, null)
+                                DropdownMenu(checkMenu, { checkMenu = false }, shape = RoundedCornerShape(20.dp)) {
+                                    checks.forEach { (mins, label) -> DropdownMenuItem({ Text(label) }, { vm.set { it.copy(checkEveryMin = mins) }; checkMenu = false; vm.haptic(H.SELECTION) }) }
+                                }
+                            }
+                        }
+                        var ageMenu by remember { mutableStateOf(false) }
+                        val ages = listOf(0 to "Off", 1 to "1 day", 2 to "2 days", 3 to "3 days", 7 to "7 days")
+                        SRow(Sym.History, "Wait before offering an Orbit release", ages.firstOrNull { it.first == s.orbitMinAgeDays }?.second ?: "${s.orbitMinAgeDays} days", onClick = { ageMenu = true }) {
+                            Box {
+                                Icon(Sym.ExpandMore, null)
+                                DropdownMenu(ageMenu, { ageMenu = false }, shape = RoundedCornerShape(20.dp)) {
+                                    ages.forEach { (days, label) -> DropdownMenuItem({ Text(label) }, { vm.set { it.copy(orbitMinAgeDays = days) }; ageMenu = false; vm.haptic(H.SELECTION) }) }
+                                }
+                            }
+                        }
                         if (s.autoUpdateEnabled) {
                             Toggle(Sym.SystemUpdate, "Install automatically", "Install downloaded updates over the current app. Anything that fails shows up next time you open Orion.", s.autoInstall) {
                                 vm.set { it.copy(autoInstall = !it.autoInstall) }
@@ -463,7 +485,7 @@ fun SettingsScreen(vm: MainViewModel) {
                             }
                             shizukuError?.let { Text(it, Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(16.dp),
                                 color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold) }
-                            InfoCard("Silent installs need Shizuku running, or Dhizuku activated as device owner.") {
+                            InfoCard("Silent installs need Shizuku or Shizuku-Next running, or Dhizuku activated as device owner.") {
                                 Row {
                                     TextButton({ vm.navigateFromSettings("shizuku") }, contentPadding = PaddingValues(0.dp)) { Text("Get Shizuku") }
                                     Spacer(Modifier.width(16.dp))
@@ -628,7 +650,7 @@ private val PAGE_RESIZE = SharedTransitionScope.ResizeMode.scaleToBounds(android
 /** One closing tip per page, so short pages end on something useful instead of empty surface. */
 private val TIPS = mapOf(
     "queue" to "Downloads keep running in the background, with live progress in your notifications.",
-    "visuals" to "The theme button in the search bar cycles Light, Dusk and Dark from anywhere.",
+    "visuals" to "The theme button in the search bar cycles System, Light, Dusk, Dark and OLED from anywhere.",
     "network" to "Auto-update queues new versions whenever the catalog refreshes. Wi-Fi only blocks downloads on mobile data.",
     "storage" to "The janitor clears leftover APKs a week after install, or on the next launch with Delete APK on.",
     "installer" to "With Shizuku, installs and updates go through without a confirmation prompt each time.",
@@ -1018,6 +1040,7 @@ fun DownloadsSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDism
     fun open(id: String) { vm.close(Overlay.DOWNLOADS); vm.navigateFromSettings(id) }
     CompositionLocalProvider(LocalAccent provides Blue) {
         SheetTitle("Downloads", Sym.Downloading, if (active + ready + updates.size == 0) "All caught up" else "$active active · $ready ready · ${updates.size} updates")
+        if (active + ready > 0) TextButton({ vm.clearQueue() }, Modifier.padding(horizontal = 16.dp)) { Text("Clear queue") }
         val silent = s.useShizuku || s.useDhizuku || s.directInstall || s.rootMode
         val rows = ready + active + updates.size
         if (rows == 0) EmptyState(Sym.DownloadDone, "Queue is empty", "Downloads and updates show up here.", Modifier.navigationBarsPadding())
@@ -1029,8 +1052,11 @@ fun DownloadsSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDism
                 SegmentedListItem({ a?.let { open(it.id) } }, ListItemDefaults.segmentedShapes(i++, rows), colors = colors,
                     leadingContent = { a?.let { AppIcon(it, 44.dp) } ?: TonalIcon(Sym.Inventory, Safe) }, supportingContent = { Text("Ready to install") },
                     trailingContent = {
-                        if (vm.installingId == id) LoadingIndicator(Modifier.size(32.dp))
-                        else Button({ a?.let { vm.installFile(it, file) } }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("Install") }
+                        if (vm.installingId == id) IconButton({ vm.installingId = null }) { Icon(Sym.Close, "Stop waiting") }
+                        else Button({
+                            val target = a
+                            if (target == null) vm.toast("This download is no longer linked to an app") else vm.installFile(target, file)
+                        }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("Install") }
                     }) { Text(a?.name ?: id, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
             d.activeDownloads.keys.forEach { id ->
@@ -1049,7 +1075,7 @@ fun DownloadsSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDism
             }
             updates.forEach { a ->
                 SegmentedListItem({ open(a.id) }, ListItemDefaults.segmentedShapes(i++, rows), colors = colors,
-                    leadingContent = { AppIcon(a, 44.dp) }, supportingContent = { Text("Update to v${a.latestVersion.removePrefix("v")}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingContent = { AppIcon(a, 44.dp) }, supportingContent = { Text(s.installedVersions[a.id]?.takeIf { it.isNotEmpty() }?.let { "v${it.removePrefix("v")} → v${a.latestVersion.removePrefix("v")}" } ?: "Update to v${a.latestVersion.removePrefix("v")}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     trailingContent = { FilledTonalButton({ vm.download(a) }, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) { Text("Update") } }) {
                     Text(a.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -1132,8 +1158,9 @@ private fun ThemePicker(vm: MainViewModel, s: Settings) {
     val current = if (s.isOled) "oled" else s.theme
     Section("Theme") {
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("light" to "Light", "dusk" to "Dusk", "dark" to "Dark", "oled" to "OLED").forEach { (t, label) ->
-                val p = previewScheme(t, s.palette, s.customPalettes); val on = current == t
+            val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
+            listOf("system" to "System", "light" to "Light", "dusk" to "Dusk", "dark" to "Dark", "oled" to "OLED").forEach { (t, label) ->
+                val p = previewScheme(if (t == "system") if (sysDark) "dark" else "light" else t, s.palette, s.customPalettes); val on = if (t == "system") s.theme == "system" && !s.isOled else current == t
                 val at = remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
                 val r by animateDpAsState(if (on) 24.dp else 14.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "r")
                 val ring by animateDpAsState(if (on) 3.dp else 0.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "ring")

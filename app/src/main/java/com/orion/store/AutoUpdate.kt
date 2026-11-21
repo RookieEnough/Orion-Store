@@ -49,19 +49,26 @@ object AutoUpdate {
     @Suppress("DEPRECATION")
     fun schedule(ctx: Context, s: Settings) {
         val js = ctx.getSystemService(JobScheduler::class.java) ?: return
-        if (!s.autoUpdateEnabled) { js.cancel(JOB_ID); return }
-        val net = if (s.wifiOnly) JobInfo.NETWORK_TYPE_UNMETERED else JobInfo.NETWORK_TYPE_ANY
-        // Rescheduling an identical job restarts its clock, so only touch it when it is missing or the network rule changed
-        if (js.getPendingJob(JOB_ID)?.networkType == net) return
+        val mins = s.checkEveryMin
+        if (mins <= 0) { js.cancel(JOB_ID); return }
+        val net = if (s.wifiOnly || s.autoWifiOnly) JobInfo.NETWORK_TYPE_UNMETERED else JobInfo.NETWORK_TYPE_ANY
+        val period = mins.coerceAtLeast(15) * 60_000L
+        val flex = (period / 6).coerceAtLeast(5 * 60_000L).coerceAtMost(period / 2)
+        val pending = js.getPendingJob(JOB_ID)
+        // Rescheduling an identical job restarts its clock, so only touch it when the rule changed
+        if (pending?.networkType == net && pending.intervalMillis == period) return
         js.schedule(JobInfo.Builder(JOB_ID, ComponentName(ctx, AutoUpdateJob::class.java))
-            .setPeriodic(6 * 3_600_000L, 3_600_000L).setRequiredNetworkType(net).setPersisted(true)
+            .setPeriodic(period, flex).setRequiredNetworkType(net).setPersisted(true)
             .apply { if (Build.VERSION.SDK_INT >= 26) setRequiresBatteryNotLow(true).setRequiresStorageNotLow(true) }
             .build())
     }
 
     suspend fun run(ctx: Context) {
         Store.init(ctx); val s0 = Store.settings.value
-        if (!s0.autoUpdateEnabled || uiVisible) return
+        if (uiVisible || s0.checkEveryMin <= 0) return
+        com.orion.store.platform.AssetAuth.arm(s0, Store.data.value.orbit)
+        refreshOrbit(s0)
+        if (!s0.autoUpdateEnabled) { Store.data.save(); return }
         Downloads.init(ctx, s0.forcedStoreUpdate?.downloadFileName)
         val tracker = AppTracker(ctx).apply { root = s0.rootMode }
         val apps = catalog(ctx, s0); if (apps.isEmpty()) return
@@ -72,7 +79,7 @@ object AutoUpdate {
             tracker.appInfo(pkg).takeIf { it.installed }?.let { id to it.version }
         }.toMap()
         val todo = availableUpdates(apps, s0.copy(installedVersions = live), now)
-            .filter { it.installsHere() && it.id !in Store.data.value.activeDownloads && (s0.resolvedPackageNames[it.id] ?: it.packageName) != ctx.packageName }
+            .filter { it.installsHere() && it.id !in s0.autoSkip && it.id !in Store.data.value.activeDownloads && (s0.resolvedPackageNames[it.id] ?: it.packageName) != ctx.packageName }
         val log = mutableListOf<AutoResult>()
         for (app in todo) {
             if (uiVisible) break
@@ -92,11 +99,14 @@ object AutoUpdate {
             if (r.failed || m.isEmpty()) null else CatalogProcessor.process(r.rawApps, m) + Store.data.value.importedApps.map { CatalogProcessor.processItem(it, m) }
         }.getOrNull()
         val base = fresh?.takeIf { it.isNotEmpty() } ?: (repo.cached()?.apps.orEmpty() + Store.data.value.importedApps)
-        // Orbit apps are checked at their own sources on the same pass, keeping anything the user edited meanwhile
+        base + Store.data.value.orbit.filter { !it.paused && !it.trackOnly }.map { it.toItem(s.daysFor(it), s.streamOf(it.id)) }
+    }
+
+    /** Orbit sources are read on every pass, whether or not the downloads themselves are turned on. */
+    private suspend fun refreshOrbit(s: Settings) {
         val now = System.currentTimeMillis()
-        val orbit = runCatching { Orbit.refreshAll(Store.data.value.orbit, s.orbitTokens(), now) }.getOrNull()?.associateBy { it.id }
-        if (orbit != null) Store.data.update { st -> st.copy(orbit = st.orbit.map { cur -> orbit[cur.id]?.let { f -> cur.copy(versions = f.versions, checkedAt = f.checkedAt, error = f.error) } ?: cur }) }
-        base + Store.data.value.orbit.filter { !it.paused }.map { it.toItem() }
+        val orbit = runCatching { Orbit.refreshAll(Store.data.value.orbit, s.orbitTokens(), now) }.getOrNull()?.associateBy { it.id } ?: return
+        Store.data.update { st -> st.copy(orbit = st.orbit.map { cur -> orbit[cur.id]?.let { f -> cur.copy(versions = f.versions, checkedAt = f.checkedAt, error = f.error) } ?: cur }) }
     }
 
     /** One app: download (or reuse a finished download), verify, install. Null = nothing worth reporting (download-only mode). */
@@ -106,7 +116,8 @@ object AutoUpdate {
         fun result(ok: Boolean, error: String? = null) = AutoResult(app.id, app.name, version, ok, error, System.currentTimeMillis())
         // The build of the app's own channel: a Beta user gets the next Beta, not the Stable APK under a Beta version
         val variants = app.availableVersions.firstOrNull { it.version == version }?.variants?.ifEmpty { null } ?: app.variants
-        val url = sanitizeDownloadUrl(variants.firstOrNull()?.url ?: app.downloadUrl)
+        val raw = variants.firstOrNull()?.url ?: app.downloadUrl
+        val url = sanitizeDownloadUrl(try { Orbit.privateDownloadUrl(raw, s.orbitTokens()) } catch (_: Exception) { raw })
         if (url == "#" || !url.startsWith("http")) return result(false, "No direct APK download for this app.")
         val name = apkFileName(app, version)
         val f = Downloads.file(name) ?: return result(false, "Invalid file name.")

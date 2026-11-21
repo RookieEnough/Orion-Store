@@ -49,6 +49,10 @@ import kotlin.math.max
     /** Anti-farming: reward times in the last 24 hours, and today's game XP (keyed by epoch day). */
     val adStamps: List<Long> = emptyList(), val gameXpDay: Long = 0, val gameXpToday: Long = 0,
     val wifiOnly: Boolean = false,
+    /** Background auto-update waits for Wi-Fi. Downloads the user starts still follow [wifiOnly]. */
+    val autoWifiOnly: Boolean = false,
+    /** Apps left out of automatic updates. A manual Update still works. */
+    val autoSkip: Set<String> = emptySet(),
     /** Beta, Alpha and Nightly builds are hidden wherever a stable release exists; overrides per-app channels while on. */
     val stableOnly: Boolean = false,
     val deleteApk: Boolean = false,
@@ -118,6 +122,10 @@ import kotlin.math.max
     /** Personal tokens for Orbit. GitHub is the same value as [githubToken], shared with Developer tools. */
     val gitlabToken: String = "",
     val codebergToken: String = "",
+    /** Days a new Orbit release waits before it is offered. 0 offers it the day it appears. */
+    val orbitMinAgeDays: Int = 0,
+    /** How often Orion looks for updates in the background, in minutes. 0 looks only while Orion is open. */
+    val checkEveryMin: Int = 360,
     val forcedStoreUpdate: ForcedSnapshot? = null,
     val installedVersions: Map<String, String> = emptyMap(),
     val lastRemoteVersions: Map<String, String> = emptyMap(),

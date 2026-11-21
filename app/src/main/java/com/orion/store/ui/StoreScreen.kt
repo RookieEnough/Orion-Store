@@ -199,7 +199,7 @@ private fun SortButton(vm: MainViewModel, opts: List<SortOption>) {
 }
 
 /** Known screenshot ratios: a revisit lays out at the final size at once instead of springing every card again. */
-private val shotRatios = HashMap<String, Float>()
+private val shotRatios = androidx.compose.runtime.mutableStateMapOf<String, Float>()
 
 /** Screenshot at its natural aspect ratio: no frame, just rounded corners; shape settles once the real size is known (instantly from memory). */
 @Composable
@@ -378,30 +378,34 @@ private fun LazyGridScope.collection(vm: MainViewModel, c: StoreCollection, inde
 
 @Composable
 private fun Hero(vm: MainViewModel, c: StoreCollection, modifier: Modifier) = BoxWithConstraints(modifier.padding(top = 8.dp)) {
-    val n = c.apps.size; val pager = rememberPagerState { n }; val s = LocalS.current; val cs = MaterialTheme.colorScheme
+    val n = c.apps.size
+    val pager = rememberPagerState { n.coerceAtLeast(1) }
+    val s = LocalS.current; val cs = MaterialTheme.colorScheme
     val glide = MaterialTheme.motionScheme.slowSpatialSpec<Float>()
     // Phones: one card at a time. Wider windows: as many whole cards as fit at 420dp or more, sized to fill the row exactly, so no card
-    // is ever cut by the screen edge (that cut left one rounded side and one square side)
+    // is ever cut by the screen edge (that cut left one rounded side and one square side).
     val gap = 10.dp; val room = maxWidth - 32.dp
     val k = if (!LocalWidthClass.current.wide) 1 else ((room + gap) / (420.dp + gap)).toInt().coerceIn(1, n.coerceAtLeast(1))
     val page = (room - gap * (k - 1)) / k
     LaunchedEffect(pager, n, k) {
-        if (n > k && !s.calm) while (true) {
+        if (n > k && !s.calm) while (pager.currentPage < (n - k).coerceAtLeast(0)) {
             delay(5500)
-            if (!pager.isScrollInProgress) pager.animateScrollToPage(if (pager.currentPage >= n - k) 0 else pager.currentPage + 1, animationSpec = glide)
+            if (!pager.isScrollInProgress && pager.currentPage < n - k) pager.animateScrollToPage((pager.currentPage + 1).coerceAtMost(n - 1), animationSpec = glide)
         }
     }
     Column {
-        HorizontalPager(pager, Modifier.fillMaxWidth().height(176.dp), contentPadding = PaddingValues(horizontal = 16.dp), pageSpacing = gap, key = { c.apps[it].id },
+        HorizontalPager(pager, Modifier.fillMaxWidth().height(176.dp), contentPadding = PaddingValues(horizontal = 16.dp), pageSpacing = gap, key = { it },
             pageSize = if (k == 1) androidx.compose.foundation.pager.PageSize.Fill else androidx.compose.foundation.pager.PageSize.Fixed(page)) { i ->
+            val app = c.apps.getOrNull(i) ?: return@HorizontalPager
             // Side by side cards sit still; the paging tilt and parallax only make sense one card at a time
-            HeroCard(vm, c.apps[i], c.id) { if (k == 1) pager.getOffsetDistanceInPages(i).coerceIn(-1f, 1f) else 0f }
+            HeroCard(vm, app, c.id) { if (k == 1) pager.getOffsetDistanceInPages(i).coerceIn(-1f, 1f) else 0f }
         }
         // The dot row keeps its height even when there is nothing to page, so the next section always starts the same distance below
         Box(Modifier.fillMaxWidth().padding(top = 12.dp).height(6.dp), contentAlignment = Alignment.Center) {
             if (n > k) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                repeat(n - k + 1) { j ->
-                    val on = j == pager.currentPage.coerceAtMost(n - k)
+                val dot = pager.currentPage.coerceIn(0, n - 1)
+                repeat(n) { j ->
+                    val on = j == dot
                     val w by animateDpAsState(if (on) 22.dp else 6.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "dot")
                     Box(Modifier.height(6.dp).width(w).clip(Pill).background(if (on) cs.primary else cs.outlineVariant))
                 }
@@ -420,18 +424,19 @@ private fun HeroCard(vm: MainViewModel, app: AppItem, from: String, offset: () -
     Box(Modifier.fillMaxSize().graphicsLayer { val k = 1f - abs(offset()) * .07f; scaleX = k; scaleY = k }.springClick(shape) { vm.selectApp(app, from) }.background(bg)) {
         Box(Modifier.align(Alignment.BottomEnd).offset(48.dp, 64.dp).size(190.dp).graphicsLayer { translationX = offset() * 90.dp.toPx(); rotationZ = offset() * 40f }
             .background(fg.copy(.08f), MaterialShapes.Cookie12Sided.toShape()))
-        val portrait = app.platform == Platform.ANDROID
-        val shots = app.screenshots.take(if (portrait) 2 else 1)
-        Box(Modifier.align(Alignment.BottomEnd).padding(end = if (portrait) 18.dp else 12.dp).offset(y = if (portrait) 40.dp else 22.dp)
+        val ratio = app.screenshots.firstOrNull()?.let { shotRatios[it] }
+        val wideShot = app.platform != Platform.ANDROID || (ratio != null && ratio >= 1f)
+        val shots = app.screenshots.take(if (wideShot) 1 else 2)
+        Box(Modifier.align(Alignment.BottomEnd).padding(end = if (wideShot) 12.dp else 18.dp).offset(y = if (wideShot) 22.dp else 40.dp)
             .graphicsLayer { translationX = offset() * 64.dp.toPx() }) {
             val big = @Composable { AppIcon(app, 96.dp, Modifier.offset(x = (-12).dp, y = (-52).dp).graphicsLayer { rotationZ = -10f; shadowElevation = 12.dp.toPx(); this.shape = RoundedCornerShape(30.dp) }) }
             if (shots.isEmpty()) big()
             shots.forEachIndexed { k, u ->
                 val back = k == 0 && shots.size > 1
-                Shot(u, if (portrait) 92.dp else 170.dp, if (portrait) 180.dp else 112.dp, Modifier
+                Shot(u, if (wideShot) 170.dp else 92.dp, if (wideShot) 112.dp else 180.dp, Modifier
                     .offset(x = if (back) (-50).dp else 0.dp, y = if (back) 12.dp else 0.dp)
                     .graphicsLayer { rotationZ = if (back) -7f else 4f; shadowElevation = 10.dp.toPx(); this.shape = RoundedCornerShape(16.dp); clip = false },
-                    portrait = portrait, corner = 16.dp, fallback = if (k == shots.lastIndex) big else null)
+                    portrait = !wideShot, corner = 16.dp, fallback = if (k == shots.lastIndex) big else null)
             }
         }
         Column(Modifier.fillMaxHeight().fillMaxWidth(.56f).padding(18.dp).graphicsLayer { translationX = -offset() * 28.dp.toPx() }) {
@@ -454,7 +459,8 @@ private fun Swimlane(vm: MainViewModel, c: StoreCollection, modifier: Modifier) 
 }
 
 /** 12.3k style, for star counts. */
-fun compactCount(n: Int): String = when {
+fun compactCount(n: Int): String = compactCount(n.toLong())
+fun compactCount(n: Long): String = when {
     n < 1000 -> "$n"
     n < 1_000_000 -> "%.1fk".format(java.util.Locale.US, n / 1000.0).replace(".0k", "k")
     else -> "%.1fM".format(java.util.Locale.US, n / 1_000_000.0).replace(".0M", "M")

@@ -15,8 +15,14 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import okhttp3.Cookie
+import okhttp3.CookieJar
+import okhttp3.HttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URI
+import java.net.URLEncoder
 
 /** An app the user keeps in Orbit: tracked straight from its source (a repo, F-Droid, IzzyOnDroid, a web page or an APK link),
  *  installed and updated like any catalog app, on this phone only until they share it with the Orion library. */
@@ -38,7 +44,13 @@ import java.net.URI
     /** Newest first, every channel: the version picker can install any of them, not just the latest. */
     val versions: List<VersionOption> = emptyList(),
     val paused: Boolean = false,
+    /** Follow new versions, but never offer Install or Update. Obtainium's trackOnly. */
+    val trackOnly: Boolean = false,
+    /** Days to wait before a release is offered. -1 uses the global Orbit wait. */
+    val minAgeDays: Int = -1,
     val published: Boolean = false,
+    /** Times the release files were downloaded, summed from the host when it reports a count. */
+    val downloads: Long = 0,
 )
 
 /** Tokens Orbit sends to GitHub, GitLab and Codeberg. GitHub is the token already saved in the app. */
@@ -50,7 +62,7 @@ enum class OrbitSource(val label: String) {
     GITHUB("GitHub"), GITLAB("GitLab"), CODEBERG("Codeberg"), FORGEJO("Forgejo"), FDROID("F-Droid"), IZZY("IzzyOnDroid"),
     UPTODOWN("Uptodown"), APKMIRROR("APKMirror"), APKPURE("APKPure"), APTOIDE("Aptoide"), SOURCEFORGE("SourceForge"),
     ITCH("itch.io"), FARSROID("Farsroid"), LITEAPKS("LiteAPKs"), APK4FREE("APK4Free"), COOLAPK("CoolApk"), SOURCEHUT("SourceHut"),
-    JENKINS("Jenkins"), TELEGRAM("Telegram"), DISCORD("Discord"), APK("APK link"), WEB("Web page")
+    JENKINS("Jenkins"), TELEGRAM("Telegram"), DISCORD("Discord"), APPGALLERY("AppGallery"), APK("APK link"), WEB("Web page")
 }
 
 /** A ready-made config from the Obtainium apps directory. */
@@ -83,6 +95,7 @@ object Orbit {
             host == "sr.ht" || host.endsWith(".sr.ht") -> OrbitSource.SOURCEHUT
             host == "telegram.org" || host == "www.telegram.org" || host == "t.me" || host == "telegram.me" -> OrbitSource.TELEGRAM
             host == "discord.com" || host == "www.discord.com" || host == "discordapp.com" || host.endsWith("discordapp.com") || host.endsWith("discordapp.net") -> OrbitSource.DISCORD
+            appGalleryId(url) != null -> OrbitSource.APPGALLERY
             JOB.containsMatchIn(url) -> OrbitSource.JENKINS
             PKG.containsMatchIn(u.substringBefore('?').substringBefore('#')) -> OrbitSource.APK
             host.endsWith("github.com") && repoPath(url) != null -> OrbitSource.GITHUB
@@ -96,8 +109,24 @@ object Orbit {
     private fun repoPath(url: String) = parseRepoSource(url)
 
     /** Stable id for a source, so adding the same link twice finds the existing entry. */
-    fun idFor(url: String): String = PREFIX + url.trim().lowercase().removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/').removeSuffix(".git")
-        .replace(Regex("[^a-z0-9._/-]"), "").take(120)
+    private val GALLERY_ID = Regex("""(?:(?:app|appdl)/|\b)(C\d{6,14})\b""", RegexOption.IGNORE_CASE)
+
+    /** Huawei's public app id, from either the store page or the direct download link. */
+    fun appGalleryId(url: String): String? {
+        val target = if (url.trim().startsWith("http", true)) url.trim() else "https://${url.trim()}"
+        val host = runCatching { URI(target).host.orEmpty().lowercase() }.getOrDefault("")
+        if (host != "appgallery.huawei.com" && host != "appgallery.cloud.huawei.com" && !host.endsWith(".cloud.huawei.com") && host != "appgallery.huawei.com.cloud") return null
+        return GALLERY_ID.find(url)?.groupValues?.filter { it.isNotEmpty() }?.lastOrNull()?.uppercase()
+    }
+
+    /** The store page opens the AppGallery app. */
+    fun appGalleryDownload(url: String) = appGalleryId(url)?.let { "https://appgallery.huawei.com/app/$it" }
+
+    fun idFor(url: String): String {
+        appGalleryId(url)?.let { return PREFIX + "appgallery/" + it.lowercase() }
+        return PREFIX + url.trim().lowercase().removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/').removeSuffix(".git")
+            .replace(Regex("[^a-z0-9._/-]"), "").take(120)
+    }
 
     private fun bearer(token: String) = if (token.isNotEmpty()) mapOf("Authorization" to "Bearer $token") else emptyMap()
     private fun codebergAuth(token: String) = if (token.isNotEmpty()) mapOf("Authorization" to "token $token") else emptyMap()
@@ -105,7 +134,11 @@ object Orbit {
 
     // region releases, per source
     private suspend fun releases(o: OrbitApp, tokens: HostTokens): List<CatalogProcessor.Release> = when (sourceOf(o.url)) {
-        OrbitSource.GITHUB -> repoPath(o.url)!!.let { gitReleases(json.parseToJsonElement(Net.text("https://api.github.com/repos/${it.repoPath}/releases?per_page=30", bearer(tokens.github)))) }
+        OrbitSource.GITHUB -> repoPath(o.url)!!.let { p ->
+            val list = gitReleases(json.parseToJsonElement(Net.text("https://api.github.com/repos/${p.repoPath}/releases?per_page=30", bearer(tokens.github))))
+            val latest = runCatching { (json.parseToJsonElement(Net.text("https://api.github.com/repos/${p.repoPath}/releases/latest", bearer(tokens.github))) as? JsonObject)?.str("tag_name").orEmpty() }.getOrDefault("")
+            if (latest.isEmpty()) list else list.map { it.pastLatest(latest) }
+        }
         OrbitSource.CODEBERG, OrbitSource.FORGEJO -> repoPath(o.url)!!.let { gitReleases(json.parseToJsonElement(Net.text("https://codeberg.org/api/v1/repos/${it.repoPath}/releases?limit=30", codebergAuth(tokens.codeberg)))) }
         OrbitSource.GITLAB -> repoPath(o.url)!!.let { r -> gitlab(json.parseToJsonElement(GitlabPace.text("https://${r.domain}/api/v4/projects/${enc(r.repoPath)}/releases?per_page=10", gitlabAuth(tokens.gitlab)))) }
         OrbitSource.FDROID -> {
@@ -125,6 +158,7 @@ object Orbit {
         OrbitSource.JENKINS -> jenkins(o.url)
         OrbitSource.TELEGRAM -> telegram(o.url)
         OrbitSource.DISCORD -> discord(o.url)
+        OrbitSource.APPGALLERY -> appGallery(o.url)
         OrbitSource.APK -> listOf(direct(o.url))
         OrbitSource.WEB -> page(o.url)
     }
@@ -185,6 +219,15 @@ object Orbit {
     private fun bodyFiles(text: String) = FILE_URL.findAll(text).map { it.value.trimEnd('.', ',', ')') }.distinct().take(8).map { u ->
         Triple(u.substringBefore('?').substringAfterLast('/'), u, null as Long?)
     }.toList()
+
+    /** A release newer than GitHub's Latest tag is not Stable. Nightly and Beta builds published ahead of that tag were wearing the Stable badge. */
+    private fun CatalogProcessor.Release.pastLatest(latest: String): CatalogProcessor.Release {
+        if (tag == latest) return this
+        val file = assets.firstOrNull()?.first.orEmpty()
+        if (CatalogProcessor.detectStream(file, tag, prerelease) != "Stable") return this
+        val newer = compareVersions(CatalogProcessor.extractVersion(tag) ?: tag, CatalogProcessor.extractVersion(latest) ?: latest) > 0
+        return if (newer) CatalogProcessor.Release(tag, name, prerelease, date, assets, downloads, "Nightly") else this
+    }
 
     /** GitHub and Codeberg releases. An APK linked from the release note counts when nothing was uploaded as an asset. */
     private fun gitReleases(root: JsonElement): List<CatalogProcessor.Release> {
@@ -563,6 +606,7 @@ object Orbit {
         return when {
             host.endsWith("uptodown.com") && !pkgFile(file) && "/download/" in path -> uptodownReal(url)
             host.endsWith("itch.io") && "/file/" in path && !pkgFile(file) -> itchReal(url)
+            appGalleryId(url) != null -> withContext(Dispatchers.IO) { runCatching { appGalleryApp(appGalleryId(url)!!)?.url }.getOrNull() } ?: url
             host.endsWith("apkmirror.com") && !pkgFile(file) -> apkmirrorReal(url)
             host.endsWith("telegram.org") && "/dl/" in path -> runCatching { Net.open(url).url }.getOrNull()?.takeIf { pkgFile(it) } ?: url
             else -> url
@@ -571,24 +615,32 @@ object Orbit {
     // endregion
     // endregion
 
+    /** A Nightly, daily or snapshot build stays visible even when pre-releases are off. It is a channel, not a generic preview. */
+    private fun channelBuild(r: CatalogProcessor.Release): Boolean {
+        val t = "${r.tag} ${r.name} ${r.assets.joinToString(" ") { it.first }}".lowercase()
+        return listOf("nightly", "daily", "snapshot").any { it in t }
+    }
+
     /** Releases into versions: APK assets that pass the filter, pre-releases only when asked, version read from the tag. */
     fun versionsOf(o: OrbitApp, rel: List<CatalogProcessor.Release>): List<VersionOption> {
         val filter = o.apkFilter.takeIf { it.isNotBlank() }?.let { runCatching { Regex(it, RegexOption.IGNORE_CASE) }.getOrNull() }
         val vre = o.versionRegex.takeIf { it.isNotBlank() }?.let { runCatching { Regex(it) }.getOrNull() }
-        return rel.filter { o.includePre || !it.prerelease }.mapNotNull { r ->
+        return rel.filter { o.includePre || !it.prerelease || channelBuild(it) }.mapNotNull { r ->
             val apks = r.assets.filter { (n, u) -> pkgFile(n) || pkgFile(u) }
                 .filter { (n, _) -> filter == null || filter.containsMatchIn(n) }
             if (apks.isEmpty()) return@mapNotNull null
             val fromTag = vre?.find(r.tag)?.let { m -> m.groupValues.getOrNull(1)?.ifEmpty { null } ?: m.value }
             val ver = fromTag ?: CatalogProcessor.extractVersion(r.tag) ?: r.tag.removePrefix("v").ifBlank { null } ?: CatalogProcessor.extractVersion(apks[0].first) ?: r.date.substringBefore('T')
             val variants = apks.map { (n, u, s) -> AppVariant(CatalogProcessor.determineArch(n), u, s) }.distinctBy { it.url }
-            VersionOption(CatalogProcessor.detectStream(apks[0].first, r.tag, r.prerelease), ver, r.date.substringBefore('T'), variants, r.tag)
+            VersionOption(r.channel ?: CatalogProcessor.detectStream(apks[0].first, r.tag, r.prerelease), ver, r.date.substringBefore('T'), variants, r.tag)
         }.take(15)
     }
 
     /** Checks the source again. Errors are kept on the entry, so the Orbit list can say why an app stopped updating. */
-    suspend fun refresh(o: OrbitApp, tokens: HostTokens, now: Long): OrbitApp = runCatching { versionsOf(o, releases(o, tokens)) }.fold(
-        { v -> o.copy(versions = v.ifEmpty { o.versions }, checkedAt = now, error = if (v.isEmpty()) "No APK matched in the latest releases" else null) },
+    suspend fun refresh(o: OrbitApp, tokens: HostTokens, now: Long): OrbitApp = runCatching {
+        val rel = releases(o, tokens); versionsOf(o, rel) to rel.sumOf { it.downloads }
+    }.fold(
+        { (v, count) -> o.copy(versions = v.ifEmpty { o.versions }, downloads = if (count > 0) count else o.downloads, checkedAt = now, error = if (v.isEmpty()) "No APK matched in the latest releases" else null) },
         { e -> o.copy(checkedAt = now, error = (e as? HttpError)?.let {
             when {
                 it.code == 429 && sourceOf(o.url) == OrbitSource.GITLAB -> "GitLab is limiting this network. Wait a few minutes, then check again."
@@ -606,12 +658,16 @@ object Orbit {
             ?: Regex("""<meta[^>]+content\s*=\s*["']([^"']*)["'][^>]*(?:property|name)\s*=\s*["']$prop["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
     }
 
-    /** ReVanced and Metrolist are not kept in Orbit. The text is what the user sees. */
+    /** ReVanced and Metrolist are not kept in Orbit. The text is what the user sees.
+     *  The package name alone is not enough: MicroG RE is a Morphe project and its package contains "revanced". */
     fun refused(url: String, name: String = "", pkg: String = "", author: String = ""): String? {
-        val hay = listOf(url, name, pkg, author).joinToString(" ").lowercase()
+        val urlL = url.lowercase(); val nameL = name.lowercase().trim(); val authorL = author.lowercase().trim(); val pkgL = pkg.lowercase().trim()
+        val morphe = "morpheapp/" in urlL || "morphe" in authorL || pkgL == "app.revanced.android.gms" || pkgL == "com.mgoogle.android.gms"
+        val revanced = !morphe && (Regex("""github\.com/revanced(/|$)""").containsMatchIn(urlL) || nameL == "revanced" || nameL.startsWith("revanced ") || authorL == "revanced" || authorL.startsWith("revanced "))
+        val metrolist = "metrolist" in "$urlL $nameL $authorL"
         return when {
-            "revanced" in hay -> "Orbit can't maintain ReVanced apps. Follow Morphe instead."
-            "metrolist" in hay -> "Orbit can't maintain Metrolist. Follow ArchiveTune or BiTChord instead."
+            revanced -> "Orbit can't maintain ReVanced apps. Follow Morphe instead."
+            metrolist -> "Orbit can't maintain Metrolist. Follow ArchiveTune or BiTChord instead."
             else -> null
         }
     }
@@ -625,6 +681,18 @@ object Orbit {
                 o = o.copy(name = o.name.ifBlank { d.name.orEmpty() }, author = o.author.ifBlank { d.author.orEmpty() }, about = o.about.ifBlank { d.description.orEmpty() },
                     icon = o.icon.ifBlank { d.icon.orEmpty() }, packageName = o.packageName ?: d.packageName, screenshots = o.screenshots.ifEmpty { d.shots })
                 if (src == OrbitSource.GITHUB && o.icon.isBlank()) o = o.copy(icon = "https://github.com/${repoPath(clean)!!.owner}.png")
+            }
+            OrbitSource.APPGALLERY -> appGalleryId(clean)?.let { id ->
+                runCatching { appGalleryApp(id) }.getOrNull()?.let { d ->
+                    o = o.copy(
+                        name = o.name.ifBlank { d.name },
+                        author = o.author.ifBlank { d.developer },
+                        about = o.about.ifBlank { d.description },
+                        icon = o.icon.ifBlank { d.icon },
+                        packageName = o.packageName ?: d.packageName.takeIf { it.isNotBlank() },
+                        screenshots = o.screenshots.ifEmpty { d.screenshots }
+                    )
+                }
             }
             else -> runCatching { Net.text(clean.substringBefore('#'), c = Net.browser) }.getOrNull()?.takeIf { src != OrbitSource.APK }?.let { html ->
                 val pkg = FDROID.find(clean)?.groupValues?.get(1) ?: IZZY.find(clean)?.groupValues?.get(1) ?: if (src == OrbitSource.UPTODOWN) uptodownPackage(html) else null
@@ -649,9 +717,15 @@ object Orbit {
         fun x(k: String) = (extra?.get(k) as? JsonPrimitive)?.contentOrNull.orEmpty()
         val id = o.str("id")
         val tags = ((o["categories"] as? JsonArray) ?: (extra?.get("categories") as? JsonArray)).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }.filter { it.isNotEmpty() }
+        fun flag(k: String): Boolean {
+            val v = extra?.get(k) ?: o[k]
+            return (v as? JsonPrimitive)?.let { it.booleanOrNull == true || it.contentOrNull == "true" } == true
+        }
+        val age = x("minimumUpdateAgeDays").ifEmpty { o.str("minimumUpdateAgeDays") }.toIntOrNull() ?: -1
         return OrbitApp(idFor(url), url, name = o.str("name").ifBlank { x("appName") }, author = o.str("author").ifBlank { x("appAuthor") },
             icon = icon, about = about.ifBlank { x("about") }, packageName = id.takeIf { '.' in it && ' ' !in it },
-            apkFilter = x("apkFilterRegEx"), includePre = x("includePrereleases") == "true", versionRegex = x("versionExtractionRegEx"), tags = tags, addedAt = now)
+            apkFilter = x("apkFilterRegEx"), includePre = x("includePrereleases") == "true", versionRegex = x("versionExtractionRegEx"), tags = tags, addedAt = now,
+            trackOnly = flag("trackOnly"), minAgeDays = age)
     }
 
     /** Whatever the user brings: an Obtainium export file, a JSON list, one app, or obtainium://app/ and directory redirect links. */
@@ -684,14 +758,23 @@ object Orbit {
         return apps to more
     }
 
+    /** The global wait written in an Obtainium export, when that file has one. */
+    fun importMinAge(text: String): Int? {
+        val root = runCatching { json.parseToJsonElement(text.trim()) as? JsonObject }.getOrNull() ?: return null
+        val s = root["settings"] as? JsonObject ?: return null
+        return (s["minimumUpdateAgeDays"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+    }
+
     /** Back out as an Obtainium export, so nothing kept in Orbit is ever locked in. */
-    fun export(list: List<OrbitApp>): String = json.encodeToString(JsonObject.serializer(), buildJsonObject {
+    fun export(list: List<OrbitApp>, minAgeDays: Int = 0): String = json.encodeToString(JsonObject.serializer(), buildJsonObject {
+        put("settings", buildJsonObject { put("minimumUpdateAgeDays", minAgeDays) })
         put("apps", JsonArray(list.map { o ->
             buildJsonObject {
                 put("id", o.packageName ?: o.id.removePrefix(PREFIX)); put("url", o.url); put("author", o.author); put("name", o.name)
                 put("additionalSettings", json.encodeToString(JsonObject.serializer(), buildJsonObject {
                     if (o.apkFilter.isNotBlank()) put("apkFilterRegEx", o.apkFilter); if (o.includePre) put("includePrereleases", true)
                     if (o.versionRegex.isNotBlank()) put("versionExtractionRegEx", o.versionRegex); if (o.about.isNotBlank()) put("about", o.about)
+                    if (o.trackOnly) put("trackOnly", true); if (o.minAgeDays >= 0) put("minimumUpdateAgeDays", o.minAgeDays)
                 }))
             }
         }))
@@ -721,18 +804,244 @@ object Orbit {
             put("downloadUrl", ""); put("screenshots", JsonArray(o.screenshots.map(::JsonPrimitive))); put("platform", Platform.ANDROID)
         }
     }
+
+    data class AppGalleryDetail(
+        val id: String,
+        val name: String,
+        val developer: String,
+        val version: String,
+        val versionCode: Long,
+        val packageName: String,
+        val size: Long,
+        val url: String,
+        val icon: String,
+        val description: String,
+        val screenshots: List<String>,
+        val releaseDate: String,
+        val downloads: Int
+    )
+
+    private var gallerySign: String = ""
+    private var galleryHost: String = "store-dre.hispace.dbankcloud.com"
+    private var gallerySignExpiry: Long = 0L
+    private val galleryDevId: String by lazy {
+        val chars = "0123456789abcdef"
+        (1..64).map { chars.random() }.joinToString("")
+    }
+
+    private val DR2_ZONES = setOf(
+        "AE", "AF", "AG", "AI", "AM", "AO", "AQ", "AR", "AS", "AW", "AZ", "BB", "BD", "BF", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BR", "BS", "BT", "BV", "BW", "BY", "BZ", "CC", "CD", "CF", "CG", "CI", "CK", "CL", "CM", "CO", "CR", "CU", "CV", "CX", "DJ", "DM", "DO", "DZ", "EC", "EG", "EH", "ER", "ET", "FJ", "FK", "FM", "GA", "GD", "GE", "GF", "GH", "GM", "GN", "GP", "GQ", "GS", "GT", "GU", "GW", "GY", "HK", "HM", "HN", "HT", "ID", "IN", "IO", "IQ", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LK", "LR", "LS", "LY", "MA", "MG", "MH", "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE", "NF", "NG", "NI", "NP", "NR", "NU", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PN", "PR", "PS", "PW", "PY", "QA", "RE", "RW", "SA", "SB", "SC", "SD", "SG", "SH", "SL", "SN", "SO", "SR", "SS", "ST", "SV", "SY", "SZ", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TT", "TV", "TW", "TZ", "UG", "UY", "UZ", "VE", "VG", "VI", "VN", "VU", "WF", "WS", "YE", "YT", "ZA", "ZM", "ZW"
+    )
+
+    private fun postHiSpace(host: String, params: Map<String, String>): JsonObject? {
+        val bodyStr = params.entries.sortedBy { it.key }.joinToString("&") { (k, v) ->
+            "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}"
+        }
+        val req = Request.Builder()
+            .url("https://$host/hwmarket/api/clientApi")
+            .header("User-Agent", "HiSpace##16.5.1.301##google##Pixel 8 Pro")
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .post(bodyStr.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+            .build()
+        return runCatching {
+            Net.client.newCall(req).execute().use { resp ->
+                val raw = resp.body.string()
+                json.parseToJsonElement(raw) as? JsonObject
+            }
+        }.getOrNull()
+    }
+
+    private fun ensureGallerySession(): Pair<String, String>? {
+        val now = System.currentTimeMillis()
+        if (gallerySign.isNotEmpty() && now < gallerySignExpiry) {
+            return galleryHost to gallerySign
+        }
+        val common = mapOf(
+            "ver" to "1.1",
+            "locale" to "en_US",
+            "serviceType" to "0",
+            "ts" to now.toString(),
+            "net" to "1",
+            "brand" to "google",
+            "manufacturer" to "Google",
+            "subBrand" to "0",
+            "deviceId" to galleryDevId,
+            "deviceIdType" to "9",
+            "packageName" to "com.huawei.appmarket"
+        )
+        val frontParams = common + mapOf(
+            "method" to "client.front2",
+            "version" to "16.5.1",
+            "versionCode" to "160501301",
+            "zone" to "1",
+            "phoneType" to "Pixel 8 Pro",
+            "firmwareVersion" to "16",
+            "isFirstLaunch" to "1",
+            "oobe" to "0",
+            "needServiceZone" to "1"
+        )
+        val initial = postHiSpace("store-dre.hispace.dbankcloud.com", frontParams)
+            ?: postHiSpace("store-dra.hispace.dbankcloud.com", frontParams)
+            ?: return null
+        val zone = initial.str("serviceZone")
+        var sign = initial.str("sign")
+        val host = when {
+            zone == "CN" -> "store-drcn.hispace.dbankcloud.com"
+            zone == "RU" -> "store-drru.hispace.dbankcloud.ru"
+            zone in DR2_ZONES -> "store-dra.hispace.dbankcloud.com"
+            else -> "store-dre.hispace.dbankcloud.com"
+        }
+        if (host != "store-dre.hispace.dbankcloud.com" || sign.isEmpty()) {
+            val regionalParams = frontParams + mapOf("needServiceZone" to "0", "ts" to System.currentTimeMillis().toString())
+            val regional = postHiSpace(host, regionalParams)
+            sign = regional?.str("sign")?.takeIf { it.isNotEmpty() } ?: sign
+        }
+        if (sign.isEmpty()) return null
+        galleryHost = host
+        gallerySign = sign
+        gallerySignExpiry = now + 4 * 3600_000L
+        return host to sign
+    }
+
+    suspend fun appGalleryApp(id: String): AppGalleryDetail? = withContext(Dispatchers.IO) {
+        val (host, sign) = ensureGallerySession() ?: return@withContext null
+        val params = mapOf(
+            "ver" to "1.1",
+            "locale" to "en_US",
+            "serviceType" to "0",
+            "ts" to System.currentTimeMillis().toString(),
+            "net" to "1",
+            "brand" to "google",
+            "manufacturer" to "Google",
+            "subBrand" to "0",
+            "deviceId" to galleryDevId,
+            "deviceIdType" to "9",
+            "packageName" to "com.huawei.appmarket",
+            "method" to "client.appDetailById",
+            "sign" to sign,
+            "id" to id
+        )
+        val res = postHiSpace(host, params) ?: run {
+            gallerySign = ""
+            return@withContext null
+        }
+        val list = (res["detailInfo"] as? JsonArray).orEmpty()
+        val info = list.firstOrNull() as? JsonObject ?: return@withContext null
+
+        val name = info.str("name")
+        if (name.isBlank()) return@withContext null
+        val developer = info.str("developer")
+        val version = info.str("versionName")
+        val versionCode = (info["versionCode"] as? JsonPrimitive)?.longOrNull ?: 0L
+        val packageName = info.str("package")
+        val size = (info["size"] as? JsonPrimitive)?.longOrNull ?: (info["fullSize"] as? JsonPrimitive)?.longOrNull ?: 0L
+        val url = info.str("url")
+        val icon = info.str("icoUri")
+        val desc = info.str("description").ifBlank { info.str("briefDescription") }
+        val shots = (info["images"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+        val releaseDate = info.str("releaseDate")
+        val downloads = (info["download"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
+
+        AppGalleryDetail(
+            id = id,
+            name = name,
+            developer = developer,
+            version = version,
+            versionCode = versionCode,
+            packageName = packageName,
+            size = size,
+            url = url,
+            icon = icon,
+            description = desc,
+            screenshots = shots,
+            releaseDate = releaseDate,
+            downloads = downloads
+        )
+    }
+
+    /** AppGallery app releases via Huawei's HiSpace client API. */
+    private suspend fun appGallery(url: String): List<CatalogProcessor.Release> = withContext(Dispatchers.IO) {
+        val id = appGalleryId(url) ?: return@withContext emptyList()
+        val d = runCatching { appGalleryApp(id) }.getOrNull() ?: return@withContext emptyList()
+        if (d.url.isBlank()) return@withContext emptyList()
+        val fileName = "${if (d.packageName.isNotBlank()) d.packageName else id}.${d.version}.apk"
+        listOf(
+            CatalogProcessor.Release(
+                tag = d.version,
+                name = d.name,
+                prerelease = false,
+                date = d.releaseDate,
+                assets = listOf(Triple(fileName, d.url, d.size.takeIf { it > 0 })),
+                downloads = d.downloads.toLong()
+            )
+        )
+    }
+
+    private val GH_RELEASE = Regex("""https://(?:www\.)?github\.com/([^/]+)/([^/]+)/releases/download/([^/]+)/([^?#]+)""", RegexOption.IGNORE_CASE)
+
+    /** Private GitHub release files answer 404 on the public link. The same file is fetched from the API when a token is saved. */
+    suspend fun privateDownloadUrl(url: String, tokens: HostTokens): String {
+        if (tokens.github.isEmpty()) return url
+        val m = GH_RELEASE.find(url) ?: return url
+        val code = runCatching {
+            withContext(Dispatchers.IO) {
+                Net.client.newBuilder().followRedirects(false).build().newCall(
+                    Request.Builder().url(url).header("Range", "bytes=0-0").header("User-Agent", "Mozilla/5.0 (Linux; Android 13) Chrome/110.0.0.0").build()
+                ).execute().use { it.code }
+            }
+        }.getOrDefault(0)
+        if (code !in setOf(401, 403, 404)) return url
+        val repo = "${m.groupValues[1]}/${m.groupValues[2]}"
+        val tag = runCatching { java.net.URLDecoder.decode(m.groupValues[3], "UTF-8") }.getOrDefault(m.groupValues[3])
+        val name = runCatching { java.net.URLDecoder.decode(m.groupValues[4], "UTF-8") }.getOrDefault(m.groupValues[4])
+        val body = runCatching { Net.text("https://api.github.com/repos/$repo/releases/tags/${enc(tag)}", mapOf("Authorization" to "Bearer ${tokens.github}", "Accept" to "application/vnd.github+json")) }.getOrNull() ?: return url
+        return runCatching { githubAssetApiUrl(json.parseToJsonElement(body), name) }.getOrNull() ?: url
+    }
+
+    /** The same app already living in the Orion library: same package, or the same repository. */
+    fun sameCatalog(o: OrbitApp, a: AppItem): Boolean {
+        if (owns(a.id)) return false
+        val pkg = o.packageName?.trim()?.lowercase()
+        if (!pkg.isNullOrEmpty() && a.packageName?.trim()?.equals(pkg, true) == true) return true
+        val repo = o.url.trim().trimEnd('/').lowercase()
+        if (a.repoUrl?.trim()?.trimEnd('/')?.equals(repo, true) == true) return true
+        val path = parseRepoSource(o.url)?.repoPath?.lowercase() ?: return false
+        return listOf(a.githubRepo, a.gitlabRepo, a.codebergRepo).any { it?.trim()?.trimEnd('/')?.lowercase() == path }
+    }
 }
 
+/** Whole days since a release date of the form yyyy-MM-dd. Null when the source gave no date. */
+fun VersionOption.ageDays(now: Long): Int? {
+    val d = date.take(10)
+    if (d.length < 10 || d[4] != '-') return null
+    val published = runCatching { java.time.LocalDate.parse(d) }.getOrNull() ?: return null
+    val today = java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+    return java.time.temporal.ChronoUnit.DAYS.between(published, today).toInt()
+}
+
+/** Releases old enough to offer. A missing date is offered, because there is nothing to wait on. */
+fun OrbitApp.offered(minDays: Int, now: Long = System.currentTimeMillis()): List<VersionOption> {
+    if (minDays <= 0) return versions
+    return versions.filter { v -> val age = v.ageDays(now); age == null || age >= minDays }
+}
+
+fun Settings.daysFor(o: OrbitApp) = if (o.minAgeDays >= 0) o.minAgeDays else orbitMinAgeDays
+
 /** The catalog-shaped item every Orion screen understands: detail page, versions, downloads, installs, updates, inspector. */
-fun OrbitApp.toItem(): AppItem {
+fun OrbitApp.toItem(minDays: Int = 0, stream: String = "Stable", now: Long = System.currentTimeMillis()): AppItem {
     val r = parseRepoSource(url); val src = Orbit.sourceOf(url)
-    val def = versions.firstOrNull { it.type == "Stable" } ?: versions.firstOrNull()
+    val shown = offered(minDays, now)
+    val def = shown.firstOrNull { it.type == stream } ?: shown.firstOrNull { it.type == "Stable" } ?: shown.firstOrNull()
     val v0 = def?.variants?.firstOrNull()
     return AppItem(id = id, name = name.ifBlank { "Untitled app" }, description = about, icon = icon, version = def?.version ?: "Latest", latestVersion = def?.version ?: "Latest",
-        downloadUrl = v0?.url ?: "#", variants = def?.variants.orEmpty(), availableVersions = versions, repoUrl = url,
+        downloadUrl = v0?.url ?: "#", variants = def?.variants.orEmpty(), availableVersions = shown, repoUrl = url,
         githubRepo = r?.repoPath?.takeIf { src == OrbitSource.GITHUB }, gitlabRepo = r?.repoPath?.takeIf { src == OrbitSource.GITLAB }, gitlabDomain = r?.domain?.takeIf { src == OrbitSource.GITLAB },
-        codebergRepo = r?.repoPath?.takeIf { src == OrbitSource.CODEBERG }, packageName = packageName, category = category, tags = listOf(ORBIT_TAG), platform = Platform.ANDROID,
-        size = v0?.size?.let(CatalogProcessor::formatSize) ?: "Varies", author = author.ifBlank { src.label }, screenshots = screenshots)
+        codebergRepo = r?.repoPath?.takeIf { src == OrbitSource.CODEBERG }, packageName = packageName, category = category,
+        tags = if (trackOnly) listOf(ORBIT_TAG, TRACK_ONLY_TAG) else listOf(ORBIT_TAG), platform = Platform.ANDROID,
+        size = v0?.size?.let(CatalogProcessor::formatSize) ?: "Varies", author = author.ifBlank { src.label }, screenshots = screenshots,
+        downloadCount = downloads.takeIf { it > 0 })
 }
 
 const val ORBIT_TAG = "Orbit"
+const val TRACK_ONLY_TAG = "Track only"

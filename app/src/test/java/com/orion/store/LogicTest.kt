@@ -341,6 +341,11 @@ class LogicTest {
         assertEquals("Orbit can't maintain ReVanced apps. Follow Morphe instead.", Orbit.refused("https://github.com/revanced/revanced-manager"))
         assertEquals("Orbit can't maintain Metrolist. Follow ArchiveTune or BiTChord instead.", Orbit.refused("https://github.com/mostafaalagamy/Metrolist", "Metrolist"))
         assertEquals(null, Orbit.refused("https://github.com/MorpheApp/morphe", "Morphe"))
+        assertEquals(null, Orbit.refused("https://github.com/MorpheApp/MicroG-RE", "MicroG RE", "app.revanced.android.gms", "MorpheApp"))
+        assertEquals(null, Orbit.refused("", "", "app.revanced.android.gms"))
+        assertEquals(OrbitSource.APPGALLERY, Orbit.sourceOf("https://appgallery.huawei.com/app/C106580399"))
+        assertEquals("C106580399", Orbit.appGalleryId("https://appgallery.huawei.com/app/C106580399"))
+        assertEquals("C106580399", Orbit.appGalleryId("https://appgallery.huawei.com/#/app/C106580399"))
         assertEquals(OrbitSource.JENKINS, Orbit.sourceOf("https://ci.example.com/job/myapp/"))
         assertEquals(OrbitSource.TELEGRAM, Orbit.sourceOf("https://t.me/s/SomeChannel"))
         assertEquals(OrbitSource.DISCORD, Orbit.sourceOf("https://discord.com/app"))
@@ -358,5 +363,34 @@ class LogicTest {
         val v = Orbit.versionsOf(o, rel)
         assertEquals(listOf("2.0", "1.9"), v.map { it.version }); assertEquals(listOf("u1"), v[1].variants.map { it.url })
         assertEquals(listOf("1.9"), Orbit.versionsOf(o.copy(includePre = false), rel).map { it.version })
+        val night = CatalogProcessor.Release("nightly", "", true, "2026-11-01", listOf(Triple("app-nightly.apk", "https://x/app-nightly.apk", 1L)))
+        assertEquals("Nightly", Orbit.versionsOf(o.copy(includePre = false, apkFilter = ""), listOf(night)).single().type)
+        val tracked = Orbit.parseImport("""{"apps":[{"id":"com.foo","url":"https://github.com/a/c","name":"C","additionalSettings":"{\"trackOnly\":true,\"minimumUpdateAgeDays\":2}"}]}""", 0).single()
+        assertTrue(tracked.trackOnly); assertEquals(2, tracked.minAgeDays)
+        assertEquals(2, Orbit.importMinAge("""{"settings":{"minimumUpdateAgeDays":2},"apps":[]}"""))
+        val held = OrbitApp("orbit:x", "https://github.com/a/b", versions = listOf(
+            VersionOption("Stable", "2", "2026-11-11"), VersionOption("Stable", "1", "2026-11-01")))
+        val now = java.time.LocalDate.parse("2026-11-11").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        assertEquals(listOf("1"), held.offered(2, now).map { it.version })
+        val asset = """{"assets":[{"name":"app.apk","url":"https://api.github.com/repos/o/r/releases/assets/5"}]}"""
+        assertEquals("https://api.github.com/repos/o/r/releases/assets/5", githubAssetApiUrl(json.parseToJsonElement(asset), "app.apk"))
+    }
+
+    @Test fun appGalleryFetch() = kotlinx.coroutines.runBlocking {
+        val detail = Orbit.appGalleryApp("C106580399")
+        assertNotNull(detail)
+        assertEquals("GBox", detail?.name)
+        assertEquals("com.gbox.android", detail?.packageName)
+        assertTrue(detail!!.version.isNotEmpty())
+        assertTrue(detail.size > 0)
+        assertTrue(detail.url.startsWith("https://"))
+        assertTrue(detail.icon.startsWith("https://"))
+
+        val app = Orbit.probe("https://appgallery.huawei.com/app/C106580399", HostTokens(), System.currentTimeMillis())
+        assertEquals("GBox", app.name)
+        assertEquals("com.gbox.android", app.packageName)
+        assertTrue(app.versions.isNotEmpty())
+        assertEquals(detail.version, app.versions.first().version)
+        assertTrue(app.versions.first().variants.first().url.startsWith("https://"))
     }
 }

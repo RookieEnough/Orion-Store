@@ -105,7 +105,12 @@ private object InstantMotion : MotionScheme {
 @Composable
 fun OrionTheme(s: Settings, content: @Composable () -> Unit) {
     val ctx = LocalContext.current
-    val theme = if (s.isOled) "oled" else s.theme
+    val follow = s.theme == "system" && !s.isOled
+    val theme = when {
+        follow -> if (androidx.compose.foundation.isSystemInDarkTheme()) "dark" else "light"
+        s.isOled -> "oled"
+        else -> s.theme
+    }
     val dyn = s.materialYouEnabled && Build.VERSION.SDK_INT >= 31
     // Theme objects are remembered: fresh instances on every Settings change re-ran the whole tree through these static locals.
     val colors = remember(theme, dyn, s.palette, s.customPalettes) {

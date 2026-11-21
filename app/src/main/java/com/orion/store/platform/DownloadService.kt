@@ -28,7 +28,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import com.orion.store.data.OrbitApp
+import com.orion.store.data.OrbitSource
+import com.orion.store.data.Settings
+import com.orion.store.data.Orbit
 import okhttp3.Call
+import okhttp3.Interceptor
 import okhttp3.Protocol
 import okhttp3.Request
 import java.io.File
@@ -50,7 +55,8 @@ object Downloads {
     private lateinit var app: Context
     private var wake: PowerManager.WakeLock? = null
     private val client by lazy {
-        Net.client.newBuilder().callTimeout(0, TimeUnit.MILLISECONDS).connectTimeout(30, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+        Net.client.newBuilder().callTimeout(0, TimeUnit.MILLISECONDS).connectTimeout(30, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS)
+            .addNetworkInterceptor(AssetAuthGuard()).build()
     }
     /** HTTP/2 would multiplex the parts onto one connection, which is exactly the cap being dodged. */
     private val h1 by lazy { client.newBuilder().protocols(listOf(Protocol.HTTP_1_1)).build() }
@@ -207,6 +213,42 @@ object Downloads {
             if (total > 0 && temp.length() < total) return R.RETRY
             fin.delete(); return if (temp.renameTo(fin)) R.OK else R.RETRY
         }
+    }
+}
+
+/** Tokens that may ride along with a download, and only to the host they belong to. A redirect to another host loses them. */
+object AssetAuth {
+    @Volatile var github = ""
+    @Volatile var gitlab = ""
+    @Volatile var codeberg = ""
+    @Volatile var gitlabHosts: Set<String> = setOf("gitlab.com")
+
+    fun headers(host: String): Map<String, String> {
+        val h = host.lowercase().removePrefix("www.")
+        return when {
+            h == "api.github.com" && github.isNotEmpty() -> mapOf("Authorization" to "Bearer $github", "Accept" to "application/octet-stream")
+            h == "codeberg.org" && codeberg.isNotEmpty() -> mapOf("Authorization" to "token $codeberg")
+            gitlab.isNotEmpty() && (h == "gitlab.com" || h in gitlabHosts) -> mapOf("PRIVATE-TOKEN" to gitlab)
+            else -> emptyMap()
+        }
+    }
+
+    fun arm(s: Settings, orbit: List<OrbitApp>) {
+        github = s.githubToken; gitlab = s.gitlabToken; codeberg = s.codebergToken
+        gitlabHosts = orbit.mapNotNull { o ->
+            if (Orbit.sourceOf(o.url) != OrbitSource.GITLAB) null else runCatching { java.net.URI(o.url).host?.lowercase() }.getOrNull()
+        }.toSet() + "gitlab.com"
+    }
+}
+
+private class AssetAuthGuard : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
+        val req = chain.request()
+        val extra = AssetAuth.headers(req.url.host)
+        val b = req.newBuilder()
+        if (extra.isEmpty()) b.removeHeader("Authorization").removeHeader("PRIVATE-TOKEN")
+        else extra.forEach { (k, v) -> b.header(k, v) }
+        return chain.proceed(b.build())
     }
 }
 

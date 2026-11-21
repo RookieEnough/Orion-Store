@@ -157,6 +157,7 @@ class AppTracker(private val ctx: Context) {
     private fun isSys(ai: ApplicationInfo) = ai.flags and ApplicationInfo.FLAG_SYSTEM != 0
 
     suspend fun install(fileName: String, pref: String, pkg: String) {
+        if (pkg.contains("shizuku", true) && (root || shizukuRunning())) { installShizuku(fileName, false); return }
         val f = Downloads.file(fileName) ?: throw NativeError("INVALID_FILE_NAME")
         repeat(5) { if (!f.exists() || f.length() == 0L) delay(200) }
         if (!f.exists()) throw NativeError("FILE_MISSING")
@@ -192,6 +193,14 @@ class AppTracker(private val ctx: Context) {
         .flatMap { a -> listOf("content://orion/a.apk", "file:///a.apk").map { Intent(a).setDataAndType(it.toUri(), APK_MIME) } }
         .flatMap { pm.queryIntentActivities(it, 0) }.map { it.activityInfo }.distinctBy { it.packageName }.filter { it.packageName != ctx.packageName }
         .map { Installer(it.packageName, it.loadLabel(pm).toString(), isSys(it.applicationInfo)) }
+        .let { found ->
+            val extra = runCatching { pm.getInstalledApplications(0) }.getOrDefault(emptyList()).mapNotNull { ai ->
+                val label = ai.loadLabel(pm).toString()
+                if (ai.packageName == ctx.packageName || found.any { it.packageName == ai.packageName }) null
+                else if (ai.packageName.contains("shizuku", true) || label.contains("shizuku", true)) Installer(ai.packageName, label, isSys(ai)) else null
+            }
+            found + extra
+        }
         .sortedWith(compareBy({ !it.isSystem }, { it.label.lowercase() }, { it.packageName }))
 
     fun icon(pkg: String): Bitmap? = runCatching { pm.getApplicationIcon(pkg).toBitmap(144, 144) }.getOrNull()
@@ -212,7 +221,7 @@ class AppTracker(private val ctx: Context) {
     suspend fun requestElevated() {
         if (root) return
         try {
-            if (!Shizuku.pingBinder()) throw NativeError("Shizuku is NOT running. Start Shizuku app first.")
+            if (!Shizuku.pingBinder()) throw NativeError("Shizuku is NOT running. Start Shizuku or Shizuku-Next first.")
             if (Shizuku.checkSelfPermission() == GRANTED) return
             val ok = suspendCancellableCoroutine { c ->
                 val l = object : Shizuku.OnRequestPermissionResultListener {
@@ -248,27 +257,50 @@ class AppTracker(private val ctx: Context) {
         if (Shizuku.checkSelfPermission() != GRANTED) throw NativeError("Shizuku permission missing")
     }
 
+    private fun streamDropped(msg: String?) = msg != null && (msg.contains("stream closed", true) || msg.contains("broken pipe", true))
+
     /** Streams the APK into `pm install`. Root also records Orion as the installer, so Android's "App details in store" and update ownership point here. */
     suspend fun installShizuku(fileName: String, lock: Boolean = false, opts: Collection<String> = emptyList()) = withContext(Dispatchers.IO) {
         val raw = resolve(fileName)
         val parts = Bundles.parts(ctx, raw)
         if (parts.isEmpty()) throw NativeError("CORRUPT_APK")
-        if (parts.size > 1) { installMany(parts, opts); return@withContext }
+        if (parts.size > 1) {
+            try { installMany(parts, opts) } catch (e: Exception) {
+                if (!streamDropped(e.message)) throw e
+                val (status, msg) = SessionInstall.commit(ctx, parts, null, true)
+                if (status != android.content.pm.PackageInstaller.STATUS_SUCCESS && status != android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION)
+                    throw NativeError(msg ?: e.message ?: "Stream closed")
+            }
+            return@withContext
+        }
         val f = parts[0]
         // A process the background updater started gets Shizuku's binder a moment after launch
         if (!root) for (i in 0 until 30) { if (shizukuRunning()) break; delay(100) }
         requireShizuku()
         val owner = if (root) " -i ${ctx.packageName}" + if (lock && Build.VERSION.SDK_INT >= 34) " --update-ownership" else "" else ""
         val args = installArgs(opts, Build.VERSION.SDK_INT, owner)
-        fun attempt(flags: String) = sh("pm install -r$flags -S ${f.length()}").let { p ->
-            p.outputStream.use { o -> f.inputStream().use { it.copyTo(o) } }
+        fun attempt(flags: String): Pair<Int, String> {
+            val p = sh("pm install -r$flags -S ${f.length()}")
+            try {
+                p.outputStream.use { o -> f.inputStream().use { it.copyTo(o) } }
+            } catch (e: java.io.IOException) {
+                runCatching { p.destroy() }
+                return -1 to (e.message ?: "Stream closed")
+            }
             // pm prints "Failure [INSTALL_FAILED_...]" on stdout, the part that says why
             val out = p.inputStream.bufferedReader().readText(); val code = p.waitFor()
-            (if (code == 0 && "Failure" in out) 1 else code) to "${out.trim()} ${p.err()}".trim()
+            return (if (code == 0 && "Failure" in out) 1 else code) to "${out.trim()} ${p.err()}".trim()
         }
         var (code, err) = attempt(args)
         // Some ROMs ship a pm without --update-ownership: install anyway rather than fail the update
         if (code != 0 && "update-ownership" in err) attempt(args.replace(" --update-ownership", "")).let { code = it.first; err = it.second }
+        // Shizuku's stdin pipe closes on large APKs. One retry, then the system session, which does not use that pipe.
+        if (code != 0 && streamDropped(err)) attempt(args).let { code = it.first; err = it.second }
+        if (code != 0 && streamDropped(err)) {
+            val (status, msg) = SessionInstall.commit(ctx, listOf(f), null, true)
+            if (status == android.content.pm.PackageInstaller.STATUS_SUCCESS || status == android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) return@withContext
+            throw NativeError(msg ?: "Install failed (Code $code): $err")
+        }
         if (code != 0) throw NativeError("Install failed (Code $code): $err")
     }
 

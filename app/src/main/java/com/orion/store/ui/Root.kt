@@ -70,6 +70,7 @@ fun OrionRoot(vm: MainViewModel) {
     CompositionLocalProvider(LocalVm provides vm, LocalS provides s, LocalD provides d, LocalWidthClass provides widthClassOf(win)) {
         OrionTheme(s) { ThemeRevealHost {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) { SharedTransitionLayout(if (Device.isTv) Modifier.padding(horizontal = 48.dp, vertical = 27.dp) else Modifier) { CompositionLocalProvider(LocalShared provides this) {
+                Box(Modifier.fillMaxSize()) {
                 BackHandler { if (!vm.back()) act?.finish() }
                 val screen = when {
                     vm.forcedTest != null || vm.forcedBlocking -> 0
@@ -80,6 +81,8 @@ fun OrionRoot(vm: MainViewModel) {
                     when (it) { 0 -> ForcedGate(vm); 1 -> Maintenance(vm); else -> Home(vm) }
                 }
                 Overlays(vm)
+                SnackbarHost(vm.snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 24.dp)) { OrionMessage(it) }
+                }
             } } }
         } }
     }
@@ -117,7 +120,7 @@ private fun Home(vm: MainViewModel) {
             Scaffold(
                 Modifier.nestedScroll(hideOnScroll),
                 contentWindowInsets = WindowInsets(0),
-                snackbarHost = { SnackbarHost(vm.snackbar, Modifier.padding(horizontal = 16.dp).padding(bottom = if (bottomDock) 88.dp else 12.dp)) { OrionMessage(it) } },
+                snackbarHost = {},
                 floatingActionButton = {
                     androidx.compose.animation.AnimatedVisibility(vm.cleanupPill && vm.selectedApp == null && vm.overlays.isEmpty(), Modifier.padding(bottom = if (bottomDock) 80.dp else 0.dp),
                         enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
@@ -311,7 +314,7 @@ private fun NavIcon(n: NavItem, on: Boolean, updates: Int) {
 fun Header(vm: MainViewModel) {
     val s = LocalS.current; val d = LocalD.current; val cs = MaterialTheme.colorScheme
     val subtitle = NAV.firstOrNull { it.tab == vm.tab }?.subtitle ?: ""
-    Row(Modifier.fillMaxWidth().height(64.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().height(72.dp).padding(start = 16.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
             if (vm.tab == Tab.ABOUT) Row(verticalAlignment = Alignment.CenterVertically) {
                 Logo(vm); Spacer(Modifier.width(12.dp)); Text(subtitle, style = MaterialTheme.typography.titleLargeEmphasized)
@@ -329,7 +332,7 @@ fun Header(vm: MainViewModel) {
         // While anything downloads or waits to install, the queue is one tap away as a sheet over the page
         AnimatedVisibility(dl + rd > 0, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
             IconButton({ vm.haptic(H.LIGHT); vm.open(Overlay.DOWNLOADS) }) {
-                BadgedBox({ Badge(containerColor = cs.primary) { Text("${dl + rd}") } }) {
+                BadgedBox({ Badge(Modifier.offset(x = (-2).dp, y = 4.dp), containerColor = cs.primary) { Text("${dl + rd}") } }) {
                     val prog = d.activeDownloads.keys.mapNotNull { d.downloadProgress[it] }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
                     Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
                         if (prog != null) CircularProgressIndicator({ prog / 100f }, Modifier.matchParentSize(), strokeWidth = 2.dp)
@@ -341,8 +344,8 @@ fun Header(vm: MainViewModel) {
         IconButton({ vm.openSettings() }) {
             BadgedBox({
                 when {
-                    up > 0 -> Badge(containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text("$up") }
-                    vm.storeUpdateAvailable -> Badge { Text("!") }
+                    up > 0 -> Badge(Modifier.offset(x = (-2).dp, y = 4.dp), containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text("$up") }
+                    vm.storeUpdateAvailable -> Badge(Modifier.offset(x = (-2).dp, y = 4.dp)) { Text("!") }
                 }
             }) { Icon(Sym.Settings, "Settings") }
         }
@@ -523,6 +526,12 @@ private fun Overlays(vm: MainViewModel) {
             confirmButton = { Button({ vm.uninstallAsk = null; vm.uninstall(a, true) }, shapes = ButtonDefaults.shapes()) { Text("Uninstall") } },
             dismissButton = { TextButton({ vm.uninstallAsk = null }) { Text("Cancel") } })
     }
+    vm.wifiAsk?.let { (app, url) ->
+        AlertDialog({ vm.wifiAsk = null }, icon = { Icon(Sym.Wifi, null) }, title = { Text("You're on mobile data") },
+            text = { Text("Wi-Fi only is on, so ${app.name} was not downloaded. Download this one now anyway? Other downloads still wait for Wi-Fi.") },
+            confirmButton = { Button({ vm.wifiAsk = null; vm.download(app, url, allowMobile = true) }, shapes = ButtonDefaults.shapes()) { Text("Download anyway") } },
+            dismissButton = { TextButton({ vm.wifiAsk = null }) { Text("Not now") } })
+    }
     vm.installIssue?.let { i ->
         fun close() { vm.installIssue = null }
         AlertDialog(::close, icon = { Icon(Sym.ErrorOutline, null) }, title = { Text(i.title) },
@@ -531,7 +540,7 @@ private fun Overlays(vm: MainViewModel) {
                 if (i.uninstall != null) TextButton({ close(); vm.tracker.uninstall(i.uninstall) }) { Text("Uninstall current") }
                 else TextButton(::close) { Text("Got it") }
             },
-            dismissButton = { i.retry?.let { f -> TextButton({ close(); vm.installFile(i.app, f, force = true) }) { Text("Try anyway") } } })
+            dismissButton = { i.retry?.let { f -> TextButton({ close(); vm.installFile(i.app, f, regular = i.regular, force = !i.regular) }) { Text(if (i.regular) "Use system installer" else "Try anyway") } } })
     }
 }
 

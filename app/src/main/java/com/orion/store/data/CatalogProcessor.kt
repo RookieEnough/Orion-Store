@@ -94,7 +94,7 @@ object CatalogProcessor {
     }
 
     // region mirror
-    class Release(val tag: String, val name: String, val prerelease: Boolean, val date: String, val assets: List<Triple<String, String, Long?>>)
+    class Release(val tag: String, val name: String, val prerelease: Boolean, val date: String, val assets: List<Triple<String, String, Long?>>, val downloads: Long = 0, val channel: String? = null)
 
     fun parseMirror(root: JsonElement?): Map<String, List<Release>> = (root as? JsonObject)?.mapNotNull { (k, v) -> releasesOf(v)?.let { k.lowercase() to it } }?.toMap().orEmpty()
 
@@ -104,13 +104,15 @@ object CatalogProcessor {
         return arr.mapNotNull { r ->
             val o = r as? JsonObject ?: return@mapNotNull null
             fun s(key: String) = (o[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
+            var got = 0L
             val assets = (o["assets"] as? JsonArray).orEmpty().mapNotNull { e ->
                 val ao = e as? JsonObject ?: return@mapNotNull null
                 val n = (ao["name"] as? JsonPrimitive)?.contentOrNull.orEmpty(); val u = (ao["browser_download_url"] as? JsonPrimitive)?.contentOrNull.orEmpty()
-                if ("apk" !in n.lowercase() && ".apk" !in u.lowercase()) null else Triple(n, u, (ao["size"] as? JsonPrimitive)?.longOrNull)
+                val count = (ao["download_count"] as? JsonPrimitive)?.longOrNull ?: 0L
+                if ("apk" !in n.lowercase() && ".apk" !in u.lowercase()) null else { got += count; Triple(n, u, (ao["size"] as? JsonPrimitive)?.longOrNull) }
             }
             if (assets.isEmpty()) null
-            else Release(s("tag_name"), s("name"), (o["prerelease"] as? JsonPrimitive)?.booleanOrNull ?: false, s("published_at").ifEmpty { s("created_at") }, assets)
+            else Release(s("tag_name"), s("name"), (o["prerelease"] as? JsonPrimitive)?.booleanOrNull ?: false, s("published_at").ifEmpty { s("created_at") }, assets, got)
         }
     }
 
@@ -180,8 +182,9 @@ object CatalogProcessor {
         val latest = STREAMS.mapNotNull { st -> versions.filter { it.first.type == st }.maxByOrNull { it.second }?.first }
         val def = latest.firstOrNull { it.type == "Stable" } ?: latest.first()
         val v0 = def.variants.firstOrNull()
+        val counted = releases.sumOf { it.downloads }.takeIf { it > 0 }
         return app.copy(version = def.version, latestVersion = def.version, downloadUrl = v0?.url?.ifEmpty { null } ?: "#", variants = def.variants,
-            availableVersions = latest, size = v0?.size?.let(::formatSize) ?: app.size)
+            availableVersions = latest, size = v0?.size?.let(::formatSize) ?: app.size, downloadCount = counted ?: app.downloadCount)
     }
     // endregion
 

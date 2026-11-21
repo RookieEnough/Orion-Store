@@ -190,6 +190,11 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                                     more = false; vm.haptic(H.SUCCESS); vm.set { it.withManaged(app.id, !managed) }
                                     vm.toast(if (managed) "${app.name} left My Apps and updates" else "${app.name} is back in My Apps", action = "Undo") { vm.set { it.withManaged(app.id, managed) } }
                                 }, leadingIcon = { Icon(if (managed) Sym.VisibilityOff else Sym.Visibility, null) })
+                                val skip = app.id in s.autoSkip
+                                DropdownMenuItem({ Text(if (skip) "Include in auto-update" else "Skip auto-update") }, {
+                                    more = false; vm.haptic(H.SUCCESS); vm.set { it.copy(autoSkip = if (skip) it.autoSkip - app.id else it.autoSkip + app.id) }
+                                    vm.toast(if (skip) "${app.name} is back on auto-update" else "${app.name} is left out of auto-update")
+                                }, leadingIcon = { Icon(Sym.Autorenew, null) })
                             }
                             if (s.isDevUnlocked) DropdownMenuItem({ Text("Developer deep links") }, { more = false; vm.haptic(H.SELECTION); shareSheet = true }, leadingIcon = { Icon(Sym.Link, null) })
                         }
@@ -231,7 +236,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                         }
                         ready != null -> {
                             Main(Sym.InstallMobile, if (installing) "Installing..." else "Install now", enabled = !installing, busy = installing) { action() }
-                            Side(Sym.Refresh, "Redownload", enabled = !installing) { vm.haptic(H.MEDIUM); vm.deleteReadyFile(app, ready) }
+                            Side(Sym.Delete, "Remove APK", enabled = !installing) { vm.haptic(H.MEDIUM); vm.deleteReadyFile(app, ready) }
                         }
                         cleanup != null && android -> {
                             Main(Sym.OpenInNew, "Open", onClick = ::launch)
@@ -241,12 +246,13 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                             Side(Sym.Delete, "Uninstall") { vm.uninstall(app) }
                             Main(Sym.OpenInNew, "Open", onClick = ::launch)
                         }
+                        TRACK_ONLY_TAG in app.tags && ready == null -> Main(Sym.Visibility, "Track only") { app.repoUrl?.let { vm.tracker.open(it) } }
                         else -> {
                             val (icon, label) = when {
                                 unavailable -> Sym.Block to "Currently unavailable"
                                 fallback -> Sym.Code to "View on GitHub"
                                 external -> Sym.OpenInNew to "Get from source"
-                                needsUpdate -> Sym.SystemUpdate to "Update now"
+                                needsUpdate -> Sym.SystemUpdate to "v${local.orEmpty().removePrefix("v")} → v${preferredVersion(app, s.streamOf(app.id)).removePrefix("v")}"
                                 app.platform == Platform.PC -> Sym.DesktopWindows to "Get on PC"
                                 else -> Sym.Download to "Download"
                             }
@@ -259,6 +265,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                                     Text("Ignore update", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
                                     DropdownMenuItem({ Text("Ignore for 1 week") }, { ignore("week") }, leadingIcon = { Icon(Sym.Schedule, null) })
                                     DropdownMenuItem({ Text("Until next version") }, { ignore("version", preferredVersion(app, s.streamOf(app.id))) }, leadingIcon = { Icon(Sym.SkipNext, null) })
+                                    DropdownMenuItem({ Text("Stay on v${local.orEmpty().removePrefix("v")}") }, { ignore("cap", local) }, leadingIcon = { Icon(Sym.Lock, null) })
                                     DropdownMenuItem({ Text("Never show again") }, { ignore("never") }, leadingIcon = { Icon(Sym.Block, null) })
                                 }
                             }
@@ -284,11 +291,10 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                                 modifier = Modifier.weight(1f, false).clip(Pill).clickable(enabled = app.author.isNotBlank()) { vm.haptic(H.LIGHT); vm.devProfile = app.author to app.id })
                             Spacer(Modifier.width(4.dp)); Icon(Sym.VerifiedFilled, "Verified", Modifier.size(16.dp), tint = cs.primary)
                         }
-                        app.stars?.let { n ->
-                            Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Sym.StarFilled, null, Modifier.size(14.dp), tint = cs.tertiary); Spacer(Modifier.width(4.dp))
-                                Text("${compactCount(n)} ${if (n == 1) "star" else "stars"}", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-                            }
+                        val counts = listOfNotNull(app.stars?.let { "${compactCount(it)} ${if (it == 1) "star" else "stars"}" }, app.downloadCount?.takeIf { it > 0 }?.let { "${compactCount(it)} downloads" })
+                        if (counts.isNotEmpty()) Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(if (app.stars != null) Sym.StarFilled else Sym.Download, null, Modifier.size(14.dp), tint = cs.tertiary); Spacer(Modifier.width(4.dp))
+                            Text(counts.joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         statusText(app)?.let { (t, c) -> Text(t, style = MaterialTheme.typography.labelLarge, color = c, modifier = Modifier.padding(top = 2.dp)) }
                         if (cleanup != null) Box(Modifier.padding(top = 6.dp)) { Tag("Pending cleanup", Caution, Sym.CleaningServices) }
@@ -314,6 +320,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     if (canInspect) {
                         divider()
                         val r = InspectCache.reports[InspectCache.key(app)]
+                        androidx.compose.runtime.SideEffect { InspectCache.keep(app) }
                         Cell({
                             Box(Modifier.size(28.dp).background(cs.secondaryContainer, MaterialShapes.Cookie6Sided.toShape()), contentAlignment = Alignment.Center) {
                                 Icon(Sym.Science, null, Modifier.size(16.dp), tint = cs.onSecondaryContainer)
@@ -326,9 +333,14 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
         fun LazyListScope.media() {
             if (app.screenshots.isNotEmpty()) item("shots") {
                 val portrait = app.platform == Platform.ANDROID
-                // The wide pane has the room: screenshots grow instead of leaving the page half empty
+                val shots = app.screenshots
+                val wide = if (twoPane) 520.dp else 320.dp
+                val tall = if (portrait) (if (twoPane) 460.dp else 340.dp) else (if (twoPane) 300.dp else 200.dp)
+                // The wide pane has the room: screenshots grow instead of leaving the page half empty.
                 LazyRow(Modifier.reveal(1).padding(top = 8.dp), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    itemsIndexed(app.screenshots) { i, u -> Shot(u, if (twoPane) 520.dp else 320.dp, if (portrait) (if (twoPane) 460.dp else 340.dp) else (if (twoPane) 300.dp else 200.dp), Modifier.reveal(i), portrait = portrait) { lightbox = i; vm.haptic(H.SELECTION) } }
+                    items(shots.size) { i ->
+                        Shot(shots[i], wide, tall, Modifier.reveal(i), portrait = portrait) { lightbox = i; vm.haptic(H.SELECTION) }
+                    }
                 }
             }
             item("about") { Column(Modifier.reveal(2)) {

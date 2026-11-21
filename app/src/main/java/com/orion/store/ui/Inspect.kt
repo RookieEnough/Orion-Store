@@ -30,7 +30,13 @@ import java.util.concurrent.TimeUnit
 /** Inspect reports from this session, keyed by app and version, so the app page can show what was found and a reopen is instant. */
 object InspectCache {
     val reports = mutableStateMapOf<String, ApkInsights.Report>()
-    fun key(app: AppItem) = app.id + "|" + app.latestVersion
+    fun key(app: AppItem) = app.id + "|" + app.latestVersion + "|" + app.repoUrl.orEmpty()
+    /** Drops a report once the offered version or the source link is no longer the one that was read. */
+    fun keep(app: AppItem) {
+        val prefix = app.id + "|"
+        val now = key(app)
+        reports.keys.filter { it.startsWith(prefix) && it != now }.toList().forEach { reports.remove(it) }
+    }
 }
 
 /** Which copy gets read: the APK already downloaded, the one installed (when it is the current version), or a fresh download. */
@@ -86,6 +92,8 @@ fun InspectSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) = Orion
     var got by remember { mutableLongStateOf(0L) }; var total by remember { mutableLongStateOf(-1L) }
     var error by remember { mutableStateOf("") }; var attempt by remember { mutableIntStateOf(if (cached || from == InspectFrom.DOWNLOAD) 0 else 1) }
     var staged by remember { mutableStateOf(d.readyToInstall[app.id]) }
+    var mobileAsk by remember { mutableStateOf(false) }
+    LaunchedEffect(key) { InspectCache.keep(app) }
     LaunchedEffect(attempt) {
         if (attempt == 0) return@LaunchedEffect
         phase = if (from == InspectFrom.DOWNLOAD) "fetch" else "read"; got = 0; total = -1
@@ -101,7 +109,7 @@ fun InspectSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) = Orion
             val r = withContext(Dispatchers.IO) { ApkInsights.read(ctx, readFrom) } ?: throw java.io.IOException("The file isn't a package Orion can read.")
             if (from == InspectFrom.DOWNLOAD) { vm.stageInspected(app, file, url); staged = d.readyToInstall[app.id] ?: apkFileName(app, app.latestVersion, url); keep = true }
             else staged = d.readyToInstall[app.id]
-            InspectCache.reports[key] = r; phase = "done"; vm.haptic(H.SUCCESS)
+            InspectCache.keep(app); InspectCache.reports[key] = r; phase = "done"; vm.haptic(H.SUCCESS)
         } catch (e: kotlinx.coroutines.CancellationException) { throw e }
         catch (e: Exception) { error = e.message ?: "Something went wrong."; phase = "failed"; vm.haptic(H.ERROR) }
         finally { if (!keep) withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { tmp.delete() } }
@@ -122,7 +130,10 @@ fun InspectSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) = Orion
                     Text("See inside before you install", Modifier.padding(top = 16.dp), style = MaterialTheme.typography.titleLargeEmphasized, textAlign = TextAlign.Center)
                     Text("Orion downloads this build${app.size.takeIf { it.isNotBlank() && it != "Varies" }?.let { " ($it)" }.orEmpty()}, reads it on your phone, and keeps the file. Install after that uses the same download.",
                         Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant, textAlign = TextAlign.Center)
-                    CtaButton(if (url == null) "No direct APK to read" else "Download and inspect", { vm.haptic(H.MEDIUM); attempt++ }, Modifier.padding(top = 20.dp), Sym.Science, enabled = url != null)
+                    CtaButton(if (url == null) "No direct APK to read" else "Download and inspect", {
+                        vm.haptic(H.MEDIUM)
+                        if (s.wifiOnly && !vm.onWifi()) mobileAsk = true else attempt++
+                    }, Modifier.padding(top = 20.dp), Sym.Science, enabled = url != null)
                 }
                 "fetch", "read" -> Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     val frac = if (p == "fetch" && total > 0) (got.toFloat() / total).coerceIn(0f, 1f) else null
@@ -165,4 +176,8 @@ fun InspectSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) = Orion
             }
         }
     }
+    if (mobileAsk) AlertDialog({ mobileAsk = false }, icon = { Icon(Sym.Wifi, null) }, title = { Text("You're on mobile data") },
+        text = { Text("Wi-Fi only is on, so ${app.name} was not downloaded. Download this one now to inspect it? Other downloads still wait for Wi-Fi.") },
+        confirmButton = { Button({ mobileAsk = false; attempt++ }, shapes = ButtonDefaults.shapes()) { Text("Download anyway") } },
+        dismissButton = { TextButton({ mobileAsk = false }) { Text("Not now") } })
 }

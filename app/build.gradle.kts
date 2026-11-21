@@ -14,9 +14,9 @@ android {
     defaultConfig {
         applicationId = "com.orion.store"
         minSdk = 24
-        targetSdk = 36
-        versionCode = 35
-        versionName = "2.7.5"
+        targetSdk = 35
+        versionCode = 37
+        versionName = "2.7.7"
         // Phones and TVs are ARM; the x86 builds of the native libraries only served emulators
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -26,6 +26,8 @@ android {
             storePassword = System.getenv("ORION_STORE_PASSWORD") ?: keystore.getProperty("storePassword")
             keyAlias = keystore.getProperty("keyAlias")
             keyPassword = System.getenv("ORION_KEY_PASSWORD") ?: System.getenv("ORION_STORE_PASSWORD") ?: keystore.getProperty("keyPassword")
+            enableV1Signing = true
+            enableV2Signing = true
         }
     }
     buildTypes {
