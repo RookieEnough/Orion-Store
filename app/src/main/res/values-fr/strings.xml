@@ -1364,7 +1364,7 @@
     <string name="new_name_came_with_your_phone">%1$s came with your phone</string>
     <string name="new_name_could_not_be_installed">%1$s could not be installed</string>
     <string name="new_a_hidden_copy_of_name_is_blocking">A hidden copy of %1$s is blocking this</string>
-    <string name="new_android_did_not_say_why">Android did not say why.</string>
+    <string name="new_android_did_not_say_why">Android n\'a pas expliqué pourquoi.</string>
     <string name="new_android_said_reason">Android said: %1$s</string>
     <string name="new_android_s_security_check_stopped_it">Android\'s security check stopped it</string>
     <string name="new_another_app_is_in_the_way">Another app is in the way</string>
