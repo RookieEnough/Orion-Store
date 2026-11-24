@@ -586,6 +586,15 @@ fun resolveOwnedAppId(group: List<AppItem>, pkgKey: String, installed: String, s
 
 data class RepoSource(val provider: String, val repoPath: String, val owner: String, val repo: String, val domain: String? = null)
 
+/** The repo to show as an app's source. TV listings from before the submit form had a repo field keep that link in downloadUrl. */
+fun sourceRepoUrl(app: AppItem): String? {
+    app.repoUrl?.takeIf { it.isNotBlank() && it != "#" }?.let { return it }
+    if (app.platform != Platform.TV) return null
+    val link = app.downloadUrl.trim().let { if (it.startsWith("http", true)) it else "https://$it" }
+    val src = parseRepoSource(link) ?: return null
+    return when (src.provider) { "github" -> "https://github.com/${src.repoPath}"; "codeberg" -> "https://codeberg.org/${src.repoPath}"; else -> "https://${src.domain}/${src.repoPath}" }
+}
+
 /** github / gitlab (any host containing "gitlab", nested groups) / codeberg; stops at tree, blob, raw, releases. */
 fun parseRepoSource(repoUrl: String): RepoSource? = runCatching {
     val u = URI(repoUrl.trim()); val host = u.host ?: return null

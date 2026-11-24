@@ -376,7 +376,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
         fun LazyListScope.facts() {
             item("source") { Column(Modifier.reveal(4)) {
                 SectionTitle("Source & safety", Modifier.padding(top = 20.dp))
-                val repo = app.repoUrl?.takeIf { it.isNotBlank() && it != "#" }
+                val repo = sourceRepoUrl(app)
                 val f = fork
                 val n = 1 + (if (repo != null) 1 else 0) + (if (f != null) 1 else 0)
                 var at = 0
