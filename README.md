@@ -141,8 +141,8 @@ That design carries through the app. Orion tracks installed packages, surfaces u
     <td width="50%" valign="top">
       <img src="assets/feature-release.svg" width="64" alt="Release intelligence icon"><br>
       <strong>Release intelligence</strong><br>
-      Orion reads public metadata, resolves upstream releases, and keeps source provenance visible instead of burying it behind a store-owned backend. It reads your device architecture and recommends the right APK.<br><br>
-      <code>Public JSON</code> <code>Mirrors</code> <code>Multi-source parsing</code> <code>ABI detection</code>
+      Orion reads public metadata, resolves upstream releases, and keeps source provenance visible instead of burying it behind a store-owned backend. It reads your device architecture, recommends the right APK, and lets you lock preferred variants.<br><br>
+      <code>Public JSON</code> <code>Mirrors</code> <code>Multi-source parsing</code> <code>ABI detection</code> <code>Variant lock</code>
     </td>
     <td width="50%" valign="top">
       <img src="assets/feature-update.svg" width="64" alt="Update center icon"><br>
@@ -155,7 +155,7 @@ That design carries through the app. Orion tracks installed packages, surfaces u
     <td width="50%" valign="top">
       <img src="assets/feature-install.svg" width="64" alt="Native install flow icon"><br>
       <strong>Native install flow</strong><br>
-      System installer, a specific installer, Shizuku silent installs, or the built-in <strong>wireless ADB</strong> installer that skips Android's 24-hour wait for unverified apps. Set it up once through a guided notification.<br><br>
+      System installer, a specific installer, Shizuku silent installs, or the built-in <strong>wireless ADB</strong> installer that skips Android's 24-hour wait for unverified apps, with optional off-Wi-Fi fallback to Android's installer. Set it up once through a guided notification.<br><br>
       <code>Wireless ADB</code> <code>Shizuku</code> <code>Installer choice</code>
     </td>
     <td width="50%" valign="top">
@@ -214,7 +214,7 @@ That design carries through the app. Orion tracks installed packages, surfaces u
 - **Material 3 Expressive design:** expressive springs, shape morphs, wavy progress, icon hand-off animations, and Material You colors.
 - **A real level system:** every ad, download, submission and Dino Run earns XP. Pilot cards turn Bronze, Silver and Gold, and you can flip yours to sign it.
 - **Fuel the Code:** a story-driven support quest, now in Chapter 2 · The Forkening, with bosses and badges to earn.
-- **Community:** submit apps straight from a GitHub, GitLab or Codeberg repo, build custom bundles, and climb the leaderboard.
+- **Community:** submit Android or Android TV apps straight from a GitHub, GitLab or Codeberg repo, build custom bundles, and climb the leaderboard.
 - **Personalization:** light, dark, dusk and OLED themes, custom fonts, pixel pull-to-refresh characters, layouts and visible tabs.
 
 <p align="center">
@@ -377,6 +377,14 @@ That split is intentional. The app stays focused on the client, while the data a
 Contributions are welcome, especially in the areas that matter most to a store client: installer reliability, release resolution, UI polish, Android behavior, security tooling, and documentation. If you are changing catalog entries or store metadata, that work usually belongs in the data repository or the submission flow rather than in this client codebase.
 
 Start with [ARCHITECTURE.md](ARCHITECTURE.md), then `ui/MainViewModel.kt`, `data/CatalogProcessor.kt` and `platform/AppTracker.kt` for how the store loads data, resolves releases and installs apps.
+
+### Contributors
+
+Thanks to the community members whose pull requests contributed to Orion Store:
+
+- **[@Zokii0](https://github.com/Zokii0)** — Wireless ADB reliability & off-Wi-Fi installer fallback ([#184](https://github.com/RookieEnough/Orion-Store/pull/184)), Play Protect verifier dialog guidance ([#185](https://github.com/RookieEnough/Orion-Store/pull/185)), and Android TV submission detection & source links ([#232](https://github.com/RookieEnough/Orion-Store/pull/232))
+- **[@Villoh](https://github.com/Villoh)** — Private GitHub, GitLab & Codeberg repository asset downloads in Orbit ([#204](https://github.com/RookieEnough/Orion-Store/pull/204))
+- **[@tsehla42](https://github.com/tsehla42)** — URL asterisk percent-encoding fix for submission links ([#217](https://github.com/RookieEnough/Orion-Store/pull/217))
 
 <p align="center">
   <picture>

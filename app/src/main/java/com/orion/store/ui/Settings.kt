@@ -116,6 +116,7 @@ fun identityExport(s: Settings, favorites: List<String>, now: Long): String {
         put("pullToRefreshCharacter", s.pullToRefreshCharacter); put("hapticEnabled", s.hapticEnabled); put("glassEffect", s.glassEffect)
         put("quickTiles", s.quickTiles?.let { json.encodeToJsonElement(it) } ?: JsonNull); put("settingsOrder", json.encodeToJsonElement(s.settingsOrder))
         put("autoUpdateEnabled", s.autoUpdateEnabled); put("wifiOnly", s.wifiOnly); put("stableOnly", s.stableOnly); put("deleteApk", s.deleteApk); put("useShizuku", s.useShizuku)
+        put("lockVariant", s.lockVariant); put("preferredVariant", s.preferredVariant); put("offWifiInstall", s.offWifiInstall)
         put("installerPreference", s.installerPreference); put("installerPackage", s.installerPackage); put("installerLabel", s.installerLabel)
         put("useRemoteJson", s.useRemoteJson); put("loadLocalData", s.loadLocalData); put("appStreams", json.encodeToJsonElement(s.appStreams))
         put("ignoredUpdates", json.encodeToJsonElement(s.ignoredUpdates)); put("appManage", json.encodeToJsonElement(s.appManage)); put("skipOtherStores", s.skipOtherStores)
@@ -172,6 +173,8 @@ fun mergeIdentity(d: JsonObject, c: Settings): Settings =
         appManage = d.or("appManage", c.appManage), skipOtherStores = d.or("skipOtherStores", c.skipOtherStores), myAppsFilters = d.or("myAppsFilters", c.myAppsFilters), userProfile = d.or("userProfile", c.userProfile),
         customBundles = d.or("customBundles", c.customBundles), removedBundleApps = d.or("removedBundleApps", c.removedBundleApps),
         extraBundleApps = d.or("extraBundleApps", c.extraBundleApps),
+        lockVariant = d.or("lockVariant", c.lockVariant), preferredVariant = d.or("preferredVariant", c.preferredVariant),
+        offWifiInstall = d.or("offWifiInstall", c.offWifiInstall),
     )
 
 /** First-run carry-over from the web build's zustand settings store, whose fields share Settings' names. A whole-object decode keeps
@@ -432,6 +435,10 @@ fun SettingsScreen(vm: MainViewModel) {
                             })
                         }
                         Toggle(Sym.Verified, "Stable releases only", "Skip Beta, Alpha and Nightly builds when a stable one exists", s.stableOnly) { vm.set { it.copy(stableOnly = !it.stableOnly) } }
+                        val lockDesc = if (s.lockVariant && s.preferredVariant.isNotEmpty()) "Locked to ${s.preferredVariant} · skips the picker when available. Turn off to reset." else "Remember your first variant choice and skip the picker unless it's unavailable"
+                        Toggle(Sym.Lock, "Lock preferred variant", lockDesc, s.lockVariant) {
+                            vm.set { it.copy(lockVariant = !it.lockVariant, preferredVariant = if (it.lockVariant) "" else it.preferredVariant) }
+                        }
                         Toggle(Sym.FilterList, "Skip apps from other stores", "Apps installed by Play Store or another store leave My Apps and get no updates here. Bring one back from its page.", s.skipOtherStores) {
                             vm.set { it.copy(skipOtherStores = !it.skipOtherStores) }
                         }
@@ -459,7 +466,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 vm.haptic(H.LIGHT); vm.pickApk()
                             }) { Chevron() }
                             if (WirelessAdb.supported) Toggle(Sym.Speed, "Skip the 24-hour wait", "Install instantly through built-in wireless debugging", s.directInstall) {
-                                if (vm.s.directInstall) vm.set { it.copy(directInstall = false) } else { picker = "direct" }
+                                if (vm.s.directInstall) vm.set { it.copy(directInstall = false, offWifiInstall = "") } else { picker = "direct" }
                             }
                             Toggle(Sym.Bolt, "Silent install", "Install apps in the background", s.useShizuku) {
                                 shizukuError = null

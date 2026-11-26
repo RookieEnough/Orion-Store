@@ -110,9 +110,10 @@ object Net {
         client.newCall(rb.build()).execute().use { it.code to it.body.string() }
     }
 
-    suspend fun alive(url: String, timeoutMs: Long = 5000): Boolean = withContext(Dispatchers.IO) {
+    suspend fun alive(url: String, timeoutMs: Long = 5000, headers: Map<String, String> = emptyMap()): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            client.newBuilder().callTimeout(timeoutMs, TimeUnit.MILLISECONDS).build().newCall(Request.Builder().url(url).head().build()).execute().use { it.code in 200..399 }
+            val rb = Request.Builder().url(url).head(); headers.forEach(rb::header)
+            client.newBuilder().callTimeout(timeoutMs, TimeUnit.MILLISECONDS).build().newCall(rb.build()).execute().use { it.code in 200..399 }
         }.getOrDefault(false)
     }
 

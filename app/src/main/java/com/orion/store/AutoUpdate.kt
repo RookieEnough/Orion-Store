@@ -116,10 +116,11 @@ object AutoUpdate {
         fun result(ok: Boolean, error: String? = null) = AutoResult(app.id, app.name, version, ok, error, System.currentTimeMillis())
         // The build of the app's own channel: a Beta user gets the next Beta, not the Stable APK under a Beta version
         val variants = app.availableVersions.firstOrNull { it.version == version }?.variants?.ifEmpty { null } ?: app.variants
-        val raw = variants.firstOrNull()?.url ?: app.downloadUrl
+        val (rawArch, abis) = tracker.deviceArch()
+        val raw = pickVariant(variants, s, rawArch, abis)?.url ?: app.downloadUrl
         val url = sanitizeDownloadUrl(try { Orbit.privateDownloadUrl(raw, s.orbitTokens()) } catch (_: Exception) { raw })
         if (url == "#" || !url.startsWith("http")) return result(false, "No direct APK download for this app.")
-        val name = apkFileName(app, version)
+        val name = apkFileName(app, version, raw)
         val f = Downloads.file(name) ?: return result(false, "Invalid file name.")
         if (!f.exists() || f.length() == 0L) {
             runCatching { Downloads.start(url, name) }.onFailure { return result(false, "Download could not start.") }

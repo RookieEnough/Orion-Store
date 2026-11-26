@@ -4,6 +4,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
@@ -137,11 +139,24 @@ object Orbit {
     private fun gitlabAuth(token: String) = if (token.isNotEmpty()) mapOf("PRIVATE-TOKEN" to token) else emptyMap()
 
     // region releases, per source
+    suspend fun fetchRawReleases(o: OrbitApp, tokens: HostTokens): List<CatalogProcessor.Release> = releases(o, tokens)
+
     private suspend fun releases(o: OrbitApp, tokens: HostTokens): List<CatalogProcessor.Release> = when (sourceOf(o.url)) {
         OrbitSource.GITHUB -> repoPath(o.url)!!.let { p ->
-            val list = gitReleases(json.parseToJsonElement(Net.text("https://api.github.com/repos/${p.repoPath}/releases?per_page=30", bearer(tokens.github))))
-            val latest = runCatching { (json.parseToJsonElement(Net.text("https://api.github.com/repos/${p.repoPath}/releases/latest", bearer(tokens.github))) as? JsonObject)?.str("tag_name").orEmpty() }.getOrDefault("")
-            if (latest.isEmpty()) list else list.map { it.pastLatest(latest) }
+            val auth = bearer(tokens.github)
+            val list = gitReleases(json.parseToJsonElement(Net.text("https://api.github.com/repos/${p.repoPath}/releases?per_page=30", auth)))
+            // Only ask /releases/latest when multiple stable candidates or verifyLatestTag need disambiguation, saving ~50% API quota
+            val stableCount = list.count { !it.prerelease }
+            if (stableCount <= 1 && list.isNotEmpty() && !o.verifyLatestTag) list
+            else {
+                val latestObj = runCatching { json.parseToJsonElement(Net.text("https://api.github.com/repos/${p.repoPath}/releases/latest", auth)) as? JsonObject }.getOrNull()
+                val latest = latestObj?.str("tag_name").orEmpty()
+                if (latest.isEmpty()) list else {
+                    val marked = list.map { it.pastLatest(latest) }
+                    if (marked.any { it.tag == latest }) marked
+                    else marked + gitReleases(JsonArray(listOf(latestObj!!)))
+                }
+            }
         }
         OrbitSource.CODEBERG, OrbitSource.FORGEJO -> repoPath(o.url)!!.let { gitReleases(json.parseToJsonElement(Net.text("https://codeberg.org/api/v1/repos/${it.repoPath}/releases?limit=30", codebergAuth(tokens.codeberg)))) }
         OrbitSource.GITLAB -> repoPath(o.url)!!.let { r -> gitlab(json.parseToJsonElement(GitlabPace.text("https://${r.domain}/api/v4/projects/${enc(r.repoPath)}/releases?per_page=10", gitlabAuth(tokens.gitlab)))) }
@@ -648,11 +663,23 @@ object Orbit {
         }.take(15)
     }
 
+    /** Applies [rel] against the entry's current filters; [keepEmptyFallback] preserves previously cached versions during background refreshes. */
+    fun applyReleases(o: OrbitApp, rel: List<CatalogProcessor.Release>, now: Long, keepEmptyFallback: Boolean = false): OrbitApp {
+        val v = versionsOf(o, rel)
+        val count = rel.sumOf { it.downloads }
+        return o.copy(
+            versions = if (keepEmptyFallback) v.ifEmpty { o.versions } else v,
+            downloads = if (count > 0) count else o.downloads,
+            checkedAt = now,
+            error = if (v.isEmpty()) "No APK matched in the latest releases" else null
+        )
+    }
+
     /** Checks the source again. Errors are kept on the entry, so the Orbit list can say why an app stopped updating. */
     suspend fun refresh(o: OrbitApp, tokens: HostTokens, now: Long): OrbitApp = runCatching {
-        val rel = releases(o, tokens); versionsOf(o, rel) to rel.sumOf { it.downloads }
+        releases(o, tokens)
     }.fold(
-        { (v, count) -> o.copy(versions = v.ifEmpty { o.versions }, downloads = if (count > 0) count else o.downloads, checkedAt = now, error = if (v.isEmpty()) "No APK matched in the latest releases" else null) },
+        { rel -> applyReleases(o, rel, now, keepEmptyFallback = true) },
         { e -> o.copy(checkedAt = now, error = (e as? HttpError)?.let {
             when {
                 it.code == 429 && sourceOf(o.url) == OrbitSource.GITLAB -> "GitLab is limiting this network. Wait a few minutes, then check again."
@@ -662,7 +689,8 @@ object Orbit {
         } ?: "Couldn't reach the source") })
 
     suspend fun refreshAll(list: List<OrbitApp>, tokens: HostTokens, now: Long): List<OrbitApp> = coroutineScope {
-        list.chunked(4).flatMap { batch -> batch.map { o -> async { if (o.paused) o else refresh(o, tokens, now) } }.awaitAll() }
+        val gate = Semaphore(4)
+        list.map { o -> async { if (o.paused) o else gate.withPermit { refresh(o, tokens, now) } } }.awaitAll()
     }
 
     private val META = { html: String, prop: String ->
@@ -706,7 +734,8 @@ object Orbit {
                     )
                 }
             }
-            else -> runCatching { Net.text(clean.substringBefore('#'), c = Net.browser) }.getOrNull()?.takeIf { src != OrbitSource.APK }?.let { html ->
+            OrbitSource.APK -> {}
+            else -> runCatching { Net.open(clean.substringBefore('#')) }.getOrNull()?.takeIf { it.code in 200..399 && it.body.isNotEmpty() }?.body?.let { html ->
                 val pkg = FDROID.find(clean)?.groupValues?.get(1) ?: IZZY.find(clean)?.groupValues?.get(1) ?: if (src == OrbitSource.UPTODOWN) uptodownPackage(html) else null
                 val title = META(html, "og:title") ?: Regex("""<title[^>]*>([^<]+)</title>""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
                 val shots = Regex("""<img[^>]+src\s*=\s*["']([^"']*(?:phoneScreenshots|screenshot)[^"']*)["']""", RegexOption.IGNORE_CASE).findAll(html)
@@ -716,7 +745,7 @@ object Orbit {
                     icon = o.icon.ifBlank { fdroidIcon?.takeIf { Net.alive(it, 5000) } ?: META(html, "og:image").orEmpty() }, packageName = o.packageName ?: pkg, screenshots = o.screenshots.ifEmpty { shots })
             }
         }
-        if (o.name.isBlank()) o = o.copy(name = humanizeRepoName(clean.substringBefore('?').trimEnd('/').substringAfterLast('/').removeSuffix(".apk")))
+        if (o.name.isBlank()) o = o.copy(name = humanizeRepoName(clean.substringBefore('?').trimEnd('/').substringAfterLast('/').replace(Regex("""\.(apk[sm]?|xapk)$""", RegexOption.IGNORE_CASE), "")))
         return refresh(o, tokens, now)
     }
 
@@ -1009,9 +1038,9 @@ object Orbit {
         }.getOrDefault(0)
         if (code !in setOf(401, 403, 404)) return url
         val repo = "${m.groupValues[1]}/${m.groupValues[2]}"
-        val tag = runCatching { java.net.URLDecoder.decode(m.groupValues[3], "UTF-8") }.getOrDefault(m.groupValues[3])
-        val name = runCatching { java.net.URLDecoder.decode(m.groupValues[4], "UTF-8") }.getOrDefault(m.groupValues[4])
-        val body = runCatching { Net.text("https://api.github.com/repos/$repo/releases/tags/${enc(tag)}", mapOf("Authorization" to "Bearer ${tokens.github}", "Accept" to "application/vnd.github+json")) }.getOrNull() ?: return url
+        val tag = runCatching { java.net.URLDecoder.decode(m.groupValues[3].replace("+", "%2B"), "UTF-8") }.getOrDefault(m.groupValues[3])
+        val name = runCatching { java.net.URLDecoder.decode(m.groupValues[4].replace("+", "%2B"), "UTF-8") }.getOrDefault(m.groupValues[4])
+        val body = runCatching { Net.text("https://api.github.com/repos/$repo/releases/tags/${enc(tag).replace("%2F", "/")}", mapOf("Authorization" to "Bearer ${tokens.github}", "Accept" to "application/vnd.github+json")) }.getOrNull() ?: return url
         return runCatching { githubAssetApiUrl(json.parseToJsonElement(body), name) }.getOrNull() ?: url
     }
 

@@ -532,6 +532,23 @@ private fun Overlays(vm: MainViewModel) {
             confirmButton = { Button({ vm.wifiAsk = null; vm.download(app, url, allowMobile = true) }, shapes = ButtonDefaults.shapes()) { Text("Download anyway") } },
             dismissButton = { TextButton({ vm.wifiAsk = null }) { Text("Not now") } })
     }
+    vm.directFailed?.let { f ->
+        fun close() { vm.directFailed = null }
+        var always by remember(f) { mutableStateOf(false) }
+        AlertDialog(::close, icon = { Icon(Sym.ErrorOutline, null) },
+            title = { Text(if (f.noWifi) "Wireless debugging needs Wi-Fi" else "Wireless debugging didn't answer") },
+            text = {
+                Column {
+                    Text(if (f.noWifi) "Connect to Wi-Fi to install instantly, or use Android's installer. Android may hold or block apps from unverified developers there."
+                        else f.msg + "\n\nTry again, or install with Android's installer.")
+                    if (f.noWifi) Row(Modifier.fillMaxWidth().clickable { always = !always }.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(always, { always = it }); Text("Always use the installer without Wi-Fi")
+                    }
+                }
+            },
+            confirmButton = { TextButton({ if (always) vm.set { it.copy(offWifiInstall = "installer") }; close(); vm.installFile(f.app, f.file, regular = true) }) { Text("Use installer") } },
+            dismissButton = { TextButton(::close) { Text("Cancel") } })
+    }
     vm.installIssue?.let { i ->
         fun close() { vm.installIssue = null }
         AlertDialog(::close, icon = { Icon(Sym.ErrorOutline, null) }, title = { Text(i.title) },
@@ -593,10 +610,10 @@ private fun VerifierDialog(vm: MainViewModel) {
         text = {
             Text(when {
                 working -> if (revert) "Switching developer verification back on." else "Switching off developer verification."
-                safe -> "Developer verification is off and sideloaded apps install freely. Changed your mind? Revert puts everything back as it was."
+                safe -> "Developer verification is off and sideloaded apps install freely. While it is off, Android also hides its own \"Install apps from unverified developers\" switch in Developer options. Changed your mind? Revert puts everything back as it was, including that switch."
                 failed -> vm.verifierError
                 setup -> "Orion needs a way to run the change: root, Shizuku, or its built-in wireless debugging. Set up wireless debugging once and this popup comes back to finish."
-                else -> "Android switched on developer verification, which can slow or block sideloaded apps. Orion can turn it off for you, and undo it any time from the shield up top."
+                else -> "Android switched on developer verification, which can slow or block sideloaded apps. Orion can turn it off for you, and undo it any time from the shield up top. While it is off, Android hides its own \"Install apps from unverified developers\" switch."
             })
         },
         confirmButton = {

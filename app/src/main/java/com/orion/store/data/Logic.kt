@@ -106,7 +106,7 @@ fun availableUpdates(apps: List<AppItem>, s: Settings, now: Long): List<AppItem>
 /** The API address of one file inside a GitHub release payload. Private repos serve this, not the public download link. */
 fun githubAssetApiUrl(root: kotlinx.serialization.json.JsonElement, fileName: String): String? {
     val o = root as? kotlinx.serialization.json.JsonObject ?: return null
-    val want = java.net.URLDecoder.decode(fileName.substringBefore('?').substringAfterLast('/'), "UTF-8").lowercase()
+    val want = java.net.URLDecoder.decode(fileName.substringBefore('?').substringAfterLast('/').replace("+", "%2B"), "UTF-8").lowercase()
     if (want.isEmpty()) return null
     return (o["assets"] as? kotlinx.serialization.json.JsonArray).orEmpty().firstNotNullOfOrNull { e ->
         val a = e as? kotlinx.serialization.json.JsonObject ?: return@firstNotNullOfOrNull null
@@ -272,6 +272,76 @@ fun archCompat(variant: String, device: String, abis: List<String>): Pair<Boolea
     abis.forEach { abi -> if (v == normalizeArch(abi) || lv.contains(abi.lowercase())) return true to (abi == abis.first()) }
     if ((d == Arch.ARM64 && v == Arch.ARMv7) || (d == Arch.x64 && v == Arch.x86)) return true to false
     return false to false
+}
+
+private val PKG_EXT = Regex("""\.(apk|apks|xapk|apkm)$""", RegexOption.IGNORE_CASE)
+private val NON_PKG_EXT = Regex("""\.(?=[^.]*[a-z])[a-z0-9]{1,8}$""", RegexOption.IGNORE_CASE)
+private val ARCH_KEYWORDS = listOf(
+    "arm64", "aarch64", "armv8", "arm-v8", "arm8", "v8a",
+    "armv7", "arm-v7", "arm7", "armeabi", "v7a",
+    "x86_64", "x86-64", "x64", "amd64", "x86", "i386", "i686",
+    "universal", "android-tv", "androidtv", "atv", "tv", "release", "debug", "beta", "nightly"
+)
+private val ARCH_KW_REGEX = Regex("""(?:^|[-_.\s])(${ARCH_KEYWORDS.joinToString("|") { Regex.escape(it) }})(?=$|[-_.\s])""", RegexOption.IGNORE_CASE)
+
+/** Filters out checksums, signatures, metadata and non-Android assets from variant pickers while keeping extensionless redirect links. */
+fun isInstallableVariant(v: AppVariant): Boolean {
+    val clean = v.name.ifBlank { v.url }.substringBefore('?').substringBefore('#').trimEnd('/')
+        .let { if (it.lowercase().endsWith("/download")) it.dropLast(9) else it }
+    val leaf = clean.substringAfterLast('/').trim()
+    if (leaf.isEmpty()) return true
+    return PKG_EXT.containsMatchIn(leaf) || !NON_PKG_EXT.containsMatchIn(leaf)
+}
+
+private fun variantStem(v: AppVariant): String =
+    v.name.ifBlank { v.url.substringBefore('?').substringBefore('#').substringAfterLast('/') }
+        .replace(Regex("""\.(apk[sm]?|xapk)$""", RegexOption.IGNORE_CASE), "")
+
+/** Smart display label for a variant: strips common sibling app/version prefixes (e.g. "antutu", "ludashi", "pubg")
+ *  as well as version noise and extension to show just the distinguishing part (e.g. "ARMv7", "TV", "Universal"). */
+fun variantLabel(v: AppVariant, all: List<AppVariant> = emptyList()): String {
+    var n = variantStem(v).ifBlank { return v.arch }
+    if (all.size > 1) {
+        val stems = all.map(::variantStem).filter { it.isNotEmpty() }
+        if (stems.size > 1) {
+            val minLen = stems.minOf { it.length }
+            var lcp = 0
+            while (lcp < minLen && stems.all { it[lcp].equals(stems[0][lcp], ignoreCase = true) }) lcp++
+            fun atBoundary(s: String, idx: Int): Boolean {
+                if (idx == 0 || idx == s.length) return true
+                val prev = s[idx - 1]; val next = s[idx]
+                if (prev == '-' || prev == '_' || prev == ' ') return true
+                if (next == '-' || next == '_' || next == ' ') return true
+                if (prev == '.' && !(idx >= 2 && s[idx - 2].isDigit() && next.isDigit())) return true
+                if (next == '.' && !(prev.isDigit() && idx + 1 < s.length && s[idx + 1].isDigit())) return true
+                return false
+            }
+            var cut = lcp
+            while (cut > 0 && !stems.all { atBoundary(it, cut) }) cut--
+            if (cut > 0 && stems.any { it.length > cut }) {
+                n = n.substring(minOf(cut, n.length)).trim('-', '_', '.', ' ')
+                return n.ifEmpty { v.arch }
+            }
+        }
+    }
+    val m = ARCH_KW_REGEX.find(n)
+    val matchIdx = m?.groups?.get(1)?.range?.first
+    if (matchIdx != null && matchIdx > 0) n = n.substring(matchIdx)
+    n = n.trim('-', '_', '.', ' ')
+    return n.ifEmpty { v.arch }
+}
+
+/** Chooses the best installable variant for this device: locked preferred architecture first (when enabled and present),
+ *  then recommended ABI, then compatible ABI. */
+fun pickVariant(variants: List<AppVariant>, s: Settings, deviceArch: String, abis: List<String>): AppVariant? {
+    val pool = variants.filter(::isInstallableVariant).ifEmpty { variants }
+    if (pool.isEmpty()) return null
+    if (s.lockVariant && s.preferredVariant.isNotEmpty()) {
+        pool.firstOrNull { it.arch.equals(s.preferredVariant, true) }?.let { return it }
+    }
+    return pool.firstOrNull { archCompat(it.arch, deviceArch, abis).second }
+        ?: pool.firstOrNull { archCompat(it.arch, deviceArch, abis).first }
+        ?: pool.firstOrNull()
 }
 // endregion
 
@@ -585,6 +655,15 @@ fun resolveOwnedAppId(group: List<AppItem>, pkgKey: String, installed: String, s
 // ---------------- Submission helpers ----------------
 
 data class RepoSource(val provider: String, val repoPath: String, val owner: String, val repo: String, val domain: String? = null)
+
+/** The repo to show as an app's source. TV listings from before the submit form had a repo field keep that link in downloadUrl. */
+fun sourceRepoUrl(app: AppItem): String? {
+    app.repoUrl?.takeIf { it.isNotBlank() && it != "#" }?.let { return it }
+    if (app.platform != Platform.TV) return null
+    val link = app.downloadUrl.trim().let { if (it.startsWith("http", true)) it else "https://$it" }
+    val src = parseRepoSource(link) ?: return null
+    return when (src.provider) { "github" -> "https://github.com/${src.repoPath}"; "codeberg" -> "https://codeberg.org/${src.repoPath}"; else -> "https://${src.domain}/${src.repoPath}" }
+}
 
 /** github / gitlab (any host containing "gitlab", nested groups) / codeberg; stops at tree, blob, raw, releases. */
 fun parseRepoSource(repoUrl: String): RepoSource? = runCatching {

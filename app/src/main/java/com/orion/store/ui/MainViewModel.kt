@@ -44,6 +44,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
@@ -117,6 +118,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Both the list and the storefront sections must be in, or modern home shows the quick updates lane alone before the rest lands. */
     val tabReady get() = tab.targetPlatform().let { it in visibleBy && it in fronts }
     var lookup by mutableStateOf<Map<String, AppItem>>(emptyMap())
+    var orbitTwins by mutableStateOf<Map<String, AppItem>>(emptyMap())
     var updates by mutableStateOf<List<AppItem>>(emptyList())
     var selectedApp by mutableStateOf<AppItem?>(null); var selectedBundle by mutableStateOf<BundleItem?>(null)
     var vtTarget by mutableStateOf<AppItem?>(null); var changeRequest by mutableStateOf(false)
@@ -155,7 +157,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Orbit entries as store items. Rebuilt when the list, the wait, or the release channel changes. */
     private var orbitMemo: Pair<List<OrbitApp>, List<AppItem>> = emptyList<OrbitApp>() to emptyList()
     private var orbitStamp: Triple<Int, Boolean, Map<String, String>>? = null
-    fun orbitItems(): List<AppItem> {
+    @Synchronized fun orbitItems(): List<AppItem> {
         val o = d.orbit
         val stamp = Triple(s.orbitMinAgeDays, s.stableOnly, s.appStreams)
         if (orbitMemo.first !== o || orbitStamp != stamp) {
@@ -176,13 +178,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (flag("about") == null) set { st -> st.copy(showAppAbout = false, seenFlags = st.seenFlags + "about=off") }
         // Tier badges follow the shared level, whichever XP source pushed it over
         viewModelScope.launch {
-            combine(settings, data) { st, dt -> Xp.level(Xp.total(st, dt.appLibrary.size)) }.distinctUntilChanged().collect { lvl ->
+            combine(settings.map { Xp.total(it, 0) }.distinctUntilChanged(), data.map { it.appLibrary.size }.distinctUntilChanged()) { _, size -> Xp.level(Xp.total(s, size)) }.distinctUntilChanged().collect { lvl ->
                 TIER_BADGES.filter { lvl >= it.first && it.second !in s.unlockedBadges }.forEach { (_, b) -> set { it.unlockBadge(b) } }
             }
         }
         viewModelScope.launch { settings.map { it.rootMode }.distinctUntilChanged().collect { tracker.root = it } }
         viewModelScope.launch { settings.map { Triple(it.checkEveryMin, it.wifiOnly, it.autoWifiOnly) }.distinctUntilChanged().collect { AssetAuth.arm(s, d.orbit); AutoUpdate.schedule(ctx, s) } }
-        viewModelScope.launch { data.map { it.orbit }.collect { AssetAuth.arm(s, it) } }
+        viewModelScope.launch { data.map { it.orbit }.distinctUntilChanged().collect { AssetAuth.arm(s, it) } }
         upd { st -> st.persistedDownloads.entries.fold(st.copy(activeDownloads = st.persistedDownloads)) { acc, (id, v) ->
             val f = v.substringAfter('|'); if (Downloads.status(f).status == DlStatus.SUCCESSFUL) acc.completeDownload(id, f, now()) else acc.cancelDownload(id) } }
         viewModelScope.launch { Downloads.state.collect(::onDownloads) }
@@ -198,6 +200,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 pendingDeepLink?.takeIf { lookup.isNotEmpty() }?.let { pendingDeepLink = null; it() }
             }
         }
+        // Keep Orbit -> Catalog library twin index precomputed off the main thread without tab-switch resets
+        viewModelScope.launch {
+            combine(data.map { it.apps }.distinctUntilChanged(), data.map { it.orbit }.distinctUntilChanged()) { apps, orbit -> apps to orbit }
+                .map { (apps, orbit) -> Orbit.findTwins(orbit, apps) }
+                .flowOn(Dispatchers.Default)
+                .distinctUntilChanged()
+                .collect { orbitTwins = it }
+        }
         viewModelScope.launch {
             combine(catalog, data.map { it.tabs }.distinctUntilChanged(), settings.map { it.storeLayout }.distinctUntilChanged(), ::Triple).collectLatest { (all, tabs, layout) ->
                 // An empty catalog is "not loaded yet": leaving the map empty keeps tabReady false, so tabs show the skeleton instead of an empty state.
@@ -209,9 +219,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         viewModelScope.launch {
-            // Orbit apps update like catalog ones, unless the user paused them
-            combine(settings, data.map { it.apps + it.importedApps + it.orbit.filter { o -> !o.paused }.map(OrbitApp::toItem) }.distinctUntilChanged()) { st, all -> availableUpdates(all, st, now()) }.distinctUntilChanged().collect { u ->
-                updates = u
+            // Orbit apps update like catalog ones, unless paused, respecting each app's minAgeDays and channel; run off main thread
+            combine(
+                settings.map {
+                    listOf(it.installedVersions, it.appStreams, it.installedBuilds, it.ignoredUpdates, it.appManage,
+                        it.skipOtherStores, it.stableOnly, it.orbitMinAgeDays, it.autoUpdateEnabled, it.wifiOnly, it.autoWifiOnly, it.autoSkip)
+                }.distinctUntilChanged(),
+                data.map { Triple(it.apps, it.importedApps, it.orbit) }.distinctUntilChanged()
+            ) { _, (apps, imp, orbit) ->
+                val st = s
+                val all = apps + imp + orbit.filter { !it.paused }.map { it.toItem(st.daysFor(it), st.streamOf(it.id)) }
+                availableUpdates(all, st, now()) to Triple(st.autoUpdateEnabled, st.wifiOnly, st.autoWifiOnly)
+            }.flowOn(Dispatchers.Default).distinctUntilChanged().collect { (u, _) ->
+                if (updates != u) updates = u
                 val mobileOk = onWifi() || (!s.wifiOnly && !s.autoWifiOnly)
                 if (s.autoUpdateEnabled && mobileOk) u.filter { it.installsHere() && it.id !in s.autoSkip && it.id !in d.activeDownloads && it.id !in d.readyToInstall && it.id !in initializing }.forEach { download(it, auto = true) }
             }
@@ -665,9 +685,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 set { it.copy(appStreams = it.appStreams + (app.id to meta.second)) }
                 val candidateVariants = app.availableVersions.firstOrNull { it.type == meta.second }?.variants.orEmpty().ifEmpty { app.variants }
                 val (rawArch, abis) = tracker.deviceArch()
-                val best = candidateVariants.firstOrNull { archCompat(it.arch, rawArch, abis).second }?.url
-                    ?: candidateVariants.firstOrNull { archCompat(it.arch, rawArch, abis).first }?.url
-                    ?: candidateVariants.firstOrNull()?.url
+                val best = pickVariant(candidateVariants, s, rawArch, abis)?.url
                 val target = url ?: best ?: app.downloadUrl
                 if (target.isEmpty() || target == "#") return@launch
                 if ((auto && (s.wifiOnly || s.autoWifiOnly) || !auto && s.wifiOnly && !allowMobile) && !onWifi()) {
@@ -685,7 +703,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 AssetAuth.arm(s, d.orbit)
                 val authed = runCatching { withContext(Dispatchers.IO) { Orbit.privateDownloadUrl(resolved, s.orbitTokens()) } }.getOrDefault(resolved)
-                val file = apkFileName(app, meta.first, authed)
+                // Preserve the asset file extension (.apks/.xapk/.apkm) when privateDownloadUrl rewrites to GitHub's extensionless API asset URL
+                val file = apkFileName(app, meta.first, if (authed != resolved) resolved else authed)
                 val id = runCatching { Downloads.start(authed, file) }.getOrElse { if (!auto) tracker.open(safe); return@launch }
                 upd { it.startDownload(app.id, id, file) }; haptic(H.MEDIUM)
             } finally { initializing -= app.id }
@@ -723,7 +742,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      *  background job's no-prompt session. Whatever can't go silently stays ready with its notification. */
     private fun autoInstall(app: AppItem, file: String) = viewModelScope.launch {
         val st = s
-        if (st.rootMode || st.useShizuku || st.useDhizuku || st.directInstall && WirelessAdb.supported) { installFile(app, file, opts = if (st.installOptions) st.installFlags else null); return@launch }
+        // Off Wi-Fi, wireless debugging cannot connect: leave it to the no-prompt session below instead of popping the system installer
+        if (st.rootMode || st.useShizuku || st.useDhizuku || st.directInstall && WirelessAdb.supported && (WirelessAdb.connected || WirelessAdb.onWifi(ctx))) { installFile(app, file, opts = if (st.installOptions) st.installFlags else null); return@launch }
         val f = Downloads.file(file) ?: return@launch
         val pkg = withContext(Dispatchers.IO) { tracker.archivePackage(f) }
         val err = if (pkg == null) "The downloaded file is not a valid APK." else AutoUpdate.install(ctx, tracker, st, f, pkg, app.name)
@@ -807,6 +827,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // region install + verification
     /** An install that can't or didn't work, explained in a dialog: [uninstall] offers removing the blocking app, [retry] installing anyway. */
     data class InstallIssue(val app: AppItem, val title: String, val text: String, val uninstall: String? = null, val retry: String? = null, val regular: Boolean = false)
+    /** Wireless debugging could not be used for an install: ask whether to use Android's installer. A dialog, because a toast renders under the app sheet.
+     *  [noWifi] is the no-Wi-Fi case, where the choice can be remembered. */
+    data class DirectFail(val app: AppItem, val file: String, val msg: String, val noWifi: Boolean = false)
+    var directFailed by mutableStateOf<DirectFail?>(null)
     var installIssue by mutableStateOf<InstallIssue?>(null)
     /** Set when Wi-Fi only blocked a download the user just tapped. The dialog offers this one on mobile data. */
     var wifiAsk by mutableStateOf<Pair<AppItem, String?>?>(null)
@@ -836,13 +860,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val k = normalizePackageName(app.packageName)
         val meta = versionMetaFromFileName(app, file, s.streamOf(app.id))
         // Direct install runs as the shell user (no 24-hour wait, no "unknown apps" permission). When adbd is unreachable the
-        // user picks the regular installer explicitly: silently falling back lands on the very wait this setting exists to skip.
+        // user picks the regular installer explicitly (or chose it once for "no Wi-Fi"): silently falling back lands on the very
+        // wait this setting exists to skip.
         val dhizuku = opts == null && !regular && !s.rootMode && s.useDhizuku
         val direct = opts == null && !regular && !dhizuku && !s.rootMode && s.directInstall && WirelessAdb.supported
         if (direct && !WirelessAdb.connected) {
             installingId = app.id
             val err = runCatching { WirelessAdb.connect(ctx) }.exceptionOrNull()
-            if (err != null) { installingId = null; toast(err.message ?: "Wireless debugging unreachable.", 8000, "Use installer") { installFile(app, file, true) }; return@launch }
+            if (err != null) {
+                installingId = null
+                val noWifi = err is WirelessAdb.NoWifiError
+                // Without Wi-Fi the user decides (or decided earlier) between Wi-Fi and Android's installer; never a silent switch by default
+                if (noWifi && s.offWifiInstall == "installer") installFile(app, file, regular = true, force = force)
+                else directFailed = DirectFail(app, file, err.message ?: "Wireless debugging unreachable.", noWifi)
+                return@launch
+            }
         }
         val shizuku = opts != null || !regular && !direct && !dhizuku && (s.useShizuku || s.rootMode)
         if (!direct && !shizuku && !dhizuku) try {
@@ -918,10 +950,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val byPkg = all.filter { !it.packageName.isNullOrBlank() }.groupBy { normalizePackageName(it.packageName) }
             val groups = LinkedHashMap<String, List<AppItem>>()
             targets.forEach { a -> val k = normalizePackageName(a.packageName); if (k.isNotEmpty() && k !in groups) groups[k] = byPkg[k] ?: listOf(a) }
-            val installed = if (groups.isEmpty()) null else tracker.installedInfos()
+            val installed = if (groups.size > 5) tracker.installedInfos() else null
             val cand = groups.mapValues { (_, g) -> g.flatMap { packageCandidates(it, st.resolvedPackageNames[it.id], installed?.keys.orEmpty()) }.distinct() }
-            val all = cand.values.flatten().toSet()
-            Triple(groups, cand, when { groups.isEmpty() -> emptyMap(); installed != null -> all.associateWith { installed[it] ?: PkgInfo(false) }; else -> tracker.appInfos(all) })
+            val allCand = cand.values.flatten().toSet()
+            Triple(groups, cand, when { groups.isEmpty() -> emptyMap(); installed != null -> allCand.associateWith { installed[it] ?: PkgInfo(false) }; else -> tracker.appInfos(allCand) })
         }
         if (groups.isEmpty()) return emptyMap()
         val src = withContext(Dispatchers.IO) { cand.values.flatten().filter { info[it]?.installed == true }.associateWith(tracker::installerOf) }
@@ -946,13 +978,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         // An Orbit entry can name a different package than the library variant that is actually installed (no-icon MicroG, for one)
-        Store.data.value.orbit.forEach { o ->
-            if (out[o.id]?.first == true) return@forEach
-            val twin = all.firstOrNull { Orbit.sameCatalog(o, it) && !ver[it.id].isNullOrEmpty() } ?: return@forEach
-            val v = ver.getValue(twin.id)
-            ver[o.id] = v; res[twin.id]?.let { res[o.id] = it }; from[twin.id]?.let { from[o.id] = it }; out[o.id] = true to v
+        // Only run full Orbit twin reconciliation during multi-app sync, using O(N+M) indexed lookups
+        if (targets.size > 5) {
+            val orbitList = Store.data.value.orbit
+            if (orbitList.isNotEmpty()) {
+                val twins = withContext(Dispatchers.Default) { Orbit.findTwins(orbitList, all) }
+                orbitList.forEach { o ->
+                    if (out[o.id]?.first == true) return@forEach
+                    val twin = twins[o.id]?.takeIf { !ver[it.id].isNullOrEmpty() } ?: return@forEach
+                    val v = ver.getValue(twin.id)
+                    ver[o.id] = v; res[twin.id]?.let { res[o.id] = it }; from[twin.id]?.let { from[o.id] = it }; out[o.id] = true to v
+                }
+            }
         }
-        set { it.copy(installedVersions = ver, resolvedPackageNames = res, packageOwners = own, installSources = from, lastRemoteVersions = it.lastRemoteVersions - stale) }
+        if (ver != st.installedVersions || res != st.resolvedPackageNames || own != st.packageOwners || from != st.installSources || stale.isNotEmpty()) {
+            set { it.copy(installedVersions = ver, resolvedPackageNames = res, packageOwners = own, installSources = from, lastRemoteVersions = it.lastRemoteVersions - stale) }
+        }
         return out
     }
 
@@ -1079,7 +1120,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Floating dock visibility (hides while scrolling down); the scroll-to-top button rides just above it. */
     var navShown by mutableStateOf(true)
     var libraryQuery by mutableStateOf("")
-    fun selectApp(app: AppItem, from: String? = null) { openFrom = from; selectedApp = app; syncApp(app); prefetchShots(app.screenshots.drop(2)) }
+    fun selectApp(app: AppItem, from: String? = null) {
+        openFrom = from
+        selectedApp = app
+        prefetchShots(app.screenshots.drop(2))
+        if (!app.packageName.isNullOrBlank()) {
+            viewModelScope.launch(Dispatchers.Default) {
+                delay(350)
+                syncApp(app)
+            }
+        }
+    }
 
     /** Pulls screenshots into Coil's disk cache ahead of time, so they paint from disk instead of the network. The tiny decode keeps it cheap;
      *  the real request misses memory (different size) but hits disk. Same URL builder as Shot, so the cache keys match. */
@@ -1174,7 +1225,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         upd { st -> st.copy(orbit = if (st.orbit.any { it.id == o.id }) st.orbit.map { if (it.id == o.id) o else it } else st.orbit + o) }
         if (adding) {
             considerSharePrompt()
-            d.apps.firstOrNull { Orbit.sameCatalog(o, it) }?.let { toast("${o.name.ifBlank { "This app" }} is also in the Orion library. Orbit follows this source on your phone.") }
+            viewModelScope.launch {
+                val twin = orbitTwins[o.id] ?: withContext(Dispatchers.Default) { d.apps.firstOrNull { Orbit.sameCatalog(o, it) } }
+                if (twin != null) toast("${o.name.ifBlank { "This app" }} is also in the Orion library. Orbit follows this source on your phone.")
+            }
         }
         scheduleInstalledSync()
     }
@@ -1182,13 +1236,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun orbitProbe(url: String, base: OrbitApp? = null) = withContext(Dispatchers.IO) { Orbit.probe(url, s.orbitTokens(), now(), base) }
 
-    /** Checks every source (or [ids]) again and keeps what the user edited meanwhile: only versions, time and errors are taken over. */
+    /** Checks every source (or [ids]) again and keeps what the user edited meanwhile: only versions, downloads, time and errors are taken over. */
     fun orbitRefresh(ids: Set<String>? = null) = viewModelScope.launch {
         if (orbitRefreshing) return@launch
         orbitRefreshing = true
-        val fresh = withContext(Dispatchers.IO) { Orbit.refreshAll(d.orbit.filter { ids == null || it.id in ids }, s.orbitTokens(), now()) }.associateBy { it.id }
-        upd { st -> st.copy(orbit = st.orbit.map { cur -> fresh[cur.id]?.let { f -> cur.copy(versions = f.versions, checkedAt = f.checkedAt, error = f.error) } ?: cur }) }
-        orbitRefreshing = false
+        try {
+            val fresh = withContext(Dispatchers.IO) { Orbit.refreshAll(d.orbit.filter { ids == null || it.id in ids }, s.orbitTokens(), now()) }.associateBy { it.id }
+            upd { st ->
+                st.copy(orbit = st.orbit.map { cur ->
+                    fresh[cur.id]?.takeIf { f ->
+                        cur.url == f.url && cur.apkFilter == f.apkFilter && cur.versionRegex == f.versionRegex &&
+                            cur.releaseFilter == f.releaseFilter && cur.includePre == f.includePre && cur.verifyLatestTag == f.verifyLatestTag
+                    }?.let { f -> cur.copy(versions = f.versions, downloads = maxOf(cur.downloads, f.downloads), checkedAt = f.checkedAt, error = f.error) } ?: cur
+                })
+            }
+        } finally {
+            orbitRefreshing = false
+        }
     }
 
     /** Imported entries land at once, then fill in their details and releases in the background. */

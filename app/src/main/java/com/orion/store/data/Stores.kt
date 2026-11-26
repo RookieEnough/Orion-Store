@@ -78,6 +78,8 @@ import kotlin.math.max
     val cloudBackupUri: String = "", val cloudBackupEvery: String = "off", val lastCloudBackup: Long = 0,
     /** Install through Orion's built-in wireless ADB (shell user), skipping the 24-hour unverified-app wait. */
     val directInstall: Boolean = false,
+    /** What to do when direct install has no Wi-Fi: "" = ask each time, "installer" = use Android's installer. */
+    val offWifiInstall: String = "",
     val installerPreference: String = "system",
     val installerPackage: String = "",
     val installerLabel: String = "",
@@ -168,6 +170,10 @@ import kotlin.math.max
     @Transient val coinFlipHintCount: Int = 0,
     /** The sideloading-protection shield in the header, on whenever the phone has the developer-verification component. Off only from Orion Xtra. */
     val verifierBadge: Boolean = true,
+    /** Lock the first variant the user picks (or the auto-detected best match); skip the picker on future downloads unless the preferred variant is unavailable. */
+    val lockVariant: Boolean = false,
+    /** The architecture string the user last chose or was auto-detected, e.g. "ARM64". Empty = not set yet. */
+    val preferredVariant: String = "",
 ) {
     fun toggleHiddenTab(tab: String): Settings {
         val next = if (tab in hiddenTabs) hiddenTabs - tab else hiddenTabs + tab

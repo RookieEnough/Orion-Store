@@ -113,7 +113,15 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
         vm.download(app, u)
     }
     fun proceed(v: VersionOption) {
-        if (v.variants.size > 1) { target = v; variants = true } else microGThen(v.variants.firstOrNull()?.url ?: app.downloadUrl)
+        val picks = v.variants.filter(::isInstallableVariant).ifEmpty { v.variants }
+        if (picks.size > 1) {
+            // Lock variant: auto-pick the preferred architecture when available, skipping the picker
+            if (s.lockVariant && s.preferredVariant.isNotEmpty()) {
+                val pref = picks.firstOrNull { it.arch.equals(s.preferredVariant, true) }
+                if (pref != null) { microGThen(pref.url); return }
+            }
+            target = v; variants = true
+        } else microGThen(picks.firstOrNull()?.url ?: app.downloadUrl)
     }
     fun action(u: String? = null) {
         if (installing || activeId != null || scanning || unavailable) return
@@ -123,7 +131,16 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
             target == null && app.availableVersions.size > 1 -> versions = true
             else -> {
                 val v = target ?: app.availableVersions.firstOrNull()
-                if (v != null) proceed(v) else if (app.variants.size > 1) variants = true else microGThen(app.downloadUrl)
+                if (v != null) proceed(v) else {
+                    val picks = app.variants.filter(::isInstallableVariant).ifEmpty { app.variants }
+                    if (picks.size > 1) {
+                        if (s.lockVariant && s.preferredVariant.isNotEmpty()) {
+                            val pref = picks.firstOrNull { it.arch.equals(s.preferredVariant, true) }
+                            if (pref != null) { microGThen(pref.url); return }
+                        }
+                        variants = true
+                    } else microGThen(picks.firstOrNull()?.url ?: app.downloadUrl)
+                }
             }
         }
     }
@@ -376,7 +393,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
         fun LazyListScope.facts() {
             item("source") { Column(Modifier.reveal(4)) {
                 SectionTitle("Source & safety", Modifier.padding(top = 20.dp))
-                val repo = app.repoUrl?.takeIf { it.isNotBlank() && it != "#" }
+                val repo = sourceRepoUrl(app)
                 val f = fork
                 val n = 1 + (if (repo != null) 1 else 0) + (if (f != null) 1 else 0)
                 var at = 0
@@ -464,10 +481,13 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
 
     if (variants) OrionSheet({ variants = false }) {
         val (raw, abis) = remember { vm.tracker.deviceArch() }
-        val list2 = remember(target) {
-            (target?.variants ?: app.variants).distinctBy { it.url }.map { it to archCompat(it.arch, raw, abis) }
+        val list2 = remember(target, app.variants) {
+            (target?.variants ?: app.variants)
+                .filter(::isInstallableVariant)
+                .distinctBy { it.url }.map { it to archCompat(it.arch, raw, abis) }
                 .sortedWith(compareByDescending<Pair<AppVariant, Pair<Boolean, Boolean>>> { it.second.second }.thenByDescending { it.second.first })
         }
+        val allVariants = remember(list2) { list2.map { it.first } }
         Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Select download option", style = MaterialTheme.typography.headlineSmallEmphasized)
@@ -491,13 +511,13 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
         Column(Modifier.weight(1f, false).heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.5f).dp).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
             list2.forEachIndexed { i, (v, c) ->
                 val (compat, rec) = c
-                val displayName = v.name.ifBlank { v.url.substringBefore('?').substringAfterLast('/') }.ifBlank { v.arch }
+                val displayName = variantLabel(v, allVariants)
                 val sizeStr = v.size?.let(CatalogProcessor::formatSize)
                 val subText = listOfNotNull(
                     if (rec) "Recommended for your phone" else if (compat) "Compatible" else "May not be compatible",
                     sizeStr
                 ).joinToString(" · ")
-                SegmentedListItem({ variants = false; action(v.url) }, ListItemDefaults.segmentedShapes(i, list2.size),
+                SegmentedListItem({ if (s.lockVariant && s.preferredVariant.isEmpty()) vm.set { it.copy(preferredVariant = v.arch) }; variants = false; action(v.url) }, ListItemDefaults.segmentedShapes(i, list2.size),
                     colors = if (rec) ListItemDefaults.segmentedColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer) else ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh),
                     leadingContent = {
                         val isTv = "tv" in v.arch.lowercase() || "tv" in displayName.lowercase()
@@ -508,9 +528,8 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                     trailingContent = { Icon(Sym.Download, null) },
                     supportingContent = { Text(subText, maxLines = 1, overflow = TextOverflow.Ellipsis) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(displayName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, false))
-                        Spacer(Modifier.width(8.dp))
-                        Tag(v.arch, if (rec) cs.primary else cs.secondary)
+                        Text(displayName, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, false))
+                        if (!displayName.equals(v.arch, ignoreCase = true)) { Spacer(Modifier.width(8.dp)); Tag(v.arch, if (rec) cs.primary else cs.secondary) }
                         if (rec) { Spacer(Modifier.width(6.dp)); Tag("Recommended", cs.primary) }
                     }
                 }

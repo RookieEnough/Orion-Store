@@ -964,7 +964,7 @@ private data class SubDraft(
     val manualKeyword: Boolean = false, val name: String = "", val description: String = "", val icon: String = "", val repoUrl: String = "", val keyword: String = "apk",
     val packageName: String = "", val category: String = "Utility", val manualCategory: Boolean = false, val topics: List<String> = emptyList(), val author: String = "", val downloadUrl: String = "",
     val autoName: String = "", val autoDesc: String = "", val autoPkg: String = "", val autoStatus: String = "idle", val autoMsg: String = "",
-    val autoIcon: String = "", val autoShots: List<String> = emptyList(),
+    val autoIcon: String = "", val autoShots: List<String> = emptyList(), val autoKeyword: String = "",
 )
 
 // Note: draft lives for the process like the web's sessionStorage; persist to disk if users lose long drafts to process death.
@@ -985,22 +985,28 @@ private fun autofillMessage(d: Detected) = when {
 fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
     val s = LocalS.current; val close = LocalSheetClose.current; val scope = rememberCoroutineScope(); val clip = LocalClipboardManager.current; val t = rememberSheetToast()
     val platform = vm.tab.targetPlatform(); val android = platform == Platform.ANDROID
+    // Android and TV apps are tracked from a repo; only PC listings are a plain download link
+    val tv = platform == Platform.TV; val repoForm = android || tv
     var f by remember { mutableStateOf(draft ?: SubDraft("manual")) }
     SideEffect { draft = f }
     var err by remember { mutableStateOf("") }; var shot by remember { mutableStateOf("") }; var issue by remember { mutableStateOf<String?>(null) }
     var help by remember { mutableStateOf(false) }; var badge by remember { mutableStateOf(false) }
     val obtainium = android && f.mode == "obtainium"
-    val id = slugId(f.name)
+    // Phone and TV builds of one app are two listings, so a name already taken by the other platform gets a platform suffix
+    val takenIds = remember(vm.d.apps, vm.d.importedApps, platform) {
+        (vm.d.apps + vm.d.importedApps).filter { !it.platform.equals(platform, true) }.map { it.id }.toSet()
+    }
+    val id = slugId(f.name).let { if (it in takenIds) "$it-${platform.lowercase()}" else it }
     val cooldown = 180 - min(s.submissionCount * 15, 150)
     val lvl = Xp.level(Xp.total(s, LocalD.current.appLibrary.size)); val rank = "Lvl $lvl · ${Xp.title(lvl)}"; val rankIcon = Sym.MilitaryTech
-    val source = remember(f.repoUrl, f.mode) { if (android && f.mode == "manual" && f.repoUrl.isNotBlank()) parseRepoSource(f.repoUrl) else null }
+    val source = remember(f.repoUrl, f.mode, platform) { if (repoForm && (tv || f.mode == "manual") && f.repoUrl.isNotBlank()) parseRepoSource(f.repoUrl) else null }
     var lastKey by remember { mutableStateOf("") }
     LaunchedEffect(source) {
         val src = source ?: run { lastKey = ""; f = f.copy(autoStatus = "idle", autoMsg = ""); return@LaunchedEffect }
         val key = "${src.provider}:${src.domain.orEmpty()}:${src.repoPath}"; if (key == lastKey) return@LaunchedEffect
         f = f.copy(autoStatus = "loading", autoMsg = "Detecting description, package name, icon and screenshots from the repo...")
         delay(650)
-        runCatching { detectRepo(src, s.orbitTokens()) }.onSuccess { d ->
+        runCatching { detectRepo(src, s.orbitTokens(), preferTv = tv) }.onSuccess { d ->
             lastKey = key
             val p = f
             f = p.copy(
@@ -1012,6 +1018,10 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
                 icon = if (d.icon != null && (p.icon.isEmpty() || p.icon == p.autoIcon)) d.icon else p.icon,
                 shots = if (d.shots.isNotEmpty() && (p.shots.isEmpty() || p.shots == p.autoShots)) d.shots else p.shots,
                 autoIcon = d.icon ?: p.autoIcon, autoShots = d.shots.ifEmpty { p.autoShots },
+                // A TV build in the release assets suggests its keyword, until the user types their own
+                manualKeyword = if (d.releaseHint != null && (!p.manualKeyword || p.keyword == p.autoKeyword)) true else if (d.releaseHint == null && p.autoKeyword.isNotEmpty() && p.keyword == p.autoKeyword) false else p.manualKeyword,
+                keyword = if (d.releaseHint != null && (!p.manualKeyword || p.keyword == p.autoKeyword)) d.releaseHint else if (d.releaseHint == null && p.autoKeyword.isNotEmpty() && p.keyword == p.autoKeyword) "apk" else p.keyword,
+                autoKeyword = d.releaseHint.orEmpty(),
                 topics = d.topics, autoName = d.name ?: p.autoName, autoDesc = d.description ?: p.autoDesc, autoPkg = d.packageName ?: p.autoPkg,
                 autoStatus = if (d.packageName != null || d.description != null || d.icon != null || d.shots.isNotEmpty()) "success" else "error", autoMsg = autofillMessage(d))
         }.onFailure { f = f.copy(autoStatus = "error", autoMsg = "Could not auto-detect repo metadata right now.") }
@@ -1058,17 +1068,19 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
             if (android) {
                 if (f.repoUrl.isBlank()) return fail("Repo URL is required.")
                 if (f.packageName.isBlank()) return fail("Package name is required.")
+            } else if (tv) {
+                if (f.repoUrl.isBlank() && f.downloadUrl.isBlank()) return fail("Add a repo URL or a direct download link.")
             } else if (f.downloadUrl.isBlank()) return fail("Direct download link is required.")
             val url = f.repoUrl; val parts = runCatching { URI(url.trim()).path.split('/').filter { it.isNotEmpty() } }.getOrDefault(emptyList())
             val host = runCatching { URI(url.trim()).host.orEmpty() }.getOrDefault("")
-            val gh = if (android && "github.com" in url) url.substringAfter("github.com/").split('/').takeIf { it.size >= 2 }?.let { "${it[0]}/${it[1].replace(".git", "").trimEnd('/')}" } else null
-            val gl = android && gh == null && "gitlab" in url && parts.size >= 2; val cb = android && gh == null && !gl && "codeberg.org" in url && parts.size >= 2
+            val gh = if (repoForm && "github.com" in url) url.substringAfter("github.com/").split('/').takeIf { it.size >= 2 }?.let { "${it[0]}/${it[1].replace(".git", "").trimEnd('/')}" } else null
+            val gl = repoForm && gh == null && "gitlab" in url && parts.size >= 2; val cb = repoForm && gh == null && !gl && "codeberg.org" in url && parts.size >= 2
             val owner = gh?.substringBefore('/') ?: parts.firstOrNull().takeIf { gl || cb }
             buildJsonObject {
                 put("name", f.name); put("id", id); put("description", f.description); put("icon", sanitizeGitHubImageUrl(f.icon)); put("repoUrl", f.repoUrl)
                 put("githubRepo", gh.orEmpty()); put("gitlabRepo", if (gl) parts.joinToString("/") else ""); put("gitlabDomain", if (gl) host else "")
                 put("codebergRepo", if (cb) parts.joinToString("/") else "")
-                put("releaseKeyword", if (android) (if (f.manualKeyword) f.keyword.trim().ifEmpty { "apk" } else "apk") else f.keyword)
+                put("releaseKeyword", if (repoForm) (if (f.manualKeyword) f.keyword.trim().ifEmpty { "apk" } else "apk") else f.keyword)
                 put("packageName", f.packageName); put("category", f.category); put("author", f.author.ifEmpty { owner.orEmpty() }); put("downloadUrl", f.downloadUrl)
                 put("screenshots", shots); put("platform", platform)
             }
@@ -1084,8 +1096,8 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
     }
     SheetToastHost(t)
     val sectionsDone = if (obtainium) listOf(f.json.isNotBlank(), f.oIcon.isNotBlank(), f.shots.size >= 3)
-        else listOf(if (android) f.repoUrl.isNotBlank() else f.downloadUrl.isNotBlank(), f.name.isNotBlank() && f.author.isNotBlank(), f.description.isNotBlank() && f.icon.isNotBlank()) +
-            (if (android) listOf(f.packageName.isNotBlank()) else emptyList()) + (f.shots.size >= 3)
+        else listOf(if (android) f.repoUrl.isNotBlank() else if (tv) f.repoUrl.isNotBlank() || f.downloadUrl.isNotBlank() else f.downloadUrl.isNotBlank(), f.name.isNotBlank() && f.author.isNotBlank(), f.description.isNotBlank() && f.icon.isNotBlank()) +
+            (if (repoForm) listOf(!android || f.packageName.isNotBlank()) else emptyList()) + (f.shots.size >= 3)
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SubmitHero(platform, rank, rankIcon, cooldown, sectionsDone.count { it }, sectionsDone.size)
         if (android) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1136,9 +1148,9 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
             }
             screenshots(3)
         } else {
-            Section(1, "Source", if (android) "Where the releases live. Orion reads the rest from the repo." else "Where people download it.", sectionsDone[0]) {
-                if (android) {
-                    Field(f.repoUrl, { f = f.copy(repoUrl = it) }, "Repo URL *", "https://github.com/owner/repo", uri = true)
+            Section(1, "Source", if (android) "Where the releases live. Orion reads the rest from the repo." else if (tv) "The repo Orion follows for releases, or a direct download link." else "Where people download it.", sectionsDone[0]) {
+                if (repoForm) {
+                    Field(f.repoUrl, { f = f.copy(repoUrl = it) }, if (android) "Repo URL *" else "Repo URL", "https://github.com/owner/repo", uri = true)
                     if (f.repoUrl.isNotBlank()) {
                         val (c, ic) = when (f.autoStatus) { "error" -> cs.error to Sym.Warning; "success" -> Safe to Sym.CheckCircle; else -> cs.onSurfaceVariant to Sym.AutoFixHigh }
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.copy(.1f)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1147,6 +1159,7 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
                             Text(f.autoMsg.ifEmpty { "Orion will try to detect the package name and description from this repo." }, style = ty.bodySmall, color = c)
                         }
                     }
+                    if (tv) Field(f.downloadUrl, { f = f.copy(downloadUrl = it) }, "Direct download link", "https://example.com/download", uri = true)
                 } else Field(f.downloadUrl, { f = f.copy(downloadUrl = it) }, "Direct download link *", "https://example.com/download", uri = true)
             }
             Section(2, "Details", null, sectionsDone[1]) {
@@ -1167,13 +1180,13 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
                 Field(f.description, { f = f.copy(description = it) }, "Description *", "A short summary users will read first.", lines = 3)
                 Field(f.icon, { f = f.copy(icon = it) }, "Icon URL *", "https://...", uri = true, leading = iconPreview(f.icon))
             }
-            if (android) Section(4, "Release", "How Orion picks the right APK from each release.", sectionsDone[3]) {
-                Field(f.packageName, { f = f.copy(packageName = it) }, "Package name *", "com.example.app", mono = true)
+            if (repoForm) Section(4, "Release", "How Orion picks the right APK from each release.", sectionsDone[3]) {
+                Field(f.packageName, { f = f.copy(packageName = it) }, if (android) "Package name *" else "Package name", "com.example.app", mono = true)
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(cs.surfaceContainerHighest).padding(start = 16.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Release keyword", style = ty.titleSmall)
-                        Text(if (f.manualKeyword) "Manual: matches your keyword" else "Auto: first APK in the release", style = ty.bodySmall, color = cs.onSurfaceVariant)
+                        Text(if (f.manualKeyword) (if (f.autoKeyword.isNotEmpty() && f.keyword == f.autoKeyword) "Suggested from the release files: matches \"${f.keyword}\"" else "Manual: matches your keyword") else "Auto: first APK in the release", style = ty.bodySmall, color = cs.onSurfaceVariant)
                     }
                     IconButton({ help = !help }) { Icon(Sym.Info, "Help: Release keyword") }
                     Switch(f.manualKeyword, { f = f.copy(manualKeyword = it); vm.haptic(H.SELECTION) })
@@ -1186,7 +1199,7 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
                     FilledTonalButton({ vm.tracker.open(r) }, shapes = ButtonDefaults.shapes()) { Icon(Sym.OpenInNew, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Check releases page") }
                 }
             }
-            screenshots(if (android) 5 else 4)
+            screenshots(if (repoForm) 5 else 4)
         }
         Column(Modifier.padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             CtaButton("Generate GitHub issue", ::submit, icon = Sym.OpenInNew)

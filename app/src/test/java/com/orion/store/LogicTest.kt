@@ -154,6 +154,13 @@ class LogicTest {
         assertFalse("\n\n" in body)
     }
 
+    @Test fun submissionIssueUrlPercentEncodesAsterisks() {
+        assertEquals("%2Aalpha%2A", enc("*alpha*"))
+        val u = submissionIssueUrl("[]", 1, "App*", "1.0.0")
+        assertTrue(u.contains("%2A"))
+        assertFalse("App*" in u.substringAfter("?title="))
+    }
+
     @Test fun categories() {
         val music = AppItem(id = "m", name = "Tunes", description = "Listen to your album collection", category = "Media")
         val tool = AppItem(id = "t", name = "Box", category = "Utility", tags = listOf("Privacy"))
@@ -409,6 +416,95 @@ class LogicTest {
         val testApps = listOf(AppItem(id = "revera", packageName = "com.caruno.revera", repoUrl = "https://github.com/caruno-git/Revera"))
         val twinMap = Orbit.findTwins(testOrbit, testApps)
         assertEquals("revera", twinMap["orbit:rev"]?.id)
+    }
+
+    @Test fun variantLabels() {
+        assertEquals("ARMv7", variantLabel(AppVariant("ARMv7", "u", name = "Revera-1.0.8-ARMv7.apk")))
+        assertEquals("armv7", variantLabel(AppVariant("ARMv7", "u", name = "orion-store-armv7.apk")))
+        assertEquals("universal", variantLabel(AppVariant("Universal", "u", name = "app-universal.apk")))
+        assertEquals("TV", variantLabel(AppVariant("TV", "u", name = "Revera-1.0.8-TV.apk")))
+        assertEquals("arm64-v8a", variantLabel(AppVariant("ARM64", "u", name = "app-arm64-v8a.apk")))
+        // No arch keyword in filename: returns cleaned filename (not arch fallback)
+        assertEquals("Brave", variantLabel(AppVariant("Universal", "https://x/Brave.apk", name = "Brave.apk")))
+        // Empty/blank name: falls back to arch
+        assertEquals("Universal", variantLabel(AppVariant("Universal", "https://x/", name = "")))
+
+        // Sibling common-prefix stripping (Issue #233 same-prefix game/benchmark flavors)
+        val deck = listOf(
+            AppVariant("Universal", "u1", name = "DroidDeck-0.7.1-antutu.apk"),
+            AppVariant("Universal", "u2", name = "DroidDeck-0.7.1-ludashi.apk"),
+            AppVariant("Universal", "u3", name = "DroidDeck-0.7.1-pubg.apk"),
+            AppVariant("Universal", "u4", name = "DroidDeck-0.7.1.apk"),
+        )
+        assertEquals("antutu", variantLabel(deck[0], deck))
+        assertEquals("ludashi", variantLabel(deck[1], deck))
+        assertEquals("pubg", variantLabel(deck[2], deck))
+        assertEquals("Universal", variantLabel(deck[3], deck))
+    }
+
+    @Test fun installableAndPickedVariants() {
+        val sha = AppVariant("ARM64", "https://x/app-arm64.apk.sha256", name = "app-arm64.apk.sha256")
+        val jsonAsset = AppVariant("Universal", "https://x/output-metadata.json", name = "output-metadata.json")
+        val txt = AppVariant("Universal", "https://x/changelog.txt", name = "changelog.txt")
+        val apk = AppVariant("ARM64", "https://x/app-arm64.apk", name = "app-arm64.apk")
+        val armv7 = AppVariant("ARMv7", "https://x/app-armv7.apk", name = "app-armv7.apk")
+        val apks = AppVariant("Universal", "https://x/app-universal.apks", name = "app-universal.apks")
+        val extless = AppVariant("ARM64", "https://example.org/latest/download", name = "")
+        assertFalse(isInstallableVariant(sha))
+        assertFalse(isInstallableVariant(jsonAsset))
+        assertFalse(isInstallableVariant(txt))
+        assertTrue(isInstallableVariant(apk))
+        assertTrue(isInstallableVariant(apks))
+        assertTrue(isInstallableVariant(extless))
+
+        // Locked preference wins when available
+        val lockedSettings = Settings(lockVariant = true, preferredVariant = "ARMv7")
+        assertEquals(armv7, pickVariant(listOf(sha, apk, armv7, apks), lockedSettings, "ARM64", listOf("arm64-v8a", "armeabi-v7a")))
+        // When locked variant is missing, falls back to device ABI without picking non-APK
+        val noArmv7 = listOf(sha, apk, apks)
+        assertEquals(apk, pickVariant(noArmv7, lockedSettings, "ARM64", listOf("arm64-v8a")))
+        // Unlocked picks recommended ABI
+        assertEquals(apk, pickVariant(listOf(sha, armv7, apk), Settings(), "ARM64", listOf("arm64-v8a", "armeabi-v7a")))
+    }
+
+    @Test fun sourceRepoUrlResolution() {
+        val android = AppItem(id = "a", platform = Platform.ANDROID, downloadUrl = "https://github.com/o/r", repoUrl = null)
+        assertNull(sourceRepoUrl(android))
+        val androidRepo = android.copy(repoUrl = "https://github.com/o/custom")
+        assertEquals("https://github.com/o/custom", sourceRepoUrl(androidRepo))
+        val legacyTv = AppItem(id = "tv", platform = Platform.TV, downloadUrl = "https://github.com/o/tvapp/releases", repoUrl = null)
+        assertEquals("https://github.com/o/tvapp", sourceRepoUrl(legacyTv))
+    }
+
+    @Test fun orbitApplyReleasesAndAssetPlus() {
+        val initial = OrbitApp(
+            id = "orbit:demo",
+            url = "https://github.com/o/demo",
+            name = "Demo",
+            versions = listOf(VersionOption("Stable", "1.0.0", variants = listOf(AppVariant("Universal", "https://x/demo.apk", name = "demo.apk")))),
+        )
+        val nonApkRelease = CatalogProcessor.Release(
+            tag = "v2.0.0", name = "2.0.0", prerelease = false, date = "2026-11-26T00:00:00Z",
+            assets = listOf(Triple("notes.txt", "https://x/notes.txt", 10L)),
+        )
+        val unmatched = Orbit.applyReleases(initial, listOf(nonApkRelease), now = 123L, keepEmptyFallback = true)
+        assertEquals("1.0.0", unmatched.versions.first().version)
+        assertEquals("No APK matched in the latest releases", unmatched.error)
+        assertEquals(123L, unmatched.checkedAt)
+
+        val apkRelease = CatalogProcessor.Release(
+            tag = "v2.0.0", name = "2.0.0", prerelease = false, date = "2026-11-26T00:00:00Z",
+            assets = listOf(Triple("demo-2.0.0.apk", "https://x/demo-2.0.0.apk", 42L)), downloads = 99L,
+        )
+        val matched = Orbit.applyReleases(unmatched, listOf(apkRelease), now = 456L, keepEmptyFallback = true)
+        assertEquals("2.0.0", matched.versions.first().version)
+        assertNull(matched.error)
+        assertEquals(99L, matched.downloads)
+
+        val payload = kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"assets":[{"name":"app+foss-arm64.apk","url":"https://api.github.com/repos/o/d/releases/assets/77"}]}"""
+        )
+        assertEquals("https://api.github.com/repos/o/d/releases/assets/77", githubAssetApiUrl(payload, "app+foss-arm64.apk"))
     }
 
     @Test fun appGalleryFetch() = kotlinx.coroutines.runBlocking {

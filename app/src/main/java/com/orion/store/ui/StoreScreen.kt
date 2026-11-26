@@ -68,10 +68,10 @@ fun StoreTab(vm: MainViewModel, platform: String, contentPadding: PaddingValues)
     val groups = remember(list, sort) { if (sort == SortOption.NAME_ASC || sort == SortOption.NAME_DESC) list.groupBy { initial(it.name) }.toList() else listOf("" to list) }
     val modernHome = vm.modernCollections()
     val grid = rememberLazyGridState(); val scope = rememberCoroutineScope()
-    // Jump to top only when the filter actually changes, not when returning to a tab whose scroll was restored.
-    val view = "${ts.category}|${ts.sort}|${ts.filterFavorites}|${vm.showAllSorted}|${vm.expandedView}"
+    // Jump to top when filter or search query changes (prevents returning from scrolled search stuck halfway down home), not on tab switch.
+    val view = "${ts.category}|${ts.sort}|${ts.filterFavorites}|${vm.showAllSorted}|${vm.expandedView}|${ts.query}"
     var lastView by rememberSaveable { mutableStateOf(view) }
-    LaunchedEffect(view) { if (view != lastView) { lastView = view; grid.scrollToItem(0) } }
+    LaunchedEffect(view, list.size) { if (view != lastView) { lastView = view; grid.scrollToItem(0) } }
     val ptr = rememberPullToRefreshState(); val wc = LocalWidthClass.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // Classic rows become a card grid on medium and expanded windows: as many 320dp-or-wider columns as the store has room for
