@@ -60,7 +60,7 @@ private val CHAPTERS = listOf(
         Feature(Sym.LibraryAdd, "Your own bundles", "Build a bundle in three steps: pick apps, give it a name, color and icon, then keep it local or submit it for everyone.", { open(Overlay.CUSTOM_BUNDLE) }),
         Feature(Sym.AutoAwesome, "Orion AI", "Tap the star and describe what you need, like a free music app. Use your own Gemini, ChatGPT or Claude key, or a model that runs on the phone. Import a LiteRT model from this phone, or paste a Hugging Face link to one. Drag the star anywhere.", { open(Overlay.AI) }),
         Feature(Sym.Search, "Search", "The search pill at the top finds apps by name, developer, category or description, and forgives accents and typos in spacing."),
-        Feature(Sym.SwapVert, "Sort and filter", "Sort by newest, oldest, name or size, and narrow the list to a single category with the filter buttons."),
+        Feature(Sym.SwapVert, "Sort and filter", "Sort by recently added, most starred, most downloaded, recently updated or name, and narrow the list with categories, Favorites or Pre-releases."),
         Feature(Sym.Favorite, "Favorites", "Long-press any card, swipe a classic row, or tap the heart on an app page. The heart filter shows only your favorites."),
         Feature(Sym.Description, "About this app previews", "Classic rows show the first lines of each description with See more to read the rest in place. Turn it off in Settings, Interface.", settings("interface")),
         Feature(Sym.Sell, "Category icons", "Every category wears its own icon on classic rows, so a long list scans at a glance."),
@@ -98,11 +98,11 @@ private val CHAPTERS = listOf(
     Chapter("library", "My Apps and Downloads", "Your library, your queue and updates that look after themselves.", Sym.GridView, Color(0xFF22C55E), MaterialShapes.Clover4Leaf, listOf(
         Feature(Sym.Inventory2, "Library", "Every app you have downloaded or installed through Orion, filtered by All, Installed, Downloaded and Updates, with its own search.", { navTo(Tab.MYAPPS) }),
         Feature(Sym.Delete, "Uninstall several apps", "Long-press an installed app in My Apps to start picking, tap more (or All), then Uninstall. Silent with root, Shizuku or Dhizuku, one system prompt each otherwise."),
-        Feature(Sym.Downloading, "Download queue", "Active downloads, ready installs and pending updates in a compact sheet over whatever you are doing, with Install all, Update all and Clear queue. While something downloads, a progress ring in the header opens it.", settings("queue")),
+        Feature(Sym.Downloading, "Download queue", "Active downloads, ready installs and pending updates in a compact sheet inside Settings (Queue card), with Install all, Update all and Clear queue.", settings("queue")),
         Feature(Sym.Notifications, "Background downloads", "Downloads keep going when you leave Orion, with live progress in your notifications and a tap to install when they finish."),
         Feature(Sym.Autorenew, "Auto-update", "Orion checks on the schedule you pick, from every 15 minutes to once a week, even when closed and after a reboot. It downloads updates for installed apps it manages: the ones in My Apps, and Orbit apps that are not paused or set to track only. When an Orbit app is also in the library, the library copy is updated. Skip auto-update lives on the app's page menu, next to Don't manage. Ignored updates are left out too. Orbit sources are still checked on that schedule.", settings("network")),
         Feature(Sym.SystemUpdate, "Install automatically", "Let Orion install the updates it downloads, whether it is open or closed. Anything that cannot finish is reported the next time you open the app.", settings("network")),
-        Feature(Sym.Verified, "Stable releases only", "Skip Beta, Alpha and Nightly builds whenever a stable release exists.", settings("network")),
+        Feature(Sym.NewReleases, "Pre-releases", "Include Beta, Alpha and Nightly releases in Orion Store or globally across Orbit whenever they are newer than Stable, or lock Stable only when you want stability.", settings("network")),
         Feature(Sym.Wifi, "Wi-Fi only", "Keep downloads you start off mobile data. On mobile data, Orion asks before downloading that one app anyway. Auto-update on Wi-Fi only is separate: background updates wait for Wi-Fi even when other downloads are allowed on mobile data.", settings("network")),
         Feature(Sym.CleaningServices, "Janitor", "Leftover APKs are cleaned a week after install, or right away with Auto-cleanup on. A pill offers a one-tap clean when files pile up.", settings("storage")),
     )),
@@ -112,7 +112,7 @@ private val CHAPTERS = listOf(
         Feature(Sym.VisibilityOff, "Hide Orbit", "The first time you open Orbit, you can hide it if you only want Orion's own apps. Turn it back on under Settings, Interface, Navigation tabs."),
         Feature(Sym.SystemUpdate, "One-tap install and update", "Orbit apps install, update and auto-update like store apps, with every install route Orion has: root, Shizuku, Dhizuku and wireless debugging.", { navTo(Tab.ORBIT) }),
         Feature(Sym.History, "Any version", "Every recent release of an Orbit app shows in its version picker, including Nightly builds, so going back to an older build is one tap. After you install a Nightly, later updates stay on that channel."),
-        Feature(Sym.Tune, "Fine-tune", "Pick which APK counts with a file name filter, include pre-releases, read the version out of the tag with a pattern, wait before a new release is offered, and set the icon and screenshots yourself."),
+        Feature(Sym.Tune, "Fine-tune", "Pick which APK counts with a file name filter, include pre-releases, read the version out of the tag with a pattern, wait before a new release is offered, set a custom icon from a URL or local image, and manage screenshots."),
         Feature(Sym.Visibility, "Track only", "Follow new versions without Install or Update. Turn it on in Fine-tune or from the long-press menu. An Obtainium export keeps the flag in both directions.", { navTo(Tab.ORBIT) }),
         Feature(Sym.Schedule, "Wait before offering", "Hold a new Orbit release for 1, 2, 3 or 7 days, in Settings or on one app. The newest release that is old enough is the one offered. Obtainium's minimum update age is imported and exported.", settings("network")),
         Feature(Sym.Key, "Source tokens", "Tokens on the Orbit tab let GitHub, GitLab and Codeberg answer private repos, download their release files, and skip the public rate limit. Each field links to the page that creates that token. The GitHub token is the same one in Developer tools, so a token you already saved is used.", { navTo(Tab.ORBIT) }),
@@ -359,6 +359,6 @@ private fun FeatureRow(c: Chapter, f: Feature, i: Int, n: Int, onGo: () -> Unit)
 @Composable
 private fun Turning(shape: RoundedPolygon, color: Color, size: Dp, modifier: Modifier = Modifier, periodMs: Int = 20_000) {
     val still = LocalS.current.calm
-    val r by rememberInfiniteTransition(label = "turn").animateFloat(0f, if (still) 0f else 360f, infiniteRepeatable(tween(periodMs, easing = LinearEasing)), label = "r")
+    val r = if (still) 0f else rememberInfiniteTransition(label = "turn").animateFloat(0f, 360f, infiniteRepeatable(tween(periodMs, easing = LinearEasing)), label = "r").value
     Box(modifier.size(size).graphicsLayer { rotationZ = r }.background(color, shape.toShape()))
 }

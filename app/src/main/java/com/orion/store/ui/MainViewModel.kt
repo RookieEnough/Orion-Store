@@ -16,6 +16,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -147,6 +148,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val expectations = mutableMapOf<String, InstallExpectation>()
     private val initializing = mutableSetOf<String>()
+    /** Live download percentages held outside Persisted DataState so progress ticks never recompose unrelated screens or serialize JSON. */
+    val dlProgress = mutableStateMapOf<String, Float>()
     private var pendingRetry: Pair<AppItem, String>? = null
     private var pendingDeepLink: (() -> Unit)? = null
     private var loadGen = 0; private var syncJob: Job? = null; private var cleaning = false
@@ -156,13 +159,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Orbit entries as store items. Rebuilt when the list, the wait, or the release channel changes. */
     private var orbitMemo: Pair<List<OrbitApp>, List<AppItem>> = emptyList<OrbitApp>() to emptyList()
-    private var orbitStamp: Triple<Int, Boolean, Map<String, String>>? = null
+    private var orbitStamp: List<Any>? = null
     @Synchronized fun orbitItems(): List<AppItem> {
         val o = d.orbit
-        val stamp = Triple(s.orbitMinAgeDays, s.stableOnly, s.appStreams)
+        val stamp = listOf(s.orbitMinAgeDays, s.stableOnly, s.orbitIncludePre, s.appStreams)
         if (orbitMemo.first !== o || orbitStamp != stamp) {
             orbitStamp = stamp
-            orbitMemo = o to o.map { it.toItem(s.daysFor(it), s.streamOf(it.id)) }
+            val globalPre = !s.stableOnly && s.orbitIncludePre
+            orbitMemo = o to o.map { it.toItem(s.daysFor(it), s.streamOf(it.id), allowPre = !s.stableOnly && (it.includePre || globalPre)) }
         }
         return orbitMemo.second
     }
@@ -223,12 +227,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             combine(
                 settings.map {
                     listOf(it.installedVersions, it.appStreams, it.installedBuilds, it.ignoredUpdates, it.appManage,
-                        it.skipOtherStores, it.stableOnly, it.orbitMinAgeDays, it.autoUpdateEnabled, it.wifiOnly, it.autoWifiOnly, it.autoSkip)
+                        it.skipOtherStores, it.stableOnly, it.includePreReleases, it.orbitIncludePre, it.orbitMinAgeDays,
+                        it.autoUpdateEnabled, it.wifiOnly, it.autoWifiOnly, it.autoSkip)
                 }.distinctUntilChanged(),
                 data.map { Triple(it.apps, it.importedApps, it.orbit) }.distinctUntilChanged()
             ) { _, (apps, imp, orbit) ->
                 val st = s
-                val all = apps + imp + orbit.filter { !it.paused }.map { it.toItem(st.daysFor(it), st.streamOf(it.id)) }
+                val globalPre = !st.stableOnly && st.orbitIncludePre
+                val all = apps + imp + orbit.filter { !it.paused }.map { it.toItem(st.daysFor(it), st.streamOf(it.id), allowPre = !st.stableOnly && (it.includePre || globalPre)) }
                 availableUpdates(all, st, now()) to Triple(st.autoUpdateEnabled, st.wifiOnly, st.autoWifiOnly)
             }.flowOn(Dispatchers.Default).distinctUntilChanged().collect { (u, _) ->
                 if (updates != u) updates = u
@@ -675,10 +681,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 if (TRACK_ONLY_TAG in app.tags) { if (!auto) toast("${app.name} is set to track only"); return@launch }
-                val meta = downloadVersionMeta(app, url, s.streamOf(app.id))
+                val stream = s.streamFor(app)
+                val meta = downloadVersionMeta(app, url, stream)
                 if (!auto && url == null && app.id !in d.readyToInstall) {
                     val local = s.installedVersions[app.id]
-                    if (!local.isNullOrEmpty() && !hasAvailableUpdate(app, local, s.streamOf(app.id), s.installedBuilds[app.id])) {
+                    if (!local.isNullOrEmpty() && !hasAvailableUpdate(app, local, stream, s.installedBuilds[app.id])) {
                         toast("${app.name} is already on this phone"); return@launch
                     }
                 }
@@ -715,7 +722,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         d.activeDownloads.forEach { (id, v) ->
             val file = v.substringAfter('|'); val dl = m[file] ?: return@forEach
             when (dl.status) {
-                DlStatus.RUNNING -> if (d.downloadProgress[id] != dl.progress.toFloat()) upd { it.updateDownload(id, dl.progress.toFloat(), "RUNNING") }
+                DlStatus.RUNNING -> {
+                    val p = dl.progress.toFloat()
+                    if (dlProgress[id] != p) dlProgress[id] = p
+                    if (d.downloadStatus[id] != "RUNNING") upd { it.copy(downloadStatus = it.downloadStatus + (id to "RUNNING")) }
+                }
                 DlStatus.SUCCESSFUL -> { Downloads.forget(file); downloadComplete(id, true) }
                 DlStatus.FAILED -> {
                     Downloads.forget(file)
@@ -727,6 +738,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun downloadComplete(id: String, ok: Boolean) {
+        dlProgress.remove(id)
         if (ok) {
             val file = d.activeDownloads[id]?.substringAfter('|') ?: return
             upd { it.completeDownload(id, file, now()) }
@@ -784,6 +796,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelDownload(appId: String) {
+        dlProgress.remove(appId)
         d.activeDownloads[appId]?.substringAfter('|')?.let { runCatching { Downloads.cancel(it) } }
         upd { it.cancelDownload(appId) }
     }
@@ -858,7 +871,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             ?.takeIf { it.isNotBlank() }?.let { p -> upd { st -> st.copy(orbit = st.orbit.map { if (it.id == app0.id) it.copy(packageName = p) else it }) }; app0.copy(packageName = p) } ?: app0 else app0
         if (opts == null && !regular && s.installOptions) { installAsk = app to file; return@launch }
         val k = normalizePackageName(app.packageName)
-        val meta = versionMetaFromFileName(app, file, s.streamOf(app.id))
+        val meta = versionMetaFromFileName(app, file, s.streamFor(app))
         // Direct install runs as the shell user (no 24-hour wait, no "unknown apps" permission). When adbd is unreachable the
         // user picks the regular installer explicitly (or chose it once for "no Wi-Fi"): silently falling back lands on the very
         // wait this setting exists to skip.
@@ -1006,7 +1019,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val (inst, v) = r[a.id] ?: (false to ""); val file = d0.readyToInstall[a.id]
             if (inst && installingId != a.id) installed += Triple(a.id, v, file ?: d0.appLibrary[a.id]?.fileName)
             if (!inst || file == null || installingId == a.id) return@forEach
-            val exp = versionMetaFromFileName(a, file, s.streamOf(a.id)).first
+            val exp = versionMetaFromFileName(a, file, s.streamFor(a)).first
             if (exp.isNotEmpty() && isComparableVersion(exp) && compareVersions(v, exp) < 0) return@forEach
             doneReady += a.id; if (v.isNotEmpty()) remote[a.id] = v
             normalizePackageName(a.packageName).let { owners[it] = a.id; expectations -= it }
@@ -1145,8 +1158,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      *  first-lane screenshots follow on unmetered networks. */
     private fun warmStorefront(f: Map<String, Pair<List<StoreCollection>, List<String>>>) = viewModelScope.launch {
         delay(2500)
+        val perf = s.perf
         val metered = runCatching { ctx.getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered }.getOrDefault(true)
         val loader = ctx.imageLoader
+        if (perf == "lite") {
+            // Low-RAM devices keep the small memory cache for the visible platform instead of pre-loading across every tab
+            val cur = tab.key()
+            val front = f[cur]?.first.orEmpty()
+            (front.take(2).flatMap { it.apps.take(4) } + visibleBy[cur].orEmpty().take(6))
+                .mapNotNull { it.icon.takeIf(String::isNotEmpty) }.distinct().forEach { icon ->
+                    loader.enqueue(ImageRequest.Builder(ctx).data(optimizedImageUrl(icon, 256, 256)).size(160)
+                        .networkCachePolicy(CachePolicy.DISABLED).build())
+                }
+            return@launch
+        }
         f.forEach { (p, front) ->
             (front.first.take(4).flatMap { it.apps.take(8) } + visibleBy[p].orEmpty().take(12)).mapNotNull { it.icon.takeIf(String::isNotEmpty) }.distinct().forEach { icon ->
                 // Same data as RemoteIcon, so the cached bitmap is the one the tile asks for
@@ -1223,6 +1248,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val adding = d.orbit.none { it.id == o.id }
         if (adding) Orbit.refused(o.url, o.name, o.packageName.orEmpty(), o.author)?.let { orbitRefuse(it); return }
         upd { st -> st.copy(orbit = if (st.orbit.any { it.id == o.id }) st.orbit.map { if (it.id == o.id) o else it } else st.orbit + o) }
+        viewModelScope.launch(Dispatchers.IO) { pruneOrbitIcons() }
         if (adding) {
             considerSharePrompt()
             viewModelScope.launch {
@@ -1232,16 +1258,81 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         scheduleInstalledSync()
     }
-    fun orbitRemove(id: String) { upd { st -> st.copy(orbit = st.orbit.filter { it.id != id }) }; haptic(H.MEDIUM) }
+    fun orbitRemove(id: String) {
+        upd { st -> st.copy(orbit = st.orbit.filter { it.id != id }) }
+        viewModelScope.launch(Dispatchers.IO) { pruneOrbitIcons() }
+        haptic(H.MEDIUM)
+    }
 
-    suspend fun orbitProbe(url: String, base: OrbitApp? = null) = withContext(Dispatchers.IO) { Orbit.probe(url, s.orbitTokens(), now(), base) }
+    fun toggleOrbitPre() {
+        val next = !s.orbitIncludePre
+        set { it.copy(orbitIncludePre = next) }
+        haptic(H.SELECTION)
+        if (next) orbitRefresh()
+    }
+
+    /** Copies a user-picked local image into app storage so Orbit icons survive URI grant expiration. */
+    suspend fun importOrbitIcon(uri: Uri): String? = withContext(Dispatchers.IO) {
+        val len = ctx.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+        if (len > 10L * 1024 * 1024) { error("Choose an image under 10 MB."); return@withContext null }
+        val mime = ctx.contentResolver.getType(uri)?.lowercase().orEmpty()
+        val ext = when {
+            "png" in mime -> "png"
+            "webp" in mime -> "webp"
+            "gif" in mime -> "gif"
+            else -> "jpg"
+        }
+        val dir = java.io.File(ctx.filesDir, "orbit_icons").apply { mkdirs() }
+        val tmp = java.io.File(dir, "tmp_${System.currentTimeMillis()}.$ext")
+        val copied = runCatching {
+            ctx.contentResolver.openInputStream(uri)?.use { input ->
+                var total = 0L
+                val buf = ByteArray(8192)
+                tmp.outputStream().use { out ->
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        total += n
+                        if (total > 10L * 1024 * 1024) throw IllegalStateException("too big")
+                        out.write(buf, 0, n)
+                    }
+                }
+                total > 0
+            } ?: false
+        }.getOrDefault(false)
+        if (!copied) {
+            tmp.delete(); error("Couldn't read that image."); return@withContext null
+        }
+        val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(tmp.absolutePath, opts)
+        if (opts.outWidth <= 0 || opts.outHeight <= 0) {
+            tmp.delete(); error("Choose a PNG, JPG, WebP, or GIF image."); return@withContext null
+        }
+        val dest = java.io.File(dir, "icon_${System.currentTimeMillis()}_${(1000..9999).random()}.$ext")
+        if (!tmp.renameTo(dest)) { tmp.copyTo(dest, overwrite = true); tmp.delete() }
+        dest.toURI().toString()
+    }
+
+    private fun pruneOrbitIcons(list: List<OrbitApp> = d.orbit) {
+        val dir = java.io.File(ctx.filesDir, "orbit_icons").takeIf { it.isDirectory } ?: return
+        val used = list.map { it.icon.trim() }.filter { it.isNotEmpty() }.toSet()
+        dir.listFiles()?.forEach { f ->
+            if (f.name.startsWith("tmp_")) return@forEach
+            if (f.toURI().toString() !in used && f.absolutePath !in used) f.delete()
+        }
+    }
+
+    suspend fun orbitProbe(url: String, base: OrbitApp? = null) =
+        withContext(Dispatchers.IO) { Orbit.probe(url, s.orbitTokens(), now(), base, !s.stableOnly && s.orbitIncludePre) }
 
     /** Checks every source (or [ids]) again and keeps what the user edited meanwhile: only versions, downloads, time and errors are taken over. */
     fun orbitRefresh(ids: Set<String>? = null) = viewModelScope.launch {
         if (orbitRefreshing) return@launch
         orbitRefreshing = true
         try {
-            val fresh = withContext(Dispatchers.IO) { Orbit.refreshAll(d.orbit.filter { ids == null || it.id in ids }, s.orbitTokens(), now()) }.associateBy { it.id }
+            val fresh = withContext(Dispatchers.IO) {
+                Orbit.refreshAll(d.orbit.filter { ids == null || it.id in ids }, s.orbitTokens(), now(), !s.stableOnly && s.orbitIncludePre)
+            }.associateBy { it.id }
             upd { st ->
                 st.copy(orbit = st.orbit.map { cur ->
                     fresh[cur.id]?.takeIf { f ->
@@ -1264,8 +1355,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (ok.isEmpty()) { if (blocked.isEmpty()) toast("Everything here is already in Orbit"); return@launch }
         upd { st -> st.copy(orbit = st.orbit + ok) }; haptic(H.SUCCESS); toast(if (ok.size == 1) "${ok[0].name.ifBlank { "1 app" }} joined your Orbit" else "${ok.size} apps joined your Orbit")
         considerSharePrompt()
+        val globalPre = !s.stableOnly && s.orbitIncludePre
         ok.chunked(3).forEach { batch ->
-            val done = batch.map { o -> async(Dispatchers.IO) { runCatching { Orbit.probe(o.url, s.orbitTokens(), now(), o) }.getOrDefault(o) } }.awaitAll()
+            val done = batch.map { o -> async(Dispatchers.IO) { runCatching { Orbit.probe(o.url, s.orbitTokens(), now(), o, globalPre) }.getOrDefault(o) } }.awaitAll()
             val drop = done.filter { Orbit.refused(it.url, it.name, it.packageName.orEmpty(), it.author) != null }
             if (drop.isNotEmpty()) orbitRefuse(drop.mapNotNull { Orbit.refused(it.url, it.name, it.packageName.orEmpty(), it.author) }.distinct().joinToString("\n\n"))
             val keep = done.filter { it.id !in drop.map { d -> d.id }.toSet() }.associateBy { it.id }

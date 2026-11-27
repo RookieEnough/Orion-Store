@@ -215,17 +215,22 @@ object CatalogProcessor {
         (rawApps as? JsonArray).orEmpty().mapNotNull(::sanitizeApp).map { processItem(it, mirror) }
 
     fun search(q: String, category: String, sort: SortOption, apps: List<AppItem>): List<AppItem> {
-        val t = q.trim().lowercase()
-        var out = if (t.isEmpty()) apps else apps.map { a ->
-            val n = a.name.lowercase()
-            a to (if (t in n) 10 else 0) + (if (n.startsWith(t)) 5 else 0) + (if (t in a.author.lowercase()) 5 else 0) + (if (t in a.description.lowercase()) 1 else 0) + (if (t in a.id.lowercase()) 2 else 0)
-        }.filter { it.second > 0 }.sortedByDescending { it.second }.map { it.first }
+        val t = q.trim()
+        var out = if (t.isEmpty()) apps else apps.mapNotNull { a ->
+            val inName = a.name.contains(t, ignoreCase = true)
+            val s = (if (inName) 10 else 0) +
+                (if (inName && a.name.startsWith(t, ignoreCase = true)) 5 else 0) +
+                (if (a.author.contains(t, ignoreCase = true)) 5 else 0) +
+                (if (a.description.contains(t, ignoreCase = true)) 1 else 0) +
+                (if (a.id.contains(t, ignoreCase = true)) 2 else 0)
+            if (s > 0) a to s else null
+        }.sortedByDescending { it.second }.map { it.first }
         if (category != "All") out = out.filter(categoryFilter(category))
         return when (sort) {
             SortOption.NAME_ASC -> out.sortedWith { a, b -> collator.compare(a.name, b.name) }
-            SortOption.NAME_DESC -> out.sortedWith { a, b -> collator.compare(b.name, a.name) }
-            SortOption.SIZE_ASC -> out.sortedBy { parseSize(it.size) }
-            SortOption.SIZE_DESC -> out.sortedByDescending { parseSize(it.size) }
+            SortOption.MOST_STARRED -> out.sortedWith(compareByDescending<AppItem> { it.stars ?: -1 }.thenByDescending { it.downloadCount ?: -1L }.thenComparator { a, b -> collator.compare(a.name, b.name) })
+            SortOption.MOST_DOWNLOADED -> out.sortedWith(compareByDescending<AppItem> { it.downloadCount ?: -1L }.thenByDescending { it.stars ?: -1 }.thenComparator { a, b -> collator.compare(a.name, b.name) })
+            SortOption.RECENTLY_UPDATED -> out.sortedWith(compareByDescending<AppItem> { a -> a.availableVersions.maxOfOrNull { it.date.take(10) }.orEmpty() }.thenByDescending { it.stars ?: -1 }.thenComparator { a, b -> collator.compare(a.name, b.name) })
             SortOption.NEWEST -> if (t.isEmpty()) out.reversed() else out
             else -> out
         }

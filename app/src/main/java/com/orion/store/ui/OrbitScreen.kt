@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -77,7 +78,7 @@ fun OrbitTab(vm: MainViewModel, padding: PaddingValues) {
     val d = LocalD.current; val s = LocalS.current
     val orbit = d.orbit
     // Respect each entry's minimum release age and release stream, matching MainViewModel and AutoUpdate
-    val items = remember(orbit, s.orbitMinAgeDays, s.stableOnly, s.appStreams) {
+    val items = remember(orbit, s.orbitMinAgeDays, s.stableOnly, s.orbitIncludePre, s.appStreams) {
         vm.orbitItems().associateBy { it.id }
     }
     var add by remember { mutableStateOf<OrbitApp?>(null) }; var adding by remember { mutableStateOf(false) }
@@ -101,18 +102,31 @@ fun OrbitTab(vm: MainViewModel, padding: PaddingValues) {
     val updateIds = remember(updates) { updates.map { it.id }.toSet() }
     val sources = remember(orbit) { orbit.map { Orbit.sourceOf(it.url) }.distinct() }
     val tags = remember(orbit) { orbit.flatMap { it.tags }.map { it.trim() }.filter { it.isNotEmpty() }.distinct().sorted() }
-    val shown = remember(orbit, q, pickedSources, pickedTags, updatesOnly, updateIds) {
+    val shown = remember(orbit, q, pickedSources, pickedTags, updatesOnly, updateIds, s.orbitSort) {
         orbit.filter { o ->
             val hit = q.isEmpty() || listOf(o.name, o.author, o.url, o.tags.joinToString(" ")).any { it.contains(q, true) }
             val srcOk = pickedSources.isEmpty() || Orbit.sourceOf(o.url).label in pickedSources
             val tagOk = pickedTags.isEmpty() || o.tags.any { it in pickedTags }
             val updOk = !updatesOnly || o.id in updateIds
             hit && srcOk && tagOk && updOk
+        }.let { list ->
+            when (s.orbitSort) {
+                OrbitSort.UPDATE_DATE -> list.sortedWith(
+                    compareByDescending<OrbitApp> { o -> o.versions.maxOfOrNull { it.date.take(10) }.orEmpty() }
+                        .thenByDescending { it.addedAt }
+                        .thenComparator { a, b -> collator.compare(a.name, b.name) }
+                )
+                OrbitSort.DATE_ADDED -> list.sortedWith(
+                    compareByDescending<OrbitApp> { it.addedAt }
+                        .thenComparator { a, b -> collator.compare(a.name, b.name) }
+                )
+                OrbitSort.NAME -> list.sortedWith { a, b ->
+                    collator.compare(a.name.ifBlank { "Untitled" }, b.name.ifBlank { "Untitled" })
+                }
+            }
         }
     }
-    val groups = remember(shown, pickedSources, pickedTags, updatesOnly, q) {
-        if (pickedSources.isNotEmpty() || pickedTags.isNotEmpty() || updatesOnly || q.isNotEmpty()) listOf("" to shown) else shown.groupBy { Orbit.sourceOf(it.url).label }.entries.map { it.key to it.value }
-    }
+    val groups = remember(shown) { listOf("" to shown) }
     val twinMap = vm.orbitTwins
     val ptr = rememberPullToRefreshState()
     var shareNow by remember { mutableStateOf(false) }
@@ -129,7 +143,15 @@ fun OrbitTab(vm: MainViewModel, padding: PaddingValues) {
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item("header", span = full) { Header(vm) }
             item("bar", span = full) {
-                OrbitBar(sources, tags, pickedSources, pickedTags, updatesOnly, updates.size, { pickedSources = emptySet(); pickedTags = emptySet(); updatesOnly = false }, { updatesOnly = !updatesOnly }, { pickedSources = it }, { pickedTags = it }, { add = null; adding = true }, { discover = true }, { importing = emptyList() }, { tokens = true }, { sourcesHelp = true })
+                OrbitBar(
+                    sources, tags, pickedSources, pickedTags, updatesOnly, updates.size, s.orbitSort,
+                    { pickedSources = emptySet(); pickedTags = emptySet(); updatesOnly = false },
+                    { updatesOnly = !updatesOnly },
+                    { pickedSources = it },
+                    { pickedTags = it },
+                    { chosen -> vm.set { it.copy(orbitSort = chosen) }; vm.haptic(H.SELECTION) },
+                    { add = null; adding = true }, { discover = true }, { importing = emptyList() }, { tokens = true }, { sourcesHelp = true }
+                )
             }
             if (orbit.isEmpty()) item("empty", span = full) { OrbitEmpty() }
             else if (shown.isEmpty()) item("none", span = full) { EmptyState(Sym.SearchOff, "Nothing in this view", "Try another tag, or clear the search.") }
@@ -262,9 +284,28 @@ private fun sourceNote(s: OrbitSource) = when (s) {
     OrbitSource.FORGEJO -> "A Forgejo repository"
 }
 @Composable
-private fun OrbitBar(sources: List<OrbitSource>, tags: List<String>, pickedSources: Set<String>, pickedTags: Set<String>, updatesOnly: Boolean, updates: Int, onAll: () -> Unit, onToggleUpdates: () -> Unit, onSourcesPicked: (Set<String>) -> Unit, onTagsPicked: (Set<String>) -> Unit, onAdd: () -> Unit, onDiscover: () -> Unit, onImport: () -> Unit, onTokens: () -> Unit, onSources: () -> Unit) {
+private fun OrbitBar(
+    sources: List<OrbitSource>,
+    tags: List<String>,
+    pickedSources: Set<String>,
+    pickedTags: Set<String>,
+    updatesOnly: Boolean,
+    updates: Int,
+    sort: OrbitSort,
+    onAll: () -> Unit,
+    onToggleUpdates: () -> Unit,
+    onSourcesPicked: (Set<String>) -> Unit,
+    onTagsPicked: (Set<String>) -> Unit,
+    onSort: (OrbitSort) -> Unit,
+    onAdd: () -> Unit,
+    onDiscover: () -> Unit,
+    onImport: () -> Unit,
+    onTokens: () -> Unit,
+    onSources: () -> Unit,
+) {
     val cs = MaterialTheme.colorScheme; val vm = LocalVm.current
     var box by remember { mutableStateOf("") }
+    var sortMenu by remember { mutableStateOf(false) }
     val allOn = pickedSources.isEmpty() && pickedTags.isEmpty() && !updatesOnly
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(24.dp), color = cs.surfaceContainer) {
@@ -281,6 +322,16 @@ private fun OrbitBar(sources: List<OrbitSource>, tags: List<String>, pickedSourc
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box {
+                FilledTonalIconButton({ sortMenu = true }, Modifier.size(40.dp)) { Icon(Sym.SwapVert, "Sort Orbit: ${sort.label}") }
+                DropdownMenu(sortMenu, { sortMenu = false }, shape = RoundedCornerShape(20.dp)) {
+                    Text("Sort Orbit by", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                    OrbitSort.entries.forEach { o ->
+                        val on = sort == o
+                        DropdownMenuItem({ Text(o.label, fontWeight = if (on) FontWeight.Bold else null) }, { onSort(o); sortMenu = false }, leadingIcon = { RadioButton(on, null) })
+                    }
+                }
+            }
             FitPill("All", allOn) { vm.haptic(H.SELECTION); onAll() }
             if (updates > 0) FitPill(if (updates == 1) "1 up" else "$updates up", updatesOnly) { vm.haptic(H.SELECTION); onToggleUpdates() }
             FitPill(if (pickedSources.isEmpty()) "Sources" else "Sources ${pickedSources.size}", pickedSources.isNotEmpty(), sources.isNotEmpty()) { vm.haptic(H.SELECTION); box = "src" }
@@ -292,14 +343,14 @@ private fun OrbitBar(sources: List<OrbitSource>, tags: List<String>, pickedSourc
     if (box == "tag") PickBox("Tags", tags.map { it to Sym.Sell }, pickedTags, { box = "" }, { onTagsPicked(it); box = "" })
 }
 
-/** One equal slice of the filter row, so the row never has to scroll. */
+/** One equal slice of the filter row so Sort, pills, and Sources help fill the bar cleanly without horizontal scrolling. */
 @Composable
 private fun RowScope.FitPill(label: String, on: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Surface(Modifier.weight(1f).height(40.dp), shape = RoundedCornerShape(20.dp), color = when {
         !enabled -> cs.surfaceContainer; on -> cs.secondaryContainer; else -> cs.surfaceContainerHigh
     }) {
-        Box(Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).clickable(enabled) { onClick() }.padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).clickable(enabled) { onClick() }.padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge, color = if (enabled) if (on) cs.onSecondaryContainer else cs.onSurface else cs.onSurface.copy(alpha = .38f))
         }
     }
@@ -359,6 +410,7 @@ private fun OrbitCard(vm: MainViewModel, o: OrbitApp, item: AppItem, twin: AppIt
     val local = s.installedVersions[item.id]
     val src = Orbit.sourceOf(o.url)
     val waiting = o.versions.isNotEmpty() && item.availableVersions.isEmpty()
+    val relDate = o.versions.maxOfOrNull { it.date.take(10) }?.takeIf { it.isNotEmpty() }
     val line = when {
         o.error != null && o.versions.isEmpty() -> o.error to cs.error
         st == CardState.DOWNLOADING -> (if (p > 0f) "Downloading ${p.toInt()}%" else "Starting download") to cs.primary
@@ -369,7 +421,7 @@ private fun OrbitCard(vm: MainViewModel, o: OrbitApp, item: AppItem, twin: AppIt
         waiting -> "New release is waiting out its minimum age" to cs.onSurfaceVariant
         o.versions.isEmpty() -> "Looking for releases" to cs.onSurfaceVariant
         o.trackOnly -> "v${item.latestVersion.removePrefix("v")} · tracking" to cs.onSurfaceVariant
-        else -> "v${item.latestVersion.removePrefix("v")} · ${src.label}" to cs.onSurfaceVariant
+        else -> listOfNotNull("v${item.latestVersion.removePrefix("v")}", relDate, src.label).joinToString(" · ") to cs.onSurfaceVariant
     }
     Surface(modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).combinedClickableOrbit(onOpen, onMore), shape = RoundedCornerShape(28.dp), color = cs.surfaceContainer) {
         Row(Modifier.padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -417,8 +469,9 @@ private fun Modifier.combinedClickableOrbit(onClick: () -> Unit, onLong: () -> U
  *  (APK filter, pre-releases, version pattern, icon, screenshots) sit folded under the preview. */
 @Composable
 fun OrbitAddSheet(vm: MainViewModel, base: OrbitApp?, onDismiss: () -> Unit) = OrionSheet(onDismiss) {
-    val cs = MaterialTheme.colorScheme; val close = LocalSheetClose.current; val clip = LocalClipboardManager.current
+    val cs = MaterialTheme.colorScheme; val s = LocalS.current; val close = LocalSheetClose.current; val clip = LocalClipboardManager.current; val scope = rememberCoroutineScope()
     val editing = base != null && LocalD.current.orbit.any { it.id == base.id }
+    val globalPre = !s.stableOnly && s.orbitIncludePre
     var url by remember { mutableStateOf(base?.url.orEmpty()) }
     var draft by remember { mutableStateOf(base?.takeIf { it.versions.isNotEmpty() || editing }) }
     var probing by remember { mutableStateOf(false) }
@@ -443,9 +496,9 @@ fun OrbitAddSheet(vm: MainViewModel, base: OrbitApp?, onDismiss: () -> Unit) = O
             if (raw != null) cachedReleases = u to raw
             val live = draft?.takeIf { it.url == u }
             val merged = when {
-                live != null && raw != null -> Orbit.applyReleases(live, raw, System.currentTimeMillis(), keepEmptyFallback = false)
+                live != null && raw != null -> Orbit.applyReleases(live, raw, System.currentTimeMillis(), keepEmptyFallback = false, globalIncludePre = globalPre)
                 live != null && probed != null -> live.copy(versions = probed.versions, downloads = maxOf(live.downloads, probed.downloads), checkedAt = probed.checkedAt, error = probed.error)
-                probed != null && raw != null -> Orbit.applyReleases(probed, raw, System.currentTimeMillis(), keepEmptyFallback = false)
+                probed != null && raw != null -> Orbit.applyReleases(probed, raw, System.currentTimeMillis(), keepEmptyFallback = false, globalIncludePre = globalPre)
                 else -> probed ?: live
             }
             if (merged != null) {
@@ -458,13 +511,13 @@ fun OrbitAddSheet(vm: MainViewModel, base: OrbitApp?, onDismiss: () -> Unit) = O
         }
     }
     // Filter / regex / toggle tuning runs locally in 0ms once raw releases are cached, fetching once on demand if editing
-    val filterKey = "${draft?.apkFilter}|${draft?.includePre}|${draft?.versionRegex}|${draft?.releaseFilter}|${draft?.verifyLatestTag}"
+    val filterKey = "${draft?.apkFilter}|${draft?.includePre}|${draft?.versionRegex}|${draft?.releaseFilter}|${draft?.verifyLatestTag}|$globalPre"
     LaunchedEffect(filterKey) {
         val u = url.trim(); val dr = draft ?: return@LaunchedEffect
         if (!u.startsWith("http") || dr.url != u) return@LaunchedEffect
         val cached = cachedReleases?.takeIf { it.first == u }?.second
         if (cached != null) {
-            draft = Orbit.applyReleases(dr, cached, System.currentTimeMillis(), keepEmptyFallback = false)
+            draft = Orbit.applyReleases(dr, cached, System.currentTimeMillis(), keepEmptyFallback = false, globalIncludePre = globalPre)
         } else if (editing || dr.versions.isNotEmpty()) {
             delay(450)
             probing = true
@@ -473,7 +526,7 @@ fun OrbitAddSheet(vm: MainViewModel, base: OrbitApp?, onDismiss: () -> Unit) = O
                 if (raw != null) {
                     cachedReleases = u to raw
                     draft?.takeIf { it.url == u }?.let { live ->
-                        draft = Orbit.applyReleases(live, raw, System.currentTimeMillis(), keepEmptyFallback = false)
+                        draft = Orbit.applyReleases(live, raw, System.currentTimeMillis(), keepEmptyFallback = false, globalIncludePre = globalPre)
                     }
                 }
             } finally {
@@ -518,7 +571,12 @@ fun OrbitAddSheet(vm: MainViewModel, base: OrbitApp?, onDismiss: () -> Unit) = O
                     OrbitField(dr.name, { draft = draft?.copy(name = it) }, "Name")
                     TagEditor(dr.tags) { draft = draft?.copy(tags = it) }
                     OrbitField(dr.author, { draft = draft?.copy(author = it) }, "Developer")
-                    OrbitField(dr.icon, { draft = draft?.copy(icon = it.trim()) }, "Icon link", uri = true)
+                    IconEditor(dr.icon, dr.name, { draft = draft?.copy(icon = it) }) {
+                        scope.launch {
+                            val picked = ResultHost.run(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*")).second?.data ?: return@launch
+                            vm.importOrbitIcon(picked)?.let { saved -> draft = draft?.copy(icon = saved); vm.haptic(H.SUCCESS) }
+                        }
+                    }
                     OrbitField(dr.apkFilter, { draft = draft?.copy(apkFilter = it) }, "APK filter",
                         hint = if (apkFilterErr) "Invalid regular expression" else "Pattern the APK file name must match, like arm64|universal", error = apkFilterErr)
                     OrbitField(dr.versionRegex, { draft = draft?.copy(versionRegex = it) }, "Version pattern",
@@ -527,7 +585,10 @@ fun OrbitAddSheet(vm: MainViewModel, base: OrbitApp?, onDismiss: () -> Unit) = O
                         hint = if (releaseFilterErr) "Invalid regular expression" else "Pattern the release title or tag must match, like ^Release v", error = releaseFilterErr)
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(cs.surfaceContainerHigh).clickable { draft = draft?.copy(includePre = !dr.includePre) }
                         .padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Pre-releases", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                        Column(Modifier.weight(1f)) {
+                            Text("Pre-releases", style = MaterialTheme.typography.titleSmall)
+                            if (s.orbitIncludePre) Text("Enabled globally in Orbit", style = MaterialTheme.typography.bodySmall, color = cs.primary)
+                        }
                         Switch(dr.includePre, { draft = draft?.copy(includePre = it) })
                     }
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(cs.surfaceContainerHigh).clickable { draft = draft?.copy(verifyLatestTag = !dr.verifyLatestTag) }
@@ -564,7 +625,7 @@ fun OrbitAddSheet(vm: MainViewModel, base: OrbitApp?, onDismiss: () -> Unit) = O
     val dr = draft
     Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (!editing && dr != null && dr.versions.isNotEmpty()) FilledTonalButton({
-            Orbit.refused(dr.url, dr.name, dr.packageName.orEmpty(), dr.author)?.let { vm.orbitRefuse(it) } ?: run { vm.orbitSave(dr); vm.haptic(H.SUCCESS); if (!dr.trackOnly) vm.download(dr.toItem(vm.s.daysFor(dr), vm.s.streamOf(dr.id))); close() }
+            Orbit.refused(dr.url, dr.name, dr.packageName.orEmpty(), dr.author)?.let { vm.orbitRefuse(it) } ?: run { vm.orbitSave(dr); vm.haptic(H.SUCCESS); if (!dr.trackOnly) vm.download(dr.toItem(vm.s.daysFor(dr), vm.s.streamOf(dr.id), allowPre = !vm.s.stableOnly && (dr.includePre || vm.s.orbitIncludePre))); close() }
         },
             modifier = Modifier.weight(1f).heightIn(min = 56.dp), shapes = ButtonDefaults.shapes()) { Text("Add and install", maxLines = 1) }
         Button({
@@ -633,6 +694,37 @@ private fun TagEditor(tags: List<String>, onChange: (List<String>) -> Unit) {
 private fun OrbitField(value: String, onChange: (String) -> Unit, label: String, hint: String? = null, uri: Boolean = false, error: Boolean = false) =
     OutlinedTextField(value, onChange, Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(20.dp), label = { Text(label) }, isError = error,
         supportingText = hint?.let { { Text(it) } }, keyboardOptions = if (uri) KeyboardOptions(keyboardType = KeyboardType.Uri) else KeyboardOptions.Default)
+
+/** Custom icon editor: accepts an http(s) link or lets the user pick a local image file saved privately inside app storage. */
+@Composable
+private fun IconEditor(icon: String, name: String, onChange: (String) -> Unit, onPickFile: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val local = isLocalMediaUri(icon)
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(cs.surfaceContainerHigh).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            RemoteIcon(icon, name.ifBlank { "App" }, 48.dp)
+            Column(Modifier.weight(1f)) {
+                Text("Custom icon", style = MaterialTheme.typography.titleSmall)
+                Text(if (local) "Saved from your device" else "Paste an image link or choose a local file", style = MaterialTheme.typography.bodySmall, color = if (local) cs.primary else cs.onSurfaceVariant)
+            }
+            FilledTonalButton(onPickFile, shapes = ButtonDefaults.shapes(), contentPadding = ButtonDefaults.SmallContentPadding) {
+                Icon(Sym.AddPhotoAlternate, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Local file")
+            }
+        }
+        OutlinedTextField(
+            value = if (local) "" else icon,
+            onValueChange = { onChange(it.trim()) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(16.dp),
+            placeholder = { Text(if (local) "Local image in use — clear or type a URL to replace" else "https://.../icon.png") },
+            trailingIcon = {
+                if (icon.isNotEmpty()) IconButton({ onChange("") }) { Icon(Sym.Close, "Reset icon") }
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        )
+    }
+}
 
 /** Screenshots as a strip of thumbnails: tap the cross to drop one, add more by link. */
 @Composable
@@ -710,7 +802,20 @@ private fun OrbitAppSheet(vm: MainViewModel, o: OrbitApp, item: AppItem?, startS
 @Composable
 private fun OrbitShare(vm: MainViewModel, o: OrbitApp, onBack: () -> Unit) {
     val cs = MaterialTheme.colorScheme; val close = LocalSheetClose.current
-    val gaps = remember(o) { Orbit.publishGaps(o) }; val wait = vm.submissionCooldown
+    var liveShots by remember(o.id) { mutableStateOf(o.screenshots) }
+    var shotUrl by remember(o.id) { mutableStateOf("") }
+    var allowNoShots by remember(o.id) { mutableStateOf(false) }
+    val draftEntry = remember(o, liveShots) { o.copy(screenshots = liveShots) }
+    val gaps = remember(draftEntry) { Orbit.publishGaps(draftEntry, allowNoShots = true) }; val wait = vm.submissionCooldown
+    fun addShot() {
+        val u = shotUrl.trim()
+        if (u.startsWith("http") && explainRejectedImageLink(u) == null) {
+            liveShots = (liveShots + sanitizeGitHubImageUrl(u)).distinct()
+            vm.orbitSave(draftEntry.copy(screenshots = liveShots))
+            shotUrl = ""
+            vm.haptic(H.LIGHT)
+        } else vm.toast("Enter a valid public image URL")
+    }
     Column(Modifier.navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 16.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(shape = RoundedCornerShape(28.dp), color = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) {
             Row(Modifier.padding(18.dp), verticalAlignment = Alignment.Top) {
@@ -731,9 +836,29 @@ private fun OrbitShare(vm: MainViewModel, o: OrbitApp, onBack: () -> Unit) {
                 Text("Still needed: ${gaps.joinToString(", ")}.", style = MaterialTheme.typography.bodyMedium)
             }
         }
+        if (liveShots.size < 3) Surface(shape = RoundedCornerShape(20.dp), color = cs.surfaceContainerHigh) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Screenshots (${liveShots.size}/3 recommended)", style = MaterialTheme.typography.titleSmall)
+                OutlinedTextField(
+                    shotUrl, { shotUrl = it }, Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(16.dp),
+                    placeholder = { Text("Paste public image link (Play Store, author site, or GitHub)") },
+                    trailingIcon = { IconButton(::addShot, enabled = shotUrl.isNotBlank()) { Icon(Sym.AddPhotoAlternate, "Add screenshot") } },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                )
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { allowNoShots = !allowNoShots; vm.haptic(H.SELECTION) }.padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(allowNoShots, { allowNoShots = it; vm.haptic(H.SELECTION) })
+                    Spacer(Modifier.width(6.dp))
+                    Text("Repo & F-Droid have no screenshots — submit without them", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                }
+            }
+        }
+        val ready = gaps.isEmpty() && (liveShots.size >= 3 || allowNoShots)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onBack, modifier = Modifier.weight(1f).heightIn(min = 56.dp), shapes = ButtonDefaults.shapes()) { Text("Back") }
-            Button({ vm.orbitPublish(o); close() }, modifier = Modifier.weight(1f).heightIn(min = 56.dp), enabled = gaps.isEmpty() && wait == null, shapes = ButtonDefaults.shapes()) {
+            Button({ vm.orbitPublish(draftEntry); close() }, modifier = Modifier.weight(1f).heightIn(min = 56.dp), enabled = ready && wait == null, shapes = ButtonDefaults.shapes()) {
                 Text(wait ?: "Share", maxLines = 1)
             }
         }
@@ -800,7 +925,7 @@ private fun OrbitDiscoverSheet(vm: MainViewModel, onPick: (OrbitApp) -> Unit, on
         val query = debounced; val p = page
         loading = true; failed = false
         runCatching { withContext(Dispatchers.IO) { Orbit.directory(query, p, System.currentTimeMillis()) } }
-            .onSuccess { (a, m) -> if (query == debounced && p == page) { list = if (p == 1) a else list + a; more = m } }
+            .onSuccess { (a, m) -> if (query == debounced && p == page) { list = if (p == 1) a else (list + a).distinctBy { it.configs.firstOrNull()?.id to it.name }; more = m } }
             .onFailure { if (query == debounced && p == page) failed = true }
         if (query == debounced && p == page) loading = false
     }
@@ -813,7 +938,7 @@ private fun OrbitDiscoverSheet(vm: MainViewModel, onPick: (OrbitApp) -> Unit, on
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
     ) {
-        itemsIndexed(valid, key = { _, a -> a.configs.first().id }) { i, a ->
+        itemsIndexed(valid, key = { i, a -> "${a.configs.first().id}|$i" }) { i, a ->
             val cfg = a.configs.first(); val added = cfg.id in have
             SegmentedListItem(
                 { if (added) vm.toast("Already in Orbit") else { vm.haptic(H.LIGHT); onPick(cfg) } },
@@ -832,7 +957,7 @@ private fun OrbitDiscoverSheet(vm: MainViewModel, onPick: (OrbitApp) -> Unit, on
                 loading -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { LoadingIndicator(Modifier.size(44.dp)) }
                 failed -> EmptyState(Sym.CloudOff, "The directory didn't answer", "Check your connection and try again.")
                 valid.isEmpty() -> EmptyState(Sym.SearchOff, "No configs for “$q”", "Paste the app's link in Add instead.")
-                more -> Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) { FilledTonalButton({ page++ }, shapes = ButtonDefaults.shapes()) { Text("Show more") } }
+                more -> Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) { FilledTonalButton({ if (!loading) page++ }, enabled = !loading, shapes = ButtonDefaults.shapes()) { Text("Show more") } }
             }
         }
     }

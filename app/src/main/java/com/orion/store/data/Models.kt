@@ -15,8 +15,12 @@ object Device { @Volatile var isTv = false; @Volatile var lowEnd = false }
 fun AppItem.installsHere() = platform == Platform.ANDROID || (platform == Platform.TV && Device.isTv)
 
 enum class SortOption(val label: String) {
-    HOME("Home Page"), NEWEST("Recently Added"), OLDEST("Oldest Added"), NAME_ASC("Name (A-Z)"),
-    NAME_DESC("Name (Z-A)"), SIZE_ASC("Size (Smallest)"), SIZE_DESC("Size (Largest)")
+    HOME("Home Page"), NEWEST("Recently Added"), MOST_STARRED("Most Starred"),
+    MOST_DOWNLOADED("Most Downloaded"), RECENTLY_UPDATED("Recently Updated"), NAME_ASC("Name (A-Z)")
+}
+
+enum class OrbitSort(val label: String) {
+    UPDATE_DATE("Update Date"), DATE_ADDED("Date Added"), NAME("By Name")
 }
 
 enum class Tab(val platform: String?) { ANDROID(Platform.ANDROID), PC(Platform.PC), TV(Platform.TV), ORBIT(null), MYAPPS(null), ABOUT(null), UPDATES(null) }
@@ -112,14 +116,21 @@ object Defaults {
     const val MIRROR_JSON = "https://raw.githubusercontent.com/RookieEnough/Orion-Data/data/mirror.json"
     /** owner/repo (lowercase) to GitHub stars, built by the mirror workflow so the app never spends API calls on it. */
     const val STARS_JSON = "https://raw.githubusercontent.com/RookieEnough/Orion-Data/data/stars.json"
-    /** GitHub first, then two CDNs that serve the same files for networks blocking raw.githubusercontent.com. */
+    /** GitHub first, then GitLab, Codeberg, and JSDelivr mirrors for networks blocking or throttling a host. */
     val CONFIG_URLS = listOf(
         "https://raw.githubusercontent.com/RookieEnough/Orion-Data/main/config.json",
+        "https://gitlab.com/Grininja/orion-data/-/raw/main/config.json",
+        "https://codeberg.org/RookieZ/Orion-Data/raw/branch/main/config.json",
         "https://cdn.jsdelivr.net/gh/RookieEnough/Orion-Data@main/config.json",
-        "https://raw.githack.com/RookieEnough/Orion-Data/main/config.json",
     )
     val APPS_URLS = CONFIG_URLS.map { it.replace("config.json", "apps.json") }
-    val MIRROR_LABELS = listOf("GitHub", "JSDelivr", "GitHack")
+    val MIRROR_URLS = listOf(
+        "https://raw.githubusercontent.com/RookieEnough/Orion-Data/data/mirror.json",
+        "https://gitlab.com/Grininja/orion-data/-/raw/data/mirror.json",
+        "https://codeberg.org/RookieZ/Orion-Data/raw/branch/data/mirror.json",
+        "https://cdn.jsdelivr.net/gh/RookieEnough/Orion-Data@data/mirror.json",
+    )
+    val MIRROR_LABELS = listOf("GitHub", "GitLab", "Codeberg", "JSDelivr")
     val MICROG_DEPENDENT_APPS = setOf("youtube-revanced", "yt-music-revanced", "google-photos-revanced")
     const val MICROG_INFO_URL = "https://github.com/microg/GmsCore/wiki"
     val DEV_SOCIALS = SocialLinks("https://github.com/RookieEnough", "https://x.com/_Rookie_Z", "https://discord.com/invite/CrM6y4ujnq", "https://www.buymeacoffee.com/rookiez")

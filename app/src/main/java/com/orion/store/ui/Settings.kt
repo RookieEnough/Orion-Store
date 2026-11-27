@@ -115,7 +115,10 @@ fun identityExport(s: Settings, favorites: List<String>, now: Long): String {
         put("compactMode", s.compactMode); put("showAppAbout", s.showAppAbout); put("bottomNavScale", jsNum(s.bottomNavScale)); put("highRefreshRate", s.highRefreshRate); put("immersive", s.immersive); put("perfMode", s.perfMode)
         put("pullToRefreshCharacter", s.pullToRefreshCharacter); put("hapticEnabled", s.hapticEnabled); put("glassEffect", s.glassEffect)
         put("quickTiles", s.quickTiles?.let { json.encodeToJsonElement(it) } ?: JsonNull); put("settingsOrder", json.encodeToJsonElement(s.settingsOrder))
-        put("autoUpdateEnabled", s.autoUpdateEnabled); put("wifiOnly", s.wifiOnly); put("stableOnly", s.stableOnly); put("deleteApk", s.deleteApk); put("useShizuku", s.useShizuku)
+        put("autoUpdateEnabled", s.autoUpdateEnabled); put("wifiOnly", s.wifiOnly); put("stableOnly", s.stableOnly)
+        put("includePreReleases", s.includePreReleases); put("orbitIncludePre", s.orbitIncludePre)
+        put("orbitSort", json.encodeToJsonElement(s.orbitSort))
+        put("deleteApk", s.deleteApk); put("useShizuku", s.useShizuku)
         put("lockVariant", s.lockVariant); put("preferredVariant", s.preferredVariant); put("offWifiInstall", s.offWifiInstall)
         put("installerPreference", s.installerPreference); put("installerPackage", s.installerPackage); put("installerLabel", s.installerLabel)
         put("useRemoteJson", s.useRemoteJson); put("loadLocalData", s.loadLocalData); put("appStreams", json.encodeToJsonElement(s.appStreams))
@@ -165,7 +168,9 @@ fun mergeIdentity(d: JsonObject, c: Settings): Settings =
         highRefreshRate = d.or("highRefreshRate", c.highRefreshRate), immersive = d.or("immersive", c.immersive), perfMode = d.or("perfMode", c.perfMode), pullToRefreshCharacter = d.or("pullToRefreshCharacter", c.pullToRefreshCharacter),
         hapticEnabled = d.or("hapticEnabled", c.hapticEnabled), glassEffect = d.or("glassEffect", c.glassEffect),
         quickTiles = d.or("quickTiles", c.quickTiles), settingsOrder = d.or("settingsOrder", c.settingsOrder),
-        autoUpdateEnabled = d.or("autoUpdateEnabled", c.autoUpdateEnabled), wifiOnly = d.or("wifiOnly", c.wifiOnly), stableOnly = d.or("stableOnly", c.stableOnly), deleteApk = d.or("deleteApk", c.deleteApk),
+        autoUpdateEnabled = d.or("autoUpdateEnabled", c.autoUpdateEnabled), wifiOnly = d.or("wifiOnly", c.wifiOnly), stableOnly = d.or("stableOnly", c.stableOnly),
+        includePreReleases = d.or("includePreReleases", c.includePreReleases), orbitIncludePre = d.or("orbitIncludePre", c.orbitIncludePre),
+        orbitSort = d.or("orbitSort", c.orbitSort), deleteApk = d.or("deleteApk", c.deleteApk),
         useShizuku = d.or("useShizuku", c.useShizuku), installerPreference = d.or("installerPreference", c.installerPreference),
         installerPackage = d.or("installerPackage", c.installerPackage), installerLabel = d.or("installerLabel", c.installerLabel),
         useRemoteJson = d.or("useRemoteJson", c.useRemoteJson), loadLocalData = d.or("loadLocalData", c.loadLocalData),
@@ -291,7 +296,7 @@ private fun Selectable(selected: Boolean, title: String, meta: String? = null, o
 @Composable
 private fun Spinner(shape: RoundedPolygon, color: Color, size: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier, periodMs: Int = 24_000) {
     val still = LocalS.current.calm
-    val turn by rememberInfiniteTransition(label = "spin").animateFloat(0f, if (still) 0f else 360f, infiniteRepeatable(tween(periodMs, easing = LinearEasing)), label = "a")
+    val turn = if (still) 0f else rememberInfiniteTransition(label = "spin").animateFloat(0f, 360f, infiniteRepeatable(tween(periodMs, easing = LinearEasing)), label = "a").value
     Box(modifier.size(size).graphicsLayer { rotationZ = turn }.background(color, shape.toShape()))
 }
 
@@ -434,7 +439,17 @@ fun SettingsScreen(vm: MainViewModel) {
                                 else -> "This Android version asks before every install. Root or Shizuku make updates silent."
                             })
                         }
-                        Toggle(Sym.Verified, "Stable releases only", "Skip Beta, Alpha and Nightly builds when a stable one exists", s.stableOnly) { vm.set { it.copy(stableOnly = !it.stableOnly) } }
+                        Toggle(Sym.NewReleases, "Include pre-releases (Orion Store)", "Prefer newer Beta, Alpha and Nightly builds across the catalog", s.includePreReleases) {
+                            val next = !s.includePreReleases
+                            vm.set { it.copy(includePreReleases = next, stableOnly = if (next) false else it.stableOnly) }
+                        }
+                        Toggle(Sym.Orbit, "Include pre-releases (Orbit)", "Follow pre-releases globally across every Orbit app", s.orbitIncludePre) {
+                            vm.toggleOrbitPre()
+                        }
+                        Toggle(Sym.Verified, "Stable releases only", "Skip Beta, Alpha and Nightly builds when a stable one exists", s.stableOnly) {
+                            val next = !s.stableOnly
+                            vm.set { it.copy(stableOnly = next, includePreReleases = if (next) false else it.includePreReleases) }
+                        }
                         val lockDesc = if (s.lockVariant && s.preferredVariant.isNotEmpty()) "Locked to ${s.preferredVariant} · skips the picker when available. Turn off to reset." else "Remember your first variant choice and skip the picker unless it's unavailable"
                         Toggle(Sym.Lock, "Lock preferred variant", lockDesc, s.lockVariant) {
                             vm.set { it.copy(lockVariant = !it.lockVariant, preferredVariant = if (it.lockVariant) "" else it.preferredVariant) }
@@ -657,7 +672,7 @@ private val PAGE_RESIZE = SharedTransitionScope.ResizeMode.scaleToBounds(android
 /** One closing tip per page, so short pages end on something useful instead of empty surface. */
 private val TIPS = mapOf(
     "queue" to "Downloads keep running in the background, with live progress in your notifications.",
-    "visuals" to "The theme button in the search bar cycles System, Light, Dusk, Dark and OLED from anywhere.",
+    "visuals" to "The Theme quick tile at the top of Settings or the choices above cycle System, Light, Dusk, Dark and OLED.",
     "network" to "Auto-update queues new versions whenever the catalog refreshes. Wi-Fi only blocks downloads on mobile data.",
     "storage" to "The janitor clears leftover APKs a week after install, or on the next launch with Delete APK on.",
     "installer" to "With Shizuku, installs and updates go through without a confirmation prompt each time.",
@@ -706,7 +721,12 @@ private fun Hub(vm: MainViewModel, s: Settings, d: DataState, active: Int, ready
         val per = if (LocalWidthClass.current.wide) 3 else 2
         quick.chunked(per).forEach { row ->
             Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { q -> QuickTile(q.icon, q.label, q.get(s), Modifier.weight(1f)) { vm.haptic(H.SELECTION); vm.set(q.flip) } }
+                row.forEach { q ->
+                    QuickTile(q.iconFor(s), q.label, q.get(s), Modifier.weight(1f), q.stateFor?.invoke(s) ?: if (q.get(s)) "On" else "Off") {
+                        vm.haptic(H.SELECTION)
+                        if (q.id == "orbitPre") vm.toggleOrbitPre() else vm.set(q.flip)
+                    }
+                }
                 repeat(per - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
@@ -758,7 +778,7 @@ private fun Hub(vm: MainViewModel, s: Settings, d: DataState, active: Int, ready
                 if (!compact) when (c.id) {
                     "queue" -> {
                         Text(if (queued == 0) "All caught up" else "$active active · $ready ready · $pending updates", style = MaterialTheme.typography.labelLarge, color = LocalContentColor.current.copy(.8f))
-                        val prog = d.activeDownloads.keys.mapNotNull { d.downloadProgress[it] }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
+                        val prog = d.activeDownloads.keys.mapNotNull { vm.dlProgress[it] ?: d.downloadProgress[it] }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
                         if (prog != null) LinearWavyProgressIndicator({ prog / 100f }, Modifier.fillMaxWidth().padding(top = 8.dp), color = LocalContentColor.current)
                     }
                     "visuals" -> {
@@ -806,16 +826,44 @@ private fun HubHeader(title: String, hint: String? = null, action: @Composable (
 /** Bento slots, top to bottom, in their default order. Developer stays pinned last. */
 private val HUB_ORDER = listOf("queue", "visuals", "network", "storage", "installer", "identity", "interface")
 
+private fun themeQuickIcon(s: Settings) = when {
+    s.isOled -> Sym.DarkMode
+    s.theme == "light" -> Sym.LightMode
+    s.theme == "dusk" || s.theme == "system" -> Sym.Brightness6
+    else -> Sym.DarkMode
+}
+
+private fun themeQuickLabel(s: Settings) = if (s.isOled) "OLED" else s.theme.replaceFirstChar(Char::uppercase)
+
+private fun cycleQuickTheme(s: Settings): Settings {
+    val next = when { s.theme == "system" -> "light"; s.theme == "light" -> "dusk"; s.theme == "dusk" -> "dark"; s.isOled -> "system"; else -> "oled" }
+    return s.copy(theme = next, isOled = next == "oled")
+}
+
 /** Every setting a quick tile can flip. Ones that need a grant first (Shizuku, root, wireless pairing) stay on their pages. */
-private class Quick(val id: String, val icon: ImageVector, val label: String, val get: (Settings) -> Boolean, val shown: (Settings) -> Boolean = { true }, val flip: (Settings) -> Settings)
+private class Quick(
+    val id: String,
+    val iconFor: (Settings) -> ImageVector,
+    val label: String,
+    val get: (Settings) -> Boolean,
+    val shown: (Settings) -> Boolean = { true },
+    val stateFor: ((Settings) -> String)? = null,
+    val flip: (Settings) -> Settings,
+) {
+    constructor(id: String, icon: ImageVector, label: String, get: (Settings) -> Boolean, shown: (Settings) -> Boolean = { true }, flip: (Settings) -> Settings) :
+        this(id, { icon }, label, get, shown, null, flip)
+}
 private val QUICK = listOf(
+    Quick("theme", ::themeQuickIcon, "Theme", { it.isOled || it.theme in setOf("dark", "dusk") }, stateFor = ::themeQuickLabel, flip = ::cycleQuickTheme),
     Quick("autoUpdate", Sym.Autorenew, "Auto-update", { it.autoUpdateEnabled }) { it.copy(autoUpdateEnabled = !it.autoUpdateEnabled) },
     Quick("wifiOnly", Sym.Wifi, "Wi-Fi only", { it.wifiOnly }) { it.copy(wifiOnly = !it.wifiOnly) },
     Quick("haptics", Sym.Vibration, "Haptics", { it.hapticEnabled }) { it.copy(hapticEnabled = !it.hapticEnabled) },
     Quick("materialYou", Sym.Wallpaper, "Material You", { it.materialYouEnabled }, { android.os.Build.VERSION.SDK_INT >= 31 }) { it.copy(materialYouEnabled = !it.materialYouEnabled) },
     Quick("smooth", Sym.Speed, "Smooth motion", { it.highRefreshRate }) { it.copy(highRefreshRate = !it.highRefreshRate) },
+    Quick("preReleases", Sym.NewReleases, "Pre-releases", { it.includePreReleases }) { val next = !it.includePreReleases; it.copy(includePreReleases = next, stableOnly = if (next) false else it.stableOnly) },
+    Quick("orbitPre", Sym.Orbit, "Orbit pre-releases", { it.orbitIncludePre }) { it.copy(orbitIncludePre = !it.orbitIncludePre) },
     Quick("compact", Sym.Compress, "Compact", { it.compactMode }) { it.copy(compactMode = !it.compactMode) },
-    Quick("stableOnly", Sym.Verified, "Stable only", { it.stableOnly }) { it.copy(stableOnly = !it.stableOnly) },
+    Quick("stableOnly", Sym.Verified, "Stable only", { it.stableOnly }) { val next = !it.stableOnly; it.copy(stableOnly = next, includePreReleases = if (next) false else it.includePreReleases) },
     Quick("cleanup", Sym.CleaningServices, "Auto-cleanup", { it.deleteApk }) { it.copy(deleteApk = !it.deleteApk) },
     Quick("noMotion", Sym.MotionPhotosOff, "No animations", { it.disableAnimations }) { it.copy(disableAnimations = !it.disableAnimations) },
     Quick("glass", Sym.BlurOn, "Glass dock", { it.glassEffect }) { it.copy(glassEffect = !it.glassEffect) },
@@ -823,7 +871,7 @@ private val QUICK = listOf(
     Quick("localData", Sym.Storage, "Built-in data", { it.loadLocalData }, { it.isDevUnlocked }) { it.copy(loadLocalData = !it.loadLocalData) },
     Quick("maintenance", Sym.Construction, "Maintenance", { it.localMaintenanceMode }, { it.isDevUnlocked }) { it.copy(localMaintenanceMode = !it.localMaintenanceMode) },
 )
-private val DEFAULT_QUICK = listOf("autoUpdate", "wifiOnly", "haptics", "materialYou", "smooth", "compact")
+private val DEFAULT_QUICK = listOf("theme", "autoUpdate", "wifiOnly", "materialYou", "smooth", "compact")
 
 /** Your tiles on top: hold and drag to reorder (they trade places live), tap to remove. Everything else below: tap to add. */
 @Composable
@@ -861,7 +909,7 @@ private fun QuickTilesSheet(vm: MainViewModel, s: Settings, onDismiss: () -> Uni
                         detectDragGesturesAfterLongPress({ live = live ?: pickedOf(vm.s); dragging = id; dy = 0f; vm.haptic(H.HEAVY) }, ::end, ::end) { c, d -> c.consume(); move(d.y) }
                     },
                 colors = ListItemDefaults.segmentedColors(containerColor = if (dragging == id) cs.primaryContainer else cs.secondaryContainer),
-                leadingContent = { Icon(q.icon, null) }, trailingContent = { Icon(Sym.DragHandle, "Hold to move") }) {
+                leadingContent = { Icon(q.iconFor(s), null) }, trailingContent = { Icon(Sym.DragHandle, "Hold to move") }) {
                 Text(q.label, fontWeight = FontWeight.SemiBold)
             }
         } }
@@ -869,7 +917,7 @@ private fun QuickTilesSheet(vm: MainViewModel, s: Settings, onDismiss: () -> Uni
         if (rest.isNotEmpty()) Text("Add tiles", Modifier.padding(start = 8.dp, top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmallEmphasized, color = cs.primary)
         rest.forEachIndexed { i, q ->
             SegmentedListItem({ toggle(q.id) }, ListItemDefaults.segmentedShapes(i, rest.size), colors = ListItemDefaults.segmentedColors(containerColor = cs.surfaceContainerHigh),
-                leadingContent = { Icon(q.icon, null) }, trailingContent = { Icon(Sym.Add, "Add") }) {
+                leadingContent = { Icon(q.iconFor(s), null) }, trailingContent = { Icon(Sym.Add, "Add") }) {
                 Text(q.label, fontWeight = FontWeight.SemiBold)
             }
         }
@@ -1067,7 +1115,7 @@ fun DownloadsSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDism
                     }) { Text(a?.name ?: id, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
             d.activeDownloads.keys.forEach { id ->
-                val a = app(id); val p = d.downloadProgress[id] ?: 0f
+                val a = app(id); val p = vm.dlProgress[id] ?: d.downloadProgress[id] ?: 0f
                 SegmentedListItem({ a?.let { open(it.id) } }, ListItemDefaults.segmentedShapes(i++, rows), colors = colors,
                     leadingContent = { a?.let { AppIcon(it, 44.dp) } ?: TonalIcon(Sym.Downloading, Blue) },
                     supportingContent = {

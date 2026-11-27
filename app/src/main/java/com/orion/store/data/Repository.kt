@@ -9,8 +9,11 @@ import kotlinx.serialization.builtins.serializer
 import java.io.File
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import okhttp3.Cache
 import okhttp3.CacheControl
@@ -170,55 +173,7 @@ class Repository(private val ctx: Context) {
         runCatching { out.write(json.encodeToString(CatalogCache.serializer(), c).toByteArray()); cache.finishWrite(out) }.onFailure { cache.failWrite(out) }
     }
 
-    private fun bust(url: String, ts: String) = "$url${if ('?' in url) '&' else '?'}t=$ts"
-    private fun host(url: String) = runCatching { URI(url).host }.getOrNull().orEmpty()
-
-    /** One catalog load. Hosts that could not be reached at all are skipped for the rest of it, so a blocked host costs one timeout, not one per file. */
-    private class Attempt { val dead: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet() }
-
-    private suspend fun first(urls: List<String>, a: Attempt, fetch: suspend (String) -> String): String {
-        var last: Exception = IOException("No reachable host")
-        for (u in urls.distinct()) {
-            val h = host(u); if (h in a.dead) continue
-            try { return fetch(u) } catch (e: HttpError) { last = e } catch (e: Exception) { last = e; a.dead += h }
-        }
-        throw last
-    }
-
-    /** The mirror is ~30 MB of JSON (under 2 MB gzipped). It streams straight into release lists, so a low-RAM phone never holds the text or a JSON tree;
-     *  revalidates against the HTTP cache; tries every host that serves it; and falls back to the last good copy on disk when none answers. */
-    private suspend fun fetchMirror(url: String, a: Attempt): Map<String, List<CatalogProcessor.Release>>? = withContext(Dispatchers.IO) {
-        fun call(u: String, cc: CacheControl) = Net.catalog.newCall(Request.Builder().url(u).cacheControl(cc).build()).execute().use { r ->
-            if (!r.isSuccessful) throw HttpError(r.code, ""); CatalogProcessor.decodeMirror(r.body.byteStream())
-        }
-        val hosts = rawMirrors(url)
-        for (u in hosts) {
-            val h = host(u); if (h in a.dead) continue
-            try { return@withContext call(u, CacheControl.Builder().noCache().build()) } catch (_: HttpError) {} catch (_: Exception) { a.dead += h }
-        }
-        hosts.firstNotNullOfOrNull { u -> runCatching { call(u, CacheControl.FORCE_CACHE) }.getOrNull() }
-    }
-
-    /** A few KB of raw file from the data branch, revalidated through the HTTP cache: no GitHub API call, so guests keep their 60 an hour. */
-    private suspend fun fetchStars(a: Attempt): Map<String, Int>? = withContext(Dispatchers.IO) {
-        runCatching {
-            first(rawMirrors(Defaults.STARS_JSON), a) { u ->
-                Net.catalog.newCall(Request.Builder().url(u).cacheControl(CacheControl.Builder().noCache().build()).build()).execute().use { r -> if (!r.isSuccessful) throw HttpError(r.code, ""); r.body.string() }
-            }.let { json.decodeFromString(MapSerializer(String.serializer(), Int.serializer()), it) }
-                .mapKeys { it.key.lowercase() }
-        }.getOrNull()
-    }
-
-    private suspend fun fetchSet(config: StoreConfig, appsFallback: String?, ts: String, a: Attempt): Triple<JsonElement, Map<String, List<CatalogProcessor.Release>>?, Map<String, Int>?> = coroutineScope {
-        val appsUrl = config.appsJsonUrl.ifEmpty { appsFallback ?: throw IOException("Dev config is missing appsJsonUrl.") }
-        val mirrorUrl = config.mirrorJsonUrl?.ifEmpty { null } ?: Defaults.MIRROR_JSON
-        val mirror = async { fetchMirror(mirrorUrl, a) }
-        val stars = async { fetchStars(a) }
-        val apps = async { first(rawMirrors(appsUrl) + listOfNotNull(appsFallback), a) { Net.text(bust(it, ts), noStore = true, c = Net.catalog) } }
-        Triple(json.parseToJsonElement(apps.await()), mirror.await(), stars.await())
-    }
-
-    /** Port of App.tsx loadApps network section: dev config → GitHub → jsDelivr → raw.githack → embedded. */
+    /** GitHub → GitLab → Codeberg → JSDelivr → embedded local_apps.json. */
     suspend fun loadCatalog(s: Settings, manual: Boolean): CatalogLoad {
         val useDev = s.devConfigEnabled; val remote = useDev || s.useRemoteJson
         val ts = System.currentTimeMillis().toString(); val a = Attempt()
@@ -230,21 +185,149 @@ class Repository(private val ctx: Context) {
                 val cfgText = try { Net.retry(bust(url, ts), 1, noStore = true) } catch (e: HttpError) { throw IOException("Dev config request failed with ${e.code}") }
                 val cfg = CatalogProcessor.parseConfig(cfgText)
                 if (cfg.appsJsonUrl.isEmpty()) throw IOException("Dev config is missing appsJsonUrl.")
-                val (apps, mirror, stars) = try { fetchSet(cfg, null, ts, a) } catch (e: HttpError) { throw IOException("Dev apps request failed with ${e.code}") }
+                val (apps, mirror, stars) = try { fetchSet(cfg, null, null, ts, a) } catch (e: HttpError) { throw IOException("Dev apps request failed with ${e.code}") }
                 return CatalogLoad(apps, mirror, cfg, "Developer Config", stars = stars)
             } catch (e: Exception) { devError = e.message ?: "Failed to load developer config." }
         } else {
-            for (i in Defaults.CONFIG_URLS.indices) {
-                val h = host(Defaults.CONFIG_URLS[i]); if (h in a.dead) continue
-                runCatching {
-                    val cfg = try { CatalogProcessor.parseConfig(Net.retry("${Defaults.CONFIG_URLS[i]}?t=$ts", 1, noStore = true)) } catch (e: IOException) { if (e !is HttpError) a.dead += h; throw e }
-                    val (apps, mirror, stars) = fetchSet(cfg, Defaults.APPS_URLS[i], ts, a)
-                    return CatalogLoad(apps, mirror, cfg, Defaults.MIRROR_LABELS[i], stars = stars)
-                }
-            }
+            loadCatalogFromHosts(ts = ts)?.let { return it }
         }
         return if (s.loadLocalData) CatalogLoad(embeddedApps(), null, null, if (useDev) "Developer Config Failed (Local Fallback)" else "Offline (Local)", devError)
         else CatalogLoad(null, null, null, if (useDev) "Developer Config Failed" else "Failed (Offline)", devError, failed = true)
+    }
+
+    companion object {
+        private fun bust(url: String, ts: String) = "$url${if ('?' in url) '&' else '?'}t=$ts"
+        private fun host(url: String) = runCatching { URI(url).host }.getOrNull().orEmpty()
+
+        /** One catalog load. Hosts that could not be reached at all are skipped for the rest of it, so a blocked host costs one timeout, not one per file. */
+        internal class Attempt { val dead: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet() }
+
+        private suspend fun first(urls: List<String>, a: Attempt, fetch: suspend (String) -> String): String {
+            var last: Exception = IOException("No reachable host")
+            for (u in urls.distinct()) {
+                val h = host(u); if (h in a.dead) continue
+                try { return fetch(u) } catch (e: HttpError) { last = e } catch (e: Exception) { last = e; a.dead += h }
+            }
+            throw last
+        }
+
+        /** The mirror is ~30 MB of JSON (under 2 MB gzipped). It streams straight into release lists, so a low-RAM phone never holds the text or a JSON tree;
+         *  revalidates against the HTTP cache; tries every host that serves it; and falls back to the last good copy on disk when none answers. */
+        private suspend fun fetchMirror(url: String, a: Attempt, c: OkHttpClient = Net.catalog): Map<String, List<CatalogProcessor.Release>>? = withContext(Dispatchers.IO) {
+            fun call(u: String, cc: CacheControl) = c.newCall(Request.Builder().url(u).cacheControl(cc).build()).execute().use { r ->
+                if (!r.isSuccessful) throw HttpError(r.code, ""); CatalogProcessor.decodeMirror(r.body.byteStream())
+            }
+            val hosts = rawMirrors(url)
+            for (u in hosts) {
+                val h = host(u); if (h in a.dead) continue
+                try { return@withContext call(u, CacheControl.Builder().noCache().build()) } catch (_: HttpError) {} catch (_: Exception) { a.dead += h }
+            }
+            hosts.firstNotNullOfOrNull { u -> runCatching { call(u, CacheControl.FORCE_CACHE) }.getOrNull() }
+        }
+
+        /** Strict single-host mirror fetch so HTTP errors, timeouts, or invalid JSON advance cleanly to the next mirror host. */
+        private suspend fun fetchMirrorDirect(url: String, a: Attempt, c: OkHttpClient = Net.catalog): Map<String, List<CatalogProcessor.Release>> = withContext(Dispatchers.IO) {
+            val h = host(url)
+            try {
+                c.newCall(Request.Builder().url(url).cacheControl(CacheControl.Builder().noCache().build()).build()).execute().use { r ->
+                    if (!r.isSuccessful) throw HttpError(r.code, "")
+                    CatalogProcessor.decodeMirror(r.body.byteStream())
+                }
+            } catch (e: HttpError) {
+                throw e
+            } catch (e: IOException) {
+                a.dead += h
+                throw e
+            }
+        }
+
+        /** A few KB of raw file from the data branch, revalidated through the HTTP cache: no GitHub API call, so guests keep their 60 an hour. */
+        private suspend fun fetchStars(a: Attempt, c: OkHttpClient = Net.catalog): Map<String, Int>? = withContext(Dispatchers.IO) {
+            runCatching {
+                first(rawMirrors(Defaults.STARS_JSON), a) { u ->
+                    c.newCall(Request.Builder().url(u).cacheControl(CacheControl.Builder().noCache().build()).build()).execute().use { r -> if (!r.isSuccessful) throw HttpError(r.code, ""); r.body.string() }
+                }.let { json.decodeFromString(MapSerializer(String.serializer(), Int.serializer()), it) }
+                    .mapKeys { it.key.lowercase() }
+            }.getOrNull()
+        }
+
+        private suspend fun fetchSet(
+            config: StoreConfig,
+            appsUrlOverride: String?,
+            mirrorUrlOverride: String?,
+            ts: String,
+            a: Attempt,
+            catalogClient: OkHttpClient = Net.catalog,
+            starsEnabled: Boolean = true,
+        ): Triple<JsonElement, Map<String, List<CatalogProcessor.Release>>?, Map<String, Int>?> = coroutineScope {
+            val strict = appsUrlOverride != null && mirrorUrlOverride != null
+            val appsUrl = appsUrlOverride ?: config.appsJsonUrl.ifEmpty { throw IOException("Dev config is missing appsJsonUrl.") }
+            val mirrorUrl = mirrorUrlOverride ?: config.mirrorJsonUrl?.ifEmpty { null } ?: Defaults.MIRROR_JSON
+            val mirror = async {
+                if (strict) fetchMirrorDirect(mirrorUrl, a, catalogClient)
+                else fetchMirror(mirrorUrl, a, catalogClient)
+            }
+            val stars = async { if (starsEnabled) fetchStars(a, catalogClient) else null }
+            val apps = async {
+                if (strict) {
+                    val h = host(appsUrl)
+                    try {
+                        Net.retry(bust(appsUrl, ts), 1, noStore = true, c = catalogClient)
+                    } catch (e: IOException) {
+                        if (e !is HttpError) a.dead += h
+                        throw e
+                    }
+                } else {
+                    first(rawMirrors(appsUrl), a) { Net.text(bust(it, ts), noStore = true, c = catalogClient) }
+                }
+            }
+            val parsedApps = json.parseToJsonElement(apps.await()).also {
+                if (it !is JsonArray) throw IOException("Invalid apps JSON from $appsUrl")
+            }
+            Triple(parsedApps, mirror.await(), stars.await())
+        }
+
+        internal suspend fun loadCatalogFromHosts(
+            configUrls: List<String> = Defaults.CONFIG_URLS,
+            appsUrls: List<String> = Defaults.APPS_URLS,
+            mirrorUrls: List<String> = Defaults.MIRROR_URLS,
+            labels: List<String> = Defaults.MIRROR_LABELS,
+            ts: String = System.currentTimeMillis().toString(),
+            configClient: OkHttpClient = Net.client,
+            catalogClient: OkHttpClient = Net.catalog,
+            starsEnabled: Boolean = true,
+        ): CatalogLoad? {
+            val a = Attempt()
+            for (i in configUrls.indices) {
+                val cfgUrl = configUrls[i]
+                val appsUrl = appsUrls.getOrNull(i) ?: continue
+                val mirrorUrl = mirrorUrls.getOrNull(i) ?: continue
+                val label = labels.getOrNull(i) ?: "Mirror ${i + 1}"
+                val h = host(cfgUrl)
+                if (h in a.dead) continue
+                try {
+                    val cfg = try {
+                        CatalogProcessor.parseConfig(Net.retry(bust(cfgUrl, ts), 1, noStore = true, c = configClient))
+                    } catch (e: IOException) {
+                        if (e !is HttpError) a.dead += h
+                        throw e
+                    }
+                    val (apps, mirror, stars) = fetchSet(
+                        cfg,
+                        appsUrlOverride = appsUrl,
+                        mirrorUrlOverride = mirrorUrl,
+                        ts = ts,
+                        a = a,
+                        catalogClient = catalogClient,
+                        starsEnabled = starsEnabled,
+                    )
+                    return CatalogLoad(apps, mirror, cfg, label, stars = stars)
+                } catch (_: Exception) {
+                    currentCoroutineContext().ensureActive()
+                }
+            }
+            return null
+        }
     }
 
 }

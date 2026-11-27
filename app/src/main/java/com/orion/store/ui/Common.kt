@@ -41,9 +41,9 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.orion.store.data.*
 import kotlinx.coroutines.launch
+import android.content.Context
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
@@ -56,10 +56,12 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.border
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
+import coil3.size.Precision
 import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -135,10 +137,16 @@ val deadImages: MutableSet<String> = java.util.Collections.synchronizedSet(HashS
 fun RemoteIcon(url: String, name: String, size: Dp, modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(size * .24f)) {
     var stage by remember(url) { mutableIntStateOf(if (url.isEmpty() || url in deadImages) 2 else 0) }
     val proxied = remember(url) { optimizedImageUrl(url, 256, 256) }
+    val ctx = LocalContext.current
+    val px = with(LocalDensity.current) { size.roundToPx().coerceIn(48, 512) }
     val sk = MaterialTheme.colorScheme.surfaceContainerHighest
     val skeleton = remember(sk) { androidx.compose.ui.graphics.painter.ColorPainter(sk) }
-    if (stage < 2) AsyncImage(if (stage == 0) proxied else url, name, modifier.size(size).clip(shape), placeholder = skeleton, contentScale = ContentScale.Crop, onError = { if (++stage == 2) deadImages += url })
-    else {
+    if (stage < 2) {
+        val req = remember(ctx, url, proxied, stage, px) {
+            ImageRequest.Builder(ctx).data(if (stage == 0) proxied else url).size(px, px).precision(Precision.INEXACT).build()
+        }
+        AsyncImage(req, name, modifier.size(size).clip(shape), placeholder = skeleton, contentScale = ContentScale.Crop, onError = { if (++stage == 2) deadImages += url })
+    } else {
         val h = remember(name) { hue(name) }; val light = MaterialTheme.colorScheme.isLight
         Box(modifier.size(size).clip(shape).background(hsl(h, .5f, if (light) .87f else .28f)), contentAlignment = Alignment.Center) {
             Text(name.take(1).uppercase(), fontSize = (size.value * .42f).sp, fontWeight = FontWeight.Black, color = hsl(h, .6f, if (light) .36f else .8f))
@@ -181,46 +189,52 @@ fun readableGutter(width: Dp) = ((width - 840.dp) / 2).coerceAtLeast(0.dp)
 /** Squash-on-press with an expressive spatial spring, plus ripple, clipped to [shape]. */
 @Composable
 fun Modifier.springClick(shape: Shape = RoundedCornerShape(20.dp), onLongClick: (() -> Unit)? = null, src: MutableInteractionSource = remember { MutableInteractionSource() }, onClick: () -> Unit): Modifier {
-    val pressed by src.collectIsPressedAsState(); val vm = LocalVm.current
-    val focused by src.collectIsFocusedAsState()
-    // D-pad and keyboard focus (TV remotes) lifts the card a little; touch never focuses, so phones never see it
+    val vm = LocalVm.current
+    val tap = Modifier.focusRing(src, shape).clip(shape).combinedClickable(src, ripple(), onLongClick = onLongClick, onClick = { vm.haptic(H.SELECTION); onClick() })
+    if (LocalS.current.calm) return tap
+    val pressed by src.collectIsPressedAsState()
+    val focused = if (Device.isTv) src.collectIsFocusedAsState().value else false
+    // D-pad and keyboard focus (TV remotes) lifts the card a little; touch phones skip the focus observer altogether
     val k by animateFloatAsState(if (pressed) .94f else if (focused) 1.04f else 1f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "press")
     // Every card and tile in the app routes through here, so this is the one place that gives taps their tick.
-    return graphicsLayer { scaleX = k; scaleY = k }.focusRing(src, shape).clip(shape).combinedClickable(src, ripple(), onLongClick = onLongClick, onClick = { vm.haptic(H.SELECTION); onClick() })
+    return graphicsLayer { scaleX = k; scaleY = k }.then(tap)
 }
 
 /** A primary ring around whatever has D-pad or keyboard focus, so a TV remote always shows where it is. */
 @Composable
 fun Modifier.focusRing(src: androidx.compose.foundation.interaction.InteractionSource, shape: Shape): Modifier {
+    if (LocalS.current.perf == "lite" && !Device.isTv) return this
     val focused by src.collectIsFocusedAsState()
-    val w by animateDpAsState(if (focused) 3.dp else 0.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "ring")
-    return if (w > 0.dp) border(w, MaterialTheme.colorScheme.primary, shape) else this
+    if (!focused) return this
+    val w by animateDpAsState(3.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "ring")
+    return border(w, MaterialTheme.colorScheme.primary, shape)
 }
 
 /** Rise-and-fade entrance for the first screenful, once per item (survives lazy recycling), staggered by [index].
- *  Items further down appear as-is, so flinging never shows rows sliding in. */
+ *  Items further down appear as-is, so flinging never shows rows sliding in; Lite & Reduced-Motion skip animations. */
 @Composable
 fun Modifier.reveal(index: Int = 0): Modifier {
-    if (index > 8) return this
+    if (index > 8 || LocalS.current.calm) return this
     var done by rememberSaveable { mutableStateOf(false) }
-    val p = remember { Animatable(if (done) 1f else 0f) }
+    if (done) return this
+    val p = remember { Animatable(0f) }
     val spec = MaterialTheme.motionScheme.slowSpatialSpec<Float>()
-    LaunchedEffect(Unit) { if (!done) { kotlinx.coroutines.delay(index.coerceIn(0, 8) * 45L); p.animateTo(1f, spec); done = true } }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(index.coerceIn(0, 8) * 45L); p.animateTo(1f, spec); done = true }
     return graphicsLayer { alpha = p.value.coerceIn(0f, 1f); translationY = (1f - p.value) * 28.dp.toPx() }
 }
 // endregion
 
-private val iconColors = HashMap<String, Color>()
+private val iconColors = android.util.LruCache<String, Color>(192)
 
 /** Signature color of an app icon: the dominant saturated hue, averaged inside its bucket. Null for monochrome icons. */
 @Composable
 fun iconColor(app: AppItem): Color? {
     val ctx = LocalContext.current
-    val c by produceState(iconColors[app.icon], app.icon) {
+    val c by produceState(iconColors.get(app.icon), app.icon) {
         if (value != null || app.icon.isEmpty()) return@produceState
-        val r = ctx.imageLoader.execute(ImageRequest.Builder(ctx).data(optimizedImageUrl(app.icon, 256, 256)).allowHardware(false).build())
+        val r = ctx.imageLoader.execute(ImageRequest.Builder(ctx).data(optimizedImageUrl(app.icon, 256, 256)).size(128, 128).precision(Precision.INEXACT).allowHardware(false).build())
         val bmp = (r as? SuccessResult)?.image?.toBitmap() ?: return@produceState
-        value = withContext(Dispatchers.Default) { dominant(bmp) }?.also { iconColors[app.icon] = it }
+        value = withContext(Dispatchers.Default) { dominant(bmp) }?.also { iconColors.put(app.icon, it) }
     }
     return c
 }
@@ -228,9 +242,13 @@ fun iconColor(app: AppItem): Color? {
 private fun dominant(src: android.graphics.Bitmap): Color? {
     val soft = if (Build.VERSION.SDK_INT >= 26 && src.config == android.graphics.Bitmap.Config.HARDWARE) src.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else src
     val b = android.graphics.Bitmap.createScaledBitmap(soft, 24, 24, true)
+    val pixels = IntArray(24 * 24)
+    b.getPixels(pixels, 0, 24, 0, 0, 24, 24)
+    if (b !== soft && b !== src) b.recycle()
+    if (soft !== src) soft.recycle()
     val w = FloatArray(12); val rgb = Array(12) { FloatArray(3) }; val hsv = FloatArray(3)
-    for (x in 0 until 24) for (y in 0 until 24) {
-        val p = b.getPixel(x, y); if (android.graphics.Color.alpha(p) < 160) continue
+    for (p in pixels) {
+        if (android.graphics.Color.alpha(p) < 160) continue
         android.graphics.Color.colorToHSV(p, hsv); val k = hsv[1] * hsv[2]; if (k < .18f) continue
         val i = (hsv[0] / 30f).toInt().coerceIn(0, 11)
         w[i] += k; rgb[i][0] += android.graphics.Color.red(p) * k; rgb[i][1] += android.graphics.Color.green(p) * k; rgb[i][2] += android.graphics.Color.blue(p) * k
@@ -241,18 +259,19 @@ private fun dominant(src: android.graphics.Bitmap): Color? {
 
 enum class CardState { NONE, INSTALLED, UPDATE, DOWNLOADING, READY }
 
-@Composable
-fun cardState(app: AppItem): Pair<CardState, Float> {
-    val s = LocalS.current; val d = LocalD.current
+fun cardStateOf(app: AppItem, s: Settings, d: DataState, dlProgress: Map<String, Float>): Pair<CardState, Float> {
     val local = s.installedVersions[app.id]
     return when {
-        app.id in d.activeDownloads -> CardState.DOWNLOADING to (d.downloadProgress[app.id] ?: 0f)
+        app.id in d.activeDownloads -> CardState.DOWNLOADING to (dlProgress[app.id] ?: d.downloadProgress[app.id] ?: 0f)
         app.id in d.readyToInstall -> CardState.READY to 1f
-        hasAvailableUpdate(app, local, s.streamOf(app.id), s.installedBuilds[app.id]) -> CardState.UPDATE to 0f
+        hasAvailableUpdate(app, local, s.streamFor(app), s.installedBuilds[app.id]) -> CardState.UPDATE to 0f
         !local.isNullOrEmpty() -> CardState.INSTALLED to 0f
         else -> CardState.NONE to 0f
     }
 }
+
+@Composable
+fun cardState(app: AppItem): Pair<CardState, Float> = cardStateOf(app, LocalS.current, LocalD.current, LocalVm.current.dlProgress)
 
 /** App icon. With [state], download progress wraps the icon as a wavy ring and install state sits in a cut-out corner badge. */
 @Composable
@@ -263,11 +282,17 @@ fun AppIcon(app: AppItem, size: Dp, modifier: Modifier = Modifier, state: Boolea
     if (!state) return RemoteIcon(app.icon, app.name, size, modifier.then(shared))
     val (st, p) = cardState(app)
     val cs = MaterialTheme.colorScheme
-    val inset by animateDpAsState(if (st == CardState.DOWNLOADING) size * .2f else 0.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "inset")
-    val round by animateIntAsState(if (st == CardState.DOWNLOADING) 50 else 24, MaterialTheme.motionScheme.fastSpatialSpec(), label = "round")
+    val dl = st == CardState.DOWNLOADING
+    val calm = LocalS.current.calm
+    var everDl by remember(app.id) { mutableStateOf(dl) }
+    if (dl && !everDl) everDl = true
+    val inset = if (calm || !everDl) { if (dl) size * .2f else 0.dp }
+    else animateDpAsState(if (dl) size * .2f else 0.dp, MaterialTheme.motionScheme.fastSpatialSpec(), label = "inset").value
+    val round = if (calm || !everDl) { if (dl) 50 else 24 }
+    else animateIntAsState(if (dl) 50 else 24, MaterialTheme.motionScheme.fastSpatialSpec(), label = "round").value
     Box(modifier.size(size)) {
         RemoteIcon(app.icon, app.name, size - inset * 2, Modifier.align(Alignment.Center).then(shared), RoundedCornerShape(round))
-        if (st == CardState.DOWNLOADING) {
+        if (dl) {
             val prog by animateFloatAsState(p / 100f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "dl")
             if (p <= 0f) CircularWavyProgressIndicator(Modifier.fillMaxSize()) else CircularWavyProgressIndicator({ prog }, Modifier.fillMaxSize())
         }
@@ -286,19 +311,21 @@ fun AppIcon(app: AppItem, size: Dp, modifier: Modifier = Modifier, state: Boolea
     }
 }
 
-/** One-line install/update status for list rows; null when the app is not on the device. */
-@Composable
-fun statusText(app: AppItem): Pair<String, Color>? {
-    val (st, p) = cardState(app); val cs = MaterialTheme.colorScheme
-    val local = LocalS.current.installedVersions[app.id]
+fun statusTextOf(app: AppItem, cs: ColorScheme, s: Settings, card: Pair<CardState, Float>): Pair<String, Color>? {
+    val (st, p) = card
+    val local = s.installedVersions[app.id]
     return when (st) {
         CardState.DOWNLOADING -> (if (p > 0f) "Downloading ${p.toInt()}%" else "Starting download") to cs.primary
         CardState.READY -> "Ready to install" to cs.primary
-        CardState.UPDATE -> "Update · v${preferredVersion(app, LocalS.current.streamOf(app.id)).removePrefix("v")}" to cs.tertiary
+        CardState.UPDATE -> "Update · v${preferredVersion(app, s.streamFor(app)).removePrefix("v")}" to cs.tertiary
         CardState.INSTALLED -> "Installed · v${local.orEmpty().removePrefix("v")}" to cs.onSurfaceVariant
         CardState.NONE -> null
     }
 }
+
+/** One-line install/update status for list rows; null when the app is not on the device. */
+@Composable
+fun statusText(app: AppItem): Pair<String, Color>? = statusTextOf(app, MaterialTheme.colorScheme, LocalS.current, cardState(app))
 
 /** Section heading with an optional trailing arrow action (Play-style "see all"). */
 @Composable
@@ -448,17 +475,50 @@ fun rememberTilt(): State<Offset> {
     return tilt
 }
 
-/** Theme switches as a circular reveal: the old frame is snapshotted and wiped away from the tap point. */
-class ThemeReveal(internal val layer: androidx.compose.ui.graphics.layer.GraphicsLayer, private val scope: kotlinx.coroutines.CoroutineScope,
+private tailrec fun Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+private suspend fun captureViewBitmap(view: android.view.View): androidx.compose.ui.graphics.ImageBitmap? {
+    val w = view.width; val h = view.height
+    if (w <= 0 || h <= 0) return null
+    val bmp = runCatching { android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888) }.getOrNull() ?: return null
+    if (Build.VERSION.SDK_INT >= 26) {
+        val window = view.context.findActivity()?.window
+        if (window != null) {
+            val loc = IntArray(2).also(view::getLocationInWindow)
+            val rect = android.graphics.Rect(loc[0], loc[1], loc[0] + w, loc[1] + h)
+            val ok = kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
+                val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                runCatching {
+                    android.view.PixelCopy.request(window, rect, bmp, { result ->
+                        if (cont.isActive) cont.resumeWith(Result.success(result == android.view.PixelCopy.SUCCESS))
+                    }, handler)
+                }.onFailure { if (cont.isActive) cont.resumeWith(Result.success(false)) }
+            }
+            if (ok) return bmp.asImageBitmap()
+            bmp.recycle()
+            return null
+        }
+    }
+    return runCatching {
+        view.draw(android.graphics.Canvas(bmp))
+        bmp.asImageBitmap()
+    }.getOrElse { bmp.recycle(); null }
+}
+
+/** Theme switches as a circular reveal: captures on demand so normal scrolling frames never record an offscreen GPU layer. */
+class ThemeReveal(private val view: android.view.View, private val scope: kotlinx.coroutines.CoroutineScope,
                   private val spec: androidx.compose.animation.core.AnimationSpec<Float>, private val instant: Boolean) {
     internal var snap by mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
     internal var origin by mutableStateOf(Offset.Zero)
     internal val progress = Animatable(0f)
     fun run(at: Offset, change: () -> Unit) {
-        if (instant || snap != null) return change()
+        if (instant || snap != null || view.width <= 0 || view.height <= 0) return change()
         scope.launch {
-            // A hung or failing capture (seen on some Samsung and Xiaomi GPUs) used to swallow the change itself; the change now always lands.
-            snap = runCatching { kotlinx.coroutines.withTimeoutOrNull(120) { layer.toImageBitmap() } }.getOrNull()
+            snap = runCatching { kotlinx.coroutines.withTimeoutOrNull(120) { captureViewBitmap(view) } }.getOrNull()
             origin = at; change(); progress.snapTo(0f)
             if (snap != null) progress.animateTo(1f, spec)
             snap = null
@@ -470,14 +530,11 @@ val LocalThemeReveal = staticCompositionLocalOf<ThemeReveal?> { null }
 
 @Composable
 fun ThemeRevealHost(content: @Composable () -> Unit) {
-    val layer = androidx.compose.ui.graphics.rememberGraphicsLayer(); val scope = rememberCoroutineScope()
-    val spec = MaterialTheme.motionScheme.slowEffectsSpec<Float>(); val instant = LocalS.current.disableAnimations
-    val reveal = remember(layer, instant) { ThemeReveal(layer, scope, spec, instant) }
+    val view = LocalView.current; val scope = rememberCoroutineScope()
+    val spec = MaterialTheme.motionScheme.slowEffectsSpec<Float>(); val instant = LocalS.current.calm
+    val reveal = remember(view, instant) { ThemeReveal(view, scope, spec, instant) }
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().drawWithContent {
-            layer.record { this@drawWithContent.drawContent() }
-            drawLayer(layer)
-        }) { CompositionLocalProvider(LocalThemeReveal provides reveal, content = content) }
+        CompositionLocalProvider(LocalThemeReveal provides reveal, content = content)
         reveal.snap?.let { img ->
             androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                 val r = reveal.progress.value * kotlin.math.hypot(size.width, size.height) * 1.05f

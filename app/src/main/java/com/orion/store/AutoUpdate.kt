@@ -99,20 +99,23 @@ object AutoUpdate {
             if (r.failed || m.isEmpty()) null else CatalogProcessor.process(r.rawApps, m) + Store.data.value.importedApps.map { CatalogProcessor.processItem(it, m) }
         }.getOrNull()
         val base = fresh?.takeIf { it.isNotEmpty() } ?: (repo.cached()?.apps.orEmpty() + Store.data.value.importedApps)
-        base + Store.data.value.orbit.filter { !it.paused && !it.trackOnly }.map { it.toItem(s.daysFor(it), s.streamOf(it.id)) }
+        base + Store.data.value.orbit.filter { !it.paused && !it.trackOnly }.map {
+            val allowPre = !s.stableOnly && (it.includePre || s.orbitIncludePre)
+            it.toItem(s.daysFor(it), s.streamOf(it.id), allowPre = allowPre)
+        }
     }
 
     /** Orbit sources are read on every pass, whether or not the downloads themselves are turned on. */
     private suspend fun refreshOrbit(s: Settings) {
         val now = System.currentTimeMillis()
-        val orbit = runCatching { Orbit.refreshAll(Store.data.value.orbit, s.orbitTokens(), now) }.getOrNull()?.associateBy { it.id } ?: return
+        val orbit = runCatching { Orbit.refreshAll(Store.data.value.orbit, s.orbitTokens(), now, !s.stableOnly && s.orbitIncludePre) }.getOrNull()?.associateBy { it.id } ?: return
         Store.data.update { st -> st.copy(orbit = st.orbit.map { cur -> orbit[cur.id]?.let { f -> cur.copy(versions = f.versions, checkedAt = f.checkedAt, error = f.error) } ?: cur }) }
     }
 
     /** One app: download (or reuse a finished download), verify, install. Null = nothing worth reporting (download-only mode). */
     private suspend fun update(ctx: Context, tracker: AppTracker, app: AppItem, s: Settings): AutoResult? {
         val pkg = s.resolvedPackageNames[app.id] ?: app.packageName.orEmpty()
-        val version = downloadVersionMeta(app, null, s.streamOf(app.id)).first
+        val version = downloadVersionMeta(app, null, s.streamFor(app)).first
         fun result(ok: Boolean, error: String? = null) = AutoResult(app.id, app.name, version, ok, error, System.currentTimeMillis())
         // The build of the app's own channel: a Beta user gets the next Beta, not the Stable APK under a Beta version
         val variants = app.availableVersions.firstOrNull { it.version == version }?.variants?.ifEmpty { null } ?: app.variants

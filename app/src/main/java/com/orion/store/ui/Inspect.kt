@@ -81,7 +81,7 @@ fun InspectSheet(vm: MainViewModel, app: AppItem, onDismiss: () -> Unit) = Orion
     val key = InspectCache.key(app)
     val ready = remember(d.readyToInstall[app.id]) { d.readyToInstall[app.id]?.let { Downloads.file(it) } }
     val local = s.installedVersions[app.id]
-    val current = !local.isNullOrEmpty() && !hasAvailableUpdate(app, local, s.streamOf(app.id), s.installedBuilds[app.id])
+    val current = !local.isNullOrEmpty() && !hasAvailableUpdate(app, local, s.streamFor(app), s.installedBuilds[app.id])
     val installedApk = remember(app.packageName, current) {
         if (!current) null else app.packageName?.let { runCatching { File(ctx.packageManager.getApplicationInfo(it, 0).sourceDir) }.getOrNull() }
     }

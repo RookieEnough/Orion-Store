@@ -37,6 +37,17 @@ fun compareVersions(a: String?, b: String?): Int {
     return 0
 }
 
+fun newestVersionOption(versions: List<VersionOption>): VersionOption? {
+    if (versions.isEmpty()) return null
+    return versions.maxWithOrNull { a, b ->
+        val d = a.date.take(10).compareTo(b.date.take(10))
+        if (d != 0) d else {
+            val v = compareVersions(a.version, b.version)
+            if (v != 0) v else STREAMS.indexOf(b.type).compareTo(STREAMS.indexOf(a.type))
+        }
+    }
+}
+
 fun preferredVersion(app: AppItem, stream: String = "Stable"): String {
     if (app.availableVersions.isEmpty()) return app.latestVersion
     app.availableVersions.firstOrNull { it.type == stream }?.let { return it.version }
@@ -72,9 +83,9 @@ fun isUpdateIgnored(app: AppItem, s: Settings, now: Long): Boolean {
         "never" -> true
         "week" -> ig.timestamp != null && now - ig.timestamp < ONE_WEEK_MS
         // Older builds stored latestVersion, which differs from the offered build when an app lists several versions
-        "version" -> isSameVersion(ig.version, preferredVersion(app, s.streamOf(app.id))) || isSameVersion(ig.version, app.latestVersion)
+        "version" -> isSameVersion(ig.version, preferredVersion(app, s.streamFor(app))) || isSameVersion(ig.version, app.latestVersion)
         // Stay on this version: anything newer than the saved cap stays hidden
-        "cap" -> compareVersions(preferredVersion(app, s.streamOf(app.id)), ig.version) > 0
+        "cap" -> compareVersions(preferredVersion(app, s.streamFor(app)), ig.version) > 0
         else -> false
     }
 }
@@ -91,7 +102,7 @@ fun availableUpdates(apps: List<AppItem>, s: Settings, now: Long): List<AppItem>
     val raw = apps.filter { a ->
         if (TRACK_ONLY_TAG in a.tags) return@filter false
         val inst = s.installedVersions[a.id]
-        !inst.isNullOrEmpty() && isManaged(a.id, s) && hasAvailableUpdate(a, inst, s.streamOf(a.id), s.installedBuilds[a.id]) && !isUpdateIgnored(a, s, now)
+        !inst.isNullOrEmpty() && isManaged(a.id, s) && hasAvailableUpdate(a, inst, s.streamFor(a), s.installedBuilds[a.id]) && !isUpdateIgnored(a, s, now)
     }
     // One update per package. The library copy wins when the same install is also followed in Orbit.
     val byPkg = LinkedHashMap<String, AppItem>()
@@ -348,6 +359,8 @@ fun pickVariant(variants: List<AppVariant>, s: Settings, deviceArch: String, abi
 // region images
 val IMAGE_EXT = listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".svg")
 
+fun isLocalMediaUri(url: String?): Boolean = url?.trim()?.let { it.startsWith("file:") || it.startsWith("/") } == true
+
 fun explainRejectedImageLink(url: String?): String? {
     val t = url?.trim().orEmpty()
     if (t.isEmpty()) return null
@@ -357,10 +370,11 @@ fun explainRejectedImageLink(url: String?): String? {
     if (host.startsWith("private-user")) return "Private-user links are not accepted. Use a public image link."
     val ok = IMAGE_EXT.any { path.lowercase().endsWith(it) } ||
         (host.endsWith("googleusercontent.com") && path.startsWith("/play-lh")) ||
-        host == "raw.githubusercontent.com" || host == "camo.githubusercontent.com" ||
+        host == "raw.githubusercontent.com" || host == "camo.githubusercontent.com" || host == "user-images.githubusercontent.com" ||
+        ((host == "github.com" || host.endsWith(".github.com")) && path.startsWith("/user-attachments/assets/")) ||
         ((host.endsWith("gitlab.com") || host.endsWith("gitlab.io")) && "/-/raw/" in path) ||
         (host == "codeberg.org" && "/raw/branch/" in path)
-    return if (ok) null else "Only image links are accepted (jpg/png/webp/gif/bmp/avif/svg, Play Store scraped links, or raw GitHub/GitLab/Codeberg/Camo links)."
+    return if (ok) null else "Only image links are accepted (jpg/png/webp/gif/bmp/avif/svg, Play Store scraped links, or GitHub/GitLab/Codeberg image links)."
 }
 
 private val PLAY_SIZE = Regex("=[swh]\\d+"); private val PLAY_SIZE_TAIL = Regex("=[swh]\\d+[^/]*$")
@@ -566,9 +580,11 @@ fun MyAppRow.matchesQuery(q: String) = q.isBlank() || q.trim().lowercase().let {
 
 // region modern storefront helpers
 fun modernSortTitle(sort: SortOption) = when (sort) {
-    SortOption.HOME -> "Home Page" to "More Picks For You"; SortOption.OLDEST -> "Oldest First" to "More Classics"
-    SortOption.NAME_ASC -> "A to Z" to "More A to Z"; SortOption.NAME_DESC -> "Z to A" to "More Z to A"
-    SortOption.SIZE_ASC -> "Smallest Footprint" to "More Lightweight Picks"; SortOption.SIZE_DESC -> "Largest Packages" to "More Heavyweights"
+    SortOption.HOME -> "Home Page" to "More Picks For You"
+    SortOption.MOST_STARRED -> "Most Starred" to "More Top Starred"
+    SortOption.MOST_DOWNLOADED -> "Most Downloaded" to "More Top Downloads"
+    SortOption.RECENTLY_UPDATED -> "Recently Updated" to "More Fresh Releases"
+    SortOption.NAME_ASC -> "A to Z" to "More A to Z"
     else -> "Recently Added" to "More Fresh Picks"
 }
 
@@ -646,8 +662,8 @@ fun resolveOwnedAppId(group: List<AppItem>, pkgKey: String, installed: String, s
     val owner = s.packageOwners[pkgKey]?.takeIf { it in ids }
     if (owner != null && isSameVersion(s.lastRemoteVersions[owner], installed)) return owner
     group.filter { isSameVersion(s.lastRemoteVersions[it.id], installed) }.singleOrNull()?.let { return it.id }
-    group.filter { isSameVersion(preferredVersion(it, s.streamOf(it.id)), installed) }.singleOrNull()?.let { return it.id }
-    if (owner != null && group.none { isComparableVersion(s.lastRemoteVersions[it.id]) || isComparableVersion(preferredVersion(it, s.streamOf(it.id))) }) return owner
+    group.filter { isSameVersion(preferredVersion(it, s.streamFor(it)), installed) }.singleOrNull()?.let { return it.id }
+    if (owner != null && group.none { isComparableVersion(s.lastRemoteVersions[it.id]) || isComparableVersion(preferredVersion(it, s.streamFor(it))) }) return owner
     return null
 }
 // endregion

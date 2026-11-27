@@ -378,14 +378,6 @@ Contributions are welcome, especially in the areas that matter most to a store c
 
 Start with [ARCHITECTURE.md](ARCHITECTURE.md), then `ui/MainViewModel.kt`, `data/CatalogProcessor.kt` and `platform/AppTracker.kt` for how the store loads data, resolves releases and installs apps.
 
-### Contributors
-
-Thanks to the community members whose pull requests contributed to Orion Store:
-
-- **[@Zokii0](https://github.com/Zokii0)** — Wireless ADB reliability & off-Wi-Fi installer fallback ([#184](https://github.com/RookieEnough/Orion-Store/pull/184)), Play Protect verifier dialog guidance ([#185](https://github.com/RookieEnough/Orion-Store/pull/185)), and Android TV submission detection & source links ([#232](https://github.com/RookieEnough/Orion-Store/pull/232))
-- **[@Villoh](https://github.com/Villoh)** — Private GitHub, GitLab & Codeberg repository asset downloads in Orbit ([#204](https://github.com/RookieEnough/Orion-Store/pull/204))
-- **[@tsehla42](https://github.com/tsehla42)** — URL asterisk percent-encoding fix for submission links ([#217](https://github.com/RookieEnough/Orion-Store/pull/217))
-
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/m3-divider-dark.svg">

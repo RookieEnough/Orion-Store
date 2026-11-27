@@ -55,6 +55,12 @@ import kotlin.math.max
     val autoSkip: Set<String> = emptySet(),
     /** Beta, Alpha and Nightly builds are hidden wherever a stable release exists; overrides per-app channels while on. */
     val stableOnly: Boolean = false,
+    /** Orion Store: automatically prefer newer pre-release builds (Beta, Alpha, Nightly) when available. */
+    val includePreReleases: Boolean = false,
+    /** Orbit: include pre-releases globally for all Orbit apps in addition to each entry's own pre-release setting. */
+    val orbitIncludePre: Boolean = false,
+    /** How Orbit entries are sorted on the Orbit tab. */
+    val orbitSort: OrbitSort = OrbitSort.UPDATE_DATE,
     val deleteApk: Boolean = false,
     val useShizuku: Boolean = false,
     /** Silent installs and uninstalls through Dhizuku's shared device owner. */
@@ -185,6 +191,16 @@ import kotlin.math.max
     /** Endless decorative motion (turning shapes, pulses, hero auto-advance, tilt) stops in Lite and with animations off. */
     val calm get() = disableAnimations || perf == "lite"
     fun streamOf(id: String) = if (stableOnly) "Stable" else appStreams[id] ?: "Stable"
+    /** Resolves the active channel for [app], honoring [stableOnly], per-app pins, and global Store/Orbit pre-release flags. */
+    fun streamFor(app: AppItem): String {
+        if (stableOnly) return "Stable"
+        appStreams[app.id]?.let { return it }
+        val allowPre = if (Orbit.owns(app.id)) {
+            orbitIncludePre || (app.availableVersions.firstOrNull { it.version == app.latestVersion }?.type?.let { it != "Stable" } == true)
+        } else includePreReleases
+        if (!allowPre || app.availableVersions.isEmpty()) return "Stable"
+        return newestVersionOption(app.availableVersions)?.type ?: "Stable"
+    }
     fun hideInstaller(pkg: String) = if (pkg in hiddenInstallers) this else copy(hiddenInstallers = hiddenInstallers + pkg)
     fun incrementCoinFlipHint() = copy(coinFlipHintCount = minOf(3, coinFlipHintCount + 1))
     fun withPtrCharacter(c: String) = copy(pullToRefreshCharacter = if (c == "pikachu") "pokeball" else c)

@@ -49,7 +49,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-private val MODERN_SORTS = listOf(SortOption.NEWEST, SortOption.NAME_ASC, SortOption.NAME_DESC, SortOption.SIZE_ASC, SortOption.SIZE_DESC, SortOption.OLDEST)
+private val MODERN_SORTS = listOf(SortOption.NEWEST, SortOption.MOST_STARRED, SortOption.MOST_DOWNLOADED, SortOption.RECENTLY_UPDATED, SortOption.NAME_ASC)
 private val CLASSIC_SORTS = SortOption.entries - SortOption.HOME
 private val full: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
 private val BLOB_SHAPES = listOf(MaterialShapes.Cookie9Sided, MaterialShapes.Sunny, MaterialShapes.Clover4Leaf, MaterialShapes.Cookie6Sided, MaterialShapes.Pentagon, MaterialShapes.Flower, MaterialShapes.Gem)
@@ -65,7 +65,7 @@ fun StoreTab(vm: MainViewModel, platform: String, contentPadding: PaddingValues)
     val list = vm.classicApps()
     // Grouped once per list and sort, not on every recomposition (download progress alone recomposes this tab twice a second)
     val sort = vm.sortControl
-    val groups = remember(list, sort) { if (sort == SortOption.NAME_ASC || sort == SortOption.NAME_DESC) list.groupBy { initial(it.name) }.toList() else listOf("" to list) }
+    val groups = remember(list, sort) { if (sort == SortOption.NAME_ASC) list.groupBy { initial(it.name) }.toList() else listOf("" to list) }
     val modernHome = vm.modernCollections()
     val grid = rememberLazyGridState(); val scope = rememberCoroutineScope()
     // Jump to top when filter or search query changes (prevents returning from scrolled search stuck halfway down home), not on tab switch.
@@ -257,23 +257,26 @@ private class Look(val shape: RoundedPolygon, val bg: Color, val fg: Color, val 
 
 /** Install state as an expressive shape: cookie to get, sun for an update, clover when installed, gem when ready. Rounds out while the row is pressed. */
 @Composable
-private fun StateBlob(app: AppItem, src: MutableInteractionSource) {
-    val (st, p) = cardState(app); val cs = MaterialTheme.colorScheme
+private fun StateBlob(app: AppItem, src: MutableInteractionSource, card: Pair<CardState, Float> = cardState(app)) {
+    val (st, p) = card; val cs = MaterialTheme.colorScheme; val calm = LocalS.current.calm
     val look = when (st) {
         CardState.READY -> Look(MaterialShapes.Gem, cs.primary, cs.onPrimary, Sym.InstallMobile)
         CardState.UPDATE -> Look(MaterialShapes.Sunny, cs.tertiaryContainer, cs.onTertiaryContainer, Sym.ArrowUpward)
         CardState.INSTALLED -> Look(MaterialShapes.Clover4Leaf, cs.secondaryContainer, cs.onSecondaryContainer, Sym.Check)
         else -> Look(MaterialShapes.Cookie6Sided, cs.surfaceContainerHighest, cs.onSurfaceVariant, Sym.Download)
     }
-    val pressed by src.collectIsPressedAsState()
-    val k by animateFloatAsState(if (pressed) 1f else 0f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "blob")
-    val morph = remember(look.shape) { Morph(look.shape, MaterialShapes.Circle) }
     Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
         if (st == CardState.DOWNLOADING) {
             val prog by animateFloatAsState(p / 100f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "dl")
             if (p <= 0f) CircularWavyProgressIndicator(Modifier.fillMaxSize()) else CircularWavyProgressIndicator({ prog }, Modifier.fillMaxSize())
             Icon(Sym.Download, "Downloading", Modifier.size(18.dp), tint = cs.primary)
+        } else if (calm) {
+            Box(Modifier.matchParentSize().background(look.bg, look.shape.toShape()))
+            Icon(look.icon, null, Modifier.size(20.dp), tint = look.fg)
         } else {
+            val pressed by src.collectIsPressedAsState()
+            val k by animateFloatAsState(if (pressed) 1f else 0f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "blob")
+            val morph = remember(look.shape) { Morph(look.shape, MaterialShapes.Circle) }
             Box(Modifier.matchParentSize().graphicsLayer { rotationZ = k * 45f }.background(look.bg, MorphShape(morph, k)))
             Icon(look.icon, null, Modifier.size(20.dp), tint = look.fg)
         }
@@ -284,16 +287,17 @@ private fun StateBlob(app: AppItem, src: MutableInteractionSource) {
 @Composable
 fun AppRow(vm: MainViewModel, app: AppItem, index: Int = 0, count: Int = 1, modifier: Modifier = Modifier, inset: Dp = 16.dp) {
     val s = LocalS.current; val compact = s.compactMode; val fav = app.id in LocalD.current.favorites; val cs = MaterialTheme.colorScheme
-    val status = statusText(app)
+    val card = cardState(app)
+    val status = statusTextOf(app, cs, s, card)
     val src = remember { MutableInteractionSource() }
     val shapes = ListItemDefaults.segmentedShapes(index, count)
-    val about = remember(app.description) { app.description.replace(SPACES, " ").trim() }
+    val about = if (!compact && s.showAppAbout) remember(app.description) { app.description.replace(SPACES, " ").trim() } else ""
     // Swipe left to favorite (or unfavorite); the row springs back once the heart has filled.
     SwipeRow(shapes.shape, modifier.padding(horizontal = inset).focusRing(src, shapes.shape), left = SwipeAction(if (fav) Sym.HeartBroken else Sym.Favorite, if (fav) "Remove from favorites" else "Add to favorites",
         cs.tertiaryContainer, cs.onTertiaryContainer, removes = false) { vm.toggleFavorite(app.id) }) {
     SegmentedListItem({ vm.haptic(H.SELECTION); vm.selectApp(app, "list") }, shapes, if (compact) CompactRowHeight else Modifier,
         leadingContent = { AppIcon(app, if (compact) 44.dp else 52.dp, from = "list") },
-        trailingContent = { StateBlob(app, src) },
+        trailingContent = { StateBlob(app, src, card) },
         overlineContent = if (compact) null else ({
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(categoryIcon(app.category), null, Modifier.size(14.dp), tint = cs.primary); Spacer(Modifier.width(4.dp))
@@ -305,7 +309,14 @@ fun AppRow(vm: MainViewModel, app: AppItem, index: Int = 0, count: Int = 1, modi
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Compact drops the category line, so its icon rides along here instead
                     if (compact) { Icon(categoryIcon(app.category), app.category, Modifier.size(14.dp), tint = cs.primary); Spacer(Modifier.width(4.dp)) }
-                    Text(status?.first ?: listOf(app.author, app.size).filter { it.isNotEmpty() }.joinToString(" · "), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    val sortHint = when (vm.sortControl) {
+                        SortOption.MOST_STARRED -> app.stars?.let { "${compactCount(it)} stars" }
+                        SortOption.MOST_DOWNLOADED -> app.downloadCount?.takeIf { it > 0 }?.let { "${compactCount(it)} downloads" }
+                        SortOption.RECENTLY_UPDATED -> app.availableVersions.maxOfOrNull { it.date.take(10) }?.takeIf { it.isNotEmpty() }
+                        else -> null
+                    }
+                    val sub = status?.first ?: listOfNotNull(sortHint, app.author.ifEmpty { null }, app.size.ifEmpty { null }).joinToString(" · ")
+                    Text(sub, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         color = status?.second ?: Color.Unspecified, fontWeight = if (status != null) FontWeight.Medium else null)
                 }
                 if (!compact && s.showAppAbout && about.isNotEmpty()) AboutPreview(about)

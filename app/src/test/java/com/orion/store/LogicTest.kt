@@ -507,6 +507,76 @@ class LogicTest {
         assertEquals("https://api.github.com/repos/o/d/releases/assets/77", githubAssetApiUrl(payload, "app+foss-arm64.apk"))
     }
 
+    @Test fun catalogSortOptions() {
+        val a = AppItem(id = "a", name = "Alpha", stars = 10, downloadCount = 500, availableVersions = listOf(VersionOption("Stable", "1.0", "2026-11-01")))
+        val b = AppItem(id = "b", name = "Beta", stars = 250, downloadCount = 100, availableVersions = listOf(VersionOption("Stable", "1.0", "2026-11-20")))
+        val c = AppItem(id = "c", name = "Gamma", stars = null, downloadCount = 2000, availableVersions = listOf(VersionOption("Stable", "1.0", "2026-11-10")))
+        val list = listOf(a, b, c)
+        assertEquals(listOf("b", "a", "c"), CatalogProcessor.search("", "All", SortOption.MOST_STARRED, list).map { it.id })
+        assertEquals(listOf("c", "a", "b"), CatalogProcessor.search("", "All", SortOption.MOST_DOWNLOADED, list).map { it.id })
+        assertEquals(listOf("b", "c", "a"), CatalogProcessor.search("", "All", SortOption.RECENTLY_UPDATED, list).map { it.id })
+        assertEquals(listOf("a", "b", "c"), CatalogProcessor.search("", "All", SortOption.NAME_ASC, list).map { it.id })
+        assertEquals(listOf("c", "b", "a"), CatalogProcessor.search("", "All", SortOption.NEWEST, list).map { it.id })
+    }
+
+    @Test fun preReleaseStreams() {
+        val storeApp = AppItem(
+            id = "demo",
+            availableVersions = listOf(
+                VersionOption("Stable", "1.2.0", "2026-11-01"),
+                VersionOption("Beta", "1.3.0-beta1", "2026-11-20"),
+            ),
+        )
+        assertEquals("Stable", Settings(includePreReleases = false).streamFor(storeApp))
+        assertEquals("Beta", Settings(includePreReleases = true).streamFor(storeApp))
+        // StableOnly always overrides includePreReleases
+        assertEquals("Stable", Settings(stableOnly = true, includePreReleases = true).streamFor(storeApp))
+        // When Stable is newer than Beta, Stable still wins even with pre-releases enabled
+        val newerStable = AppItem(
+            id = "demo2",
+            availableVersions = listOf(
+                VersionOption("Stable", "2.0.0", "2026-11-25"),
+                VersionOption("Beta", "1.9.0-beta1", "2026-11-10"),
+            ),
+        )
+        assertEquals("Stable", Settings(includePreReleases = true).streamFor(newerStable))
+
+        // Orbit global pre-release unlocks pre-release releases even if per-app flag is off
+        val o = OrbitApp(id = "orbit:demo", url = "https://github.com/o/demo", includePre = false)
+        val rels = listOf(
+            CatalogProcessor.Release("v2.0.0-beta1", "2.0 beta", prerelease = true, date = "2026-11-25T00:00:00Z", assets = listOf(Triple("app-beta.apk", "https://x/b.apk", 10L))),
+            CatalogProcessor.Release("v1.0.0", "1.0", prerelease = false, date = "2026-11-01T00:00:00Z", assets = listOf(Triple("app.apk", "https://x/a.apk", 10L))),
+        )
+        assertEquals(listOf("1.0.0"), Orbit.versionsOf(o, rels, globalIncludePre = false).map { it.version })
+        val unlocked = Orbit.versionsOf(o, rels, globalIncludePre = true)
+        assertEquals(listOf("2.0.0" to "Beta", "1.0.0" to "Stable"), unlocked.map { it.version to it.type })
+        val item = o.copy(versions = unlocked).toItem(allowPre = true)
+        assertEquals("Beta", Settings(orbitIncludePre = true).streamFor(item))
+        assertEquals("2.0.0", preferredVersion(item, Settings(orbitIncludePre = true).streamFor(item)))
+    }
+
+    @Test fun orbitCustomIconAndPublishGaps() {
+        assertTrue(isLocalMediaUri("file:///data/user/0/com.orion.store/files/orbit_icons/a.png"))
+        assertTrue(isLocalMediaUri("/storage/emulated/0/icon.png"))
+        assertFalse(isLocalMediaUri("https://example.org/icon.png"))
+        assertNull(explainRejectedImageLink("https://github.com/user-attachments/assets/abc-123"))
+        assertNotNull(explainRejectedImageLink("https://private-user-images.githubusercontent.com/1/2.png"))
+
+        val base = OrbitApp(
+            id = "orbit:demo",
+            url = "https://github.com/o/demo",
+            name = "Demo",
+            about = "Desc",
+            packageName = "com.o.demo",
+            icon = "file:///tmp/icon.png",
+        )
+        assertTrue(Orbit.publishGaps(base, allowNoShots = false).any { "public icon" in it })
+        assertTrue(Orbit.publishGaps(base, allowNoShots = false).any { "screenshot" in it })
+        val publicIcon = base.copy(icon = "https://github.com/o.png")
+        assertTrue(Orbit.publishGaps(publicIcon, allowNoShots = true).isEmpty())
+        assertEquals("", Orbit.catalogJson(base)["icon"]?.let { (it as kotlinx.serialization.json.JsonPrimitive).content })
+    }
+
     @Test fun appGalleryFetch() = kotlinx.coroutines.runBlocking {
         val detail = Orbit.appGalleryApp("C106580399")
         assertNotNull(detail)
@@ -523,5 +593,138 @@ class LogicTest {
         assertTrue(app.versions.isNotEmpty())
         assertEquals(detail.version, app.versions.first().version)
         assertTrue(app.versions.first().variants.first().url.startsWith("https://"))
+    }
+
+    @Test fun defaultsMirrorUrlsAligned() {
+        assertEquals(4, Defaults.CONFIG_URLS.size)
+        assertEquals(Defaults.CONFIG_URLS.size, Defaults.APPS_URLS.size)
+        assertEquals(Defaults.CONFIG_URLS.size, Defaults.MIRROR_URLS.size)
+        assertEquals(Defaults.CONFIG_URLS.size, Defaults.MIRROR_LABELS.size)
+        assertEquals(listOf("GitHub", "GitLab", "Codeberg", "JSDelivr"), Defaults.MIRROR_LABELS)
+        assertEquals("https://gitlab.com/Grininja/orion-data/-/raw/main/config.json", Defaults.CONFIG_URLS[1])
+        assertEquals("https://codeberg.org/RookieZ/Orion-Data/raw/branch/main/config.json", Defaults.CONFIG_URLS[2])
+        assertEquals("https://gitlab.com/Grininja/orion-data/-/raw/main/apps.json", Defaults.APPS_URLS[1])
+        assertEquals("https://codeberg.org/RookieZ/Orion-Data/raw/branch/main/apps.json", Defaults.APPS_URLS[2])
+        assertEquals("https://raw.githubusercontent.com/RookieEnough/Orion-Data/data/mirror.json", Defaults.MIRROR_URLS[0])
+        assertEquals("https://gitlab.com/Grininja/orion-data/-/raw/data/mirror.json", Defaults.MIRROR_URLS[1])
+        assertEquals("https://codeberg.org/RookieZ/Orion-Data/raw/branch/data/mirror.json", Defaults.MIRROR_URLS[2])
+        assertEquals("https://cdn.jsdelivr.net/gh/RookieEnough/Orion-Data@data/mirror.json", Defaults.MIRROR_URLS[3])
+    }
+
+    @Test fun mirrorFallbackStaysOnSingleHost() = kotlinx.coroutines.runBlocking {
+        var trapHits = 0
+        var h0ConfigMode = "ok"
+        var h0AppsMode = "ok"
+        var h0MirrorMode = "ok"
+        val hits = mutableListOf<String>()
+
+        val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        val port = server.address.port
+        fun respond(ex: com.sun.net.httpserver.HttpExchange, code: Int, body: String) {
+            val bytes = body.toByteArray(Charsets.UTF_8)
+            ex.sendResponseHeaders(code, bytes.size.toLong())
+            ex.responseBody.use { it.write(bytes) }
+        }
+        val mirrorJson = """{"owner/demo":[{"tag_name":"v1.0.0","name":"1.0.0","prerelease":false,"published_at":"2026-01-01T00:00:00Z","assets":[{"name":"demo.apk","browser_download_url":"https://example.org/demo.apk","size":1048576,"download_count":10}]}]}"""
+        fun cfgJson(tag: String) = """{"appsJsonUrl":"http://127.0.0.1:$port/trap/apps.json","mirrorJsonUrl":"http://127.0.0.1:$port/trap/mirror.json","announcement":"$tag"}"""
+        val appsJsonH0 = """[{"id":"app0","name":"FromH0"}]"""
+        val appsJsonH1 = """[{"id":"app1","name":"FromH1"}]"""
+
+        server.createContext("/") { ex ->
+            val p = ex.requestURI.path
+            hits += p
+            when {
+                p.startsWith("/trap/") -> { trapHits++; respond(ex, 500, "trap") }
+                p == "/h0/config.json" -> when (h0ConfigMode) {
+                    "ok" -> respond(ex, 200, cfgJson("cfg0"))
+                    "badjson" -> respond(ex, 200, "{not valid")
+                    else -> respond(ex, 500, "err")
+                }
+                p == "/h0/apps.json" -> when (h0AppsMode) {
+                    "ok" -> respond(ex, 200, appsJsonH0)
+                    "obj" -> respond(ex, 200, """{"error":"not array"}""")
+                    "badjson" -> respond(ex, 200, "[broken")
+                    else -> respond(ex, 404, "missing")
+                }
+                p == "/h0/mirror.json" -> when (h0MirrorMode) {
+                    "ok" -> respond(ex, 200, mirrorJson)
+                    "badjson" -> respond(ex, 200, "<html>502</html>")
+                    "arr" -> respond(ex, 200, "[]")
+                    "slow" -> { Thread.sleep(1500); respond(ex, 200, mirrorJson) }
+                    else -> respond(ex, 500, "err")
+                }
+                p == "/h1/config.json" -> respond(ex, 200, cfgJson("cfg1"))
+                p == "/h1/apps.json" -> respond(ex, 200, appsJsonH1)
+                p == "/h1/mirror.json" -> respond(ex, 200, mirrorJson)
+                else -> respond(ex, 404, "404")
+            }
+        }
+        server.executor = java.util.concurrent.Executors.newCachedThreadPool()
+        server.start()
+        try {
+            val loopback = java.net.InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1))
+            val client = okhttp3.OkHttpClient.Builder()
+                .dns { listOf(loopback) }
+                .connectTimeout(400, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .readTimeout(400, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .callTimeout(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .build()
+            val cfgUrls = listOf("http://host0.test:$port/h0/config.json", "http://host1.test:$port/h1/config.json")
+            val appsUrls = listOf("http://host0.test:$port/h0/apps.json", "http://host1.test:$port/h1/apps.json")
+            val mirrorUrls = listOf("http://host0.test:$port/h0/mirror.json", "http://host1.test:$port/h1/mirror.json")
+            val labels = listOf("Host0", "Host1")
+
+            suspend fun load() = Repository.loadCatalogFromHosts(cfgUrls, appsUrls, mirrorUrls, labels, ts = "1", configClient = client, catalogClient = client, starsEnabled = false)
+
+            // 1. Healthy Host0 ignores config.appsJsonUrl / config.mirrorJsonUrl
+            val ok0 = load()!!
+            assertEquals("Host0", ok0.source)
+            assertEquals("cfg0", ok0.config?.announcement)
+            assertEquals(1, (ok0.rawApps as kotlinx.serialization.json.JsonArray).size)
+            assertTrue(ok0.mirror!!.containsKey("owner/demo"))
+            assertEquals(0, trapHits)
+
+            // 2. Host0 mirror HTTP 500 -> fails over cleanly to Host1 (all 3 from Host1)
+            h0MirrorMode = "500"; hits.clear()
+            val fbMirror500 = load()!!
+            assertEquals("Host1", fbMirror500.source)
+            assertEquals("cfg1", fbMirror500.config?.announcement)
+            assertTrue("/h1/apps.json" in hits && "/h1/mirror.json" in hits)
+            assertEquals(0, trapHits)
+
+            // 3. Host0 mirror invalid JSON / non-object / timeout -> fails over cleanly to Host1
+            for (mode in listOf("badjson", "arr", "slow")) {
+                h0MirrorMode = mode
+                val fb = load()!!
+                assertEquals("mode=$mode", "Host1", fb.source)
+                assertEquals("cfg1", fb.config?.announcement)
+                assertTrue(fb.mirror!!.containsKey("owner/demo"))
+            }
+
+            // 4. Host0 apps invalid JSON / object / 404 -> fails over to Host1
+            h0MirrorMode = "ok"
+            for (mode in listOf("404", "badjson", "obj")) {
+                h0AppsMode = mode
+                val fb = load()!!
+                assertEquals("appsMode=$mode", "Host1", fb.source)
+                assertEquals("cfg1", fb.config?.announcement)
+            }
+
+            // 5. Host0 config error -> fails over to Host1
+            h0AppsMode = "ok"; h0ConfigMode = "badjson"
+            assertEquals("Host1", load()!!.source)
+            assertEquals(0, trapHits)
+
+            // 6. All hosts broken -> null (loadCatalog falls back to embedded local_apps.json)
+            val allDead = Repository.loadCatalogFromHosts(
+                listOf("http://127.0.0.1:$port/h0/config.json"),
+                listOf("http://127.0.0.1:$port/h0/apps.json"),
+                listOf("http://127.0.0.1:$port/h0/mirror.json"),
+                listOf("Host0"), ts = "2", configClient = client, catalogClient = client, starsEnabled = false,
+            )
+            assertNull(allDead)
+        } finally {
+            server.stop(0)
+        }
     }
 }

@@ -166,12 +166,13 @@ private fun Home(vm: MainViewModel) {
 @Composable
 private fun AiStarFace(vm: MainViewModel, modifier: Modifier = Modifier, lifted: Boolean = false) {
     val cs = MaterialTheme.colorScheme; val still = LocalS.current.calm
-    val spin by rememberInfiniteTransition(label = "star").animateFloat(0f, if (still) 0f else 360f, infiniteRepeatable(tween(14_000, easing = androidx.compose.animation.core.LinearEasing)), label = "spin")
+    val spin = if (still) 0f else rememberInfiniteTransition(label = "star").animateFloat(0f, 360f, infiniteRepeatable(tween(14_000, easing = androidx.compose.animation.core.LinearEasing)), label = "spin").value
     val k by animateFloatAsState(if (lifted) 1.18f else 1f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "lift")
     val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val starShape = MaterialShapes.Cookie9Sided.toShape()
     Box(modifier.size(44.dp).graphicsLayer { scaleX = k; scaleY = k }.focusRing(src, CircleShape).clip(CircleShape)
         .clickable(src, ripple()) { vm.haptic(H.MEDIUM); vm.open(Overlay.AI) }, contentAlignment = Alignment.Center) {
-        Box(Modifier.matchParentSize().graphicsLayer { rotationZ = spin }.background(cs.primaryContainer.copy(alpha = .6f), MaterialShapes.Cookie9Sided.toShape()))
+        Box(Modifier.matchParentSize().graphicsLayer { rotationZ = spin }.background(cs.primaryContainer.copy(alpha = .6f), starShape))
         Icon(Sym.AutoAwesome, "Orion AI", Modifier.size(22.dp), tint = cs.onPrimaryContainer)
     }
 }
@@ -215,10 +216,11 @@ private fun FloatingNav(vm: MainViewModel, items: List<NavItem>, updates: Int, s
     val past = if (top) WindowInsets.statusBarsIgnoringVisibility.getTop(dn) else WindowInsets.navigationBars.getBottom(dn)
     val slide = Modifier.graphicsLayer { translationY = (if (top) -1 else 1) * drop * (size.height + past + 32.dp.toPx()) }
     val edge = if (top) Modifier.windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility).padding(top = 8.dp) else Modifier.navigationBarsPadding().padding(bottom = 12.dp)
+    val navElev = if (s.perf == "lite") 2.dp else 8.dp
     if (dock == "bar") {
         // The classic bar spans the screen on phones; wide screens get it as a floating card, so it never stretches edge to edge
         val wide = LocalWidthClass.current.wide
-        val m = if (wide) modifier.then(edge).then(slide).widthIn(max = 560.dp).shadow(8.dp, RoundedCornerShape(28.dp)).clip(RoundedCornerShape(28.dp)) else modifier.then(slide)
+        val m = if (wide) modifier.then(edge).then(slide).widthIn(max = 560.dp).shadow(navElev, RoundedCornerShape(28.dp)).clip(RoundedCornerShape(28.dp)) else modifier.then(slide)
         NavigationBar(m, containerColor = if (s.isOled) Color.Black else cs.surfaceContainer, windowInsets = if (wide) WindowInsets(0) else NavigationBarDefaults.windowInsets) {
             items.forEach { n -> NavigationBarItem(vm.tab == n.tab, { vm.navTo(n.tab) }, { NavIcon(n, vm.tab == n.tab, updates) }, label = { Text(n.label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = if (tight) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium) }) }
         }
@@ -228,7 +230,7 @@ private fun FloatingNav(vm: MainViewModel, items: List<NavItem>, updates: Int, s
     val oled = s.isOled
     val color = if (oled) Color.Black else cs.surfaceContainerHigh.copy(alpha = if (s.glassEffect) .95f else 1f)
     // OLED: a pitch-black dock, set apart from the black page by a hairline outline instead of a lighter fill
-    Surface(modifier.then(edge).then(slide), shape = if (dock == "labels") RoundedCornerShape(28.dp) else Pill, color = color, shadowElevation = 8.dp,
+    Surface(modifier.then(edge).then(slide), shape = if (dock == "labels") RoundedCornerShape(28.dp) else Pill, color = color, shadowElevation = navElev,
         border = if (oled) androidx.compose.foundation.BorderStroke(1.dp, cs.outline.copy(alpha = .5f)) else null) {
         Row(Modifier.padding(if (tight) 4.dp else 6.dp), horizontalArrangement = Arrangement.spacedBy(if (dock == "pill") 2.dp else 4.dp), verticalAlignment = Alignment.CenterVertically) {
             items.forEach { n ->
@@ -314,7 +316,7 @@ private fun NavIcon(n: NavItem, on: Boolean, updates: Int) {
 fun Header(vm: MainViewModel) {
     val s = LocalS.current; val d = LocalD.current; val cs = MaterialTheme.colorScheme
     val subtitle = NAV.firstOrNull { it.tab == vm.tab }?.subtitle ?: ""
-    Row(Modifier.fillMaxWidth().height(72.dp).padding(start = 16.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().height(72.dp).padding(start = 16.dp, end = 12.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
             if (vm.tab == Tab.ABOUT) Row(verticalAlignment = Alignment.CenterVertically) {
                 Logo(vm); Spacer(Modifier.width(12.dp)); Text(subtitle, style = MaterialTheme.typography.titleLargeEmphasized)
@@ -328,23 +330,11 @@ fun Header(vm: MainViewModel) {
         // The pill carries the shield on store tabs; the Dev tab has no pill, so it sits here. The megaphone, when there is news, lives here too.
         if (vm.tab == Tab.ABOUT) ShieldButton(vm)
         else AnnouncementButton(vm)
-        val dl = d.activeDownloads.size; val rd = d.readyToInstall.size; val up = vm.updates.size
-        // While anything downloads or waits to install, the queue is one tap away as a sheet over the page
-        AnimatedVisibility(dl + rd > 0, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
-            IconButton({ vm.haptic(H.LIGHT); vm.open(Overlay.DOWNLOADS) }) {
-                BadgedBox({ Badge(Modifier.offset(x = (-2).dp, y = 4.dp), containerColor = cs.primary) { Text("${dl + rd}") } }) {
-                    val prog = d.activeDownloads.keys.mapNotNull { d.downloadProgress[it] }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
-                    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-                        if (prog != null) CircularProgressIndicator({ prog / 100f }, Modifier.matchParentSize(), strokeWidth = 2.dp)
-                        Icon(if (dl > 0) Sym.Downloading else Sym.InstallMobile, "Downloads", Modifier.size(18.dp))
-                    }
-                }
-            }
-        }
+        val queueCount = d.activeDownloads.size + d.readyToInstall.size + vm.updates.size
         IconButton({ vm.openSettings() }) {
             BadgedBox({
                 when {
-                    up > 0 -> Badge(Modifier.offset(x = (-2).dp, y = 4.dp), containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text("$up") }
+                    queueCount > 0 -> Badge(Modifier.offset(x = (-2).dp, y = 4.dp), containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer) { Text("$queueCount") }
                     vm.storeUpdateAvailable -> Badge(Modifier.offset(x = (-2).dp, y = 4.dp)) { Text("!") }
                 }
             }) { Icon(Sym.Settings, "Settings") }
@@ -387,7 +377,7 @@ private fun Logo(vm: MainViewModel) {
 
 @Composable
 private fun SearchPill(vm: MainViewModel, scope: String) {
-    val s = LocalS.current; val cs = MaterialTheme.colorScheme
+    val cs = MaterialTheme.colorScheme
     val lib = vm.tab == Tab.MYAPPS; val orbit = vm.tab == Tab.ORBIT
     // Read through LocalD: vm.tabState is a plain StateFlow read, invisible to Compose, so this skippable pill never saw the typed text.
     val q = if (lib) vm.libraryQuery else if (orbit) vm.orbitQuery else LocalD.current.tab(vm.tab.key()).query
@@ -405,13 +395,7 @@ private fun SearchPill(vm: MainViewModel, scope: String) {
             })
         AnimatedContent(q.isNotEmpty(), label = "trail") { typing ->
             if (typing) IconButton({ set("") }) { Icon(Sym.Close, "Clear search") }
-            else Row {
-                ShieldButton(vm)
-                val at = remember { mutableStateOf(Offset.Zero) }; val reveal = LocalThemeReveal.current
-                IconButton({ reveal?.run(at.value) { vm.toggleTheme() } ?: vm.toggleTheme() }, Modifier.trackCenter(at)) {
-                    AnimatedContent(s.theme, label = "theme") { Icon(when (it) { "light" -> Sym.LightMode; "dusk" -> Sym.Brightness6; else -> Sym.DarkMode }, "Theme: $it, tap to change") }
-                }
-            }
+            else ShieldButton(vm)
         }
     }
 }
@@ -458,9 +442,10 @@ private fun AnnouncementButton(vm: MainViewModel) {
     ) {
         val scope = rememberCoroutineScope()
         IconButton({ scope.launch { tip.show() } }) {
+            val still = LocalS.current.calm
             BadgedBox({ if (unread) {
-                // The pulse only runs while unread: an idle infinite transition still ticks every frame.
-                val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(1f, 1.18f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "p")
+                // The pulse only runs while unread and animations are active: an idle infinite transition still ticks every frame.
+                val pulse = if (still) 1f else rememberInfiniteTransition(label = "pulse").animateFloat(1f, 1.18f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "p").value
                 Badge(Modifier.graphicsLayer { scaleX = pulse; scaleY = pulse })
             } }) {
                 Icon(Sym.Campaign, "Announcement", tint = if (unread) cs.primary else LocalContentColor.current)

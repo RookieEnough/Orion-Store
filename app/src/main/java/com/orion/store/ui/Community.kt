@@ -468,7 +468,7 @@ private fun PilotCard(s: Settings, name: String, avatarUrl: String, onAvatar: ()
     val cs = MaterialTheme.colorScheme; val tilt = rememberTilt(); val scope = rememberCoroutineScope()
     val drag = remember { Animatable(Offset.Zero, Offset.VectorConverter) }; val back = MaterialTheme.motionScheme.slowSpatialSpec<Offset>()
     val still = s.calm
-    val foil by rememberInfiniteTransition(label = "foil").animateFloat(0f, if (still) 0f else 1f, infiniteRepeatable(tween(7000, easing = LinearEasing)), label = "f")
+    val foil = if (still) 0f else rememberInfiniteTransition(label = "foil").animateFloat(0f, 1f, infiniteRepeatable(tween(7000, easing = LinearEasing)), label = "f").value
     val xp = Xp.total(s, LocalD.current.appLibrary.size); val level = Xp.level(xp)
     val target = ((xp - Xp.start(level)).toFloat() / Xp.step(level)).coerceIn(0f, 1f)
     // Metal skins from the tier levels on; below Bronze the card wears the theme
@@ -960,7 +960,8 @@ private const val KEYWORD_HELP = "1. Tap 'Check Releases Page' below.\n2. Go to 
 internal val pretty = Json { prettyPrint = true; @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class) prettyPrintIndent = "  " }
 
 private data class SubDraft(
-    val mode: String, val json: String = "", val shots: List<String> = emptyList(), val oIcon: String = "", val oKeyword: String = "", val oDesc: String = "",
+    val mode: String, val json: String = "", val shots: List<String> = emptyList(), val allowNoShots: Boolean = false,
+    val oIcon: String = "", val oKeyword: String = "", val oDesc: String = "",
     val manualKeyword: Boolean = false, val name: String = "", val description: String = "", val icon: String = "", val repoUrl: String = "", val keyword: String = "apk",
     val packageName: String = "", val category: String = "Utility", val manualCategory: Boolean = false, val topics: List<String> = emptyList(), val author: String = "", val downloadUrl: String = "",
     val autoName: String = "", val autoDesc: String = "", val autoPkg: String = "", val autoStatus: String = "idle", val autoMsg: String = "",
@@ -1050,7 +1051,7 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
     }
     fun submit() {
         err = ""
-        if (f.shots.size < 3) return fail("At least 3 screenshots are required.")
+        if (!f.allowNoShots && f.shots.size < 3) return fail("At least 3 screenshots are required (or confirm below if none exist).")
         f.shots.forEachIndexed { i, u -> explainRejectedImageLink(u)?.let { return fail("Screenshot #${i + 1}: $it") } }
         val shots = JsonArray(f.shots.map(::JsonPrimitive))
         val app: JsonObject = if (obtainium) {
@@ -1095,9 +1096,10 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
             dismissButton = { TextButton({ issue = null }) { Text("Go Back") } })
     }
     SheetToastHost(t)
-    val sectionsDone = if (obtainium) listOf(f.json.isNotBlank(), f.oIcon.isNotBlank(), f.shots.size >= 3)
+    val shotsDone = f.shots.size >= 3 || f.allowNoShots
+    val sectionsDone = if (obtainium) listOf(f.json.isNotBlank(), f.oIcon.isNotBlank(), shotsDone)
         else listOf(if (android) f.repoUrl.isNotBlank() else if (tv) f.repoUrl.isNotBlank() || f.downloadUrl.isNotBlank() else f.downloadUrl.isNotBlank(), f.name.isNotBlank() && f.author.isNotBlank(), f.description.isNotBlank() && f.icon.isNotBlank()) +
-            (if (repoForm) listOf(!android || f.packageName.isNotBlank()) else emptyList()) + (f.shots.size >= 3)
+            (if (repoForm) listOf(!android || f.packageName.isNotBlank()) else emptyList()) + shotsDone
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SubmitHero(platform, rank, rankIcon, cooldown, sectionsDone.count { it }, sectionsDone.size)
         if (android) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1106,13 +1108,21 @@ fun SubmissionSheet(vm: MainViewModel, onDismiss: () -> Unit) = OrionSheet(onDis
         }
         ErrorNote(err)
         val screenshots: @Composable (Int) -> Unit = { n ->
-            Section(n, "Screenshots", "At least 3 direct image links, from the README, Play Store or F-Droid.", f.shots.size >= 3) {
+            Section(n, "Screenshots", "At least 3 direct image links, from the README, Play Store or F-Droid.", shotsDone) {
                 Field(shot, { shot = it }, "Screenshot URL", "https://image.url/screenshot.jpg", uri = true, onDone = ::addShot,
                     trailing = { IconButton(::addShot, enabled = shot.isNotBlank()) { Icon(Sym.AddPhotoAlternate, "Add screenshot") } })
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val p by animateFloatAsState((f.shots.size / 3f).coerceAtMost(1f), MaterialTheme.motionScheme.defaultSpatialSpec(), label = "shots")
-                    LinearWavyProgressIndicator({ p }, Modifier.weight(1f), color = if (f.shots.size >= 3) Safe else cs.primary)
-                    Text("${f.shots.size}/3", Modifier.padding(start = 12.dp), style = ty.labelLargeEmphasized, color = if (f.shots.size >= 3) Safe else cs.onSurfaceVariant)
+                    LinearWavyProgressIndicator({ p }, Modifier.weight(1f), color = if (shotsDone) Safe else cs.primary)
+                    Text("${f.shots.size}/3", Modifier.padding(start = 12.dp), style = ty.labelLargeEmphasized, color = if (shotsDone) Safe else cs.onSurfaceVariant)
+                }
+                if (f.shots.size < 3) Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { vm.haptic(H.SELECTION); f = f.copy(allowNoShots = !f.allowNoShots) }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(f.allowNoShots, { vm.haptic(H.SELECTION); f = f.copy(allowNoShots = it) })
+                    Spacer(Modifier.width(6.dp))
+                    Text("Repo and F-Droid have no screenshots — submit without them", style = ty.bodySmall, color = cs.onSurfaceVariant)
                 }
                 var viewing by remember { mutableStateOf<Int?>(null) }
                 viewing?.let { Lightbox(f.shots, it) { viewing = null } }

@@ -193,12 +193,13 @@ private fun FilterPills(vm: MainViewModel, saved: List<String>, selected: MyApps
 
 @Composable
 private fun LibraryRow(vm: MainViewModel, r: MyAppRow, modifier: Modifier, picked: Boolean? = null, onPick: (() -> Unit)? = null) {
-    val (icon, c) = tone(r); val cs = MaterialTheme.colorScheme; val compact = LocalS.current.compactMode
+    val (icon, c) = tone(r); val cs = MaterialTheme.colorScheme; val s = LocalS.current; val compact = s.compactMode; val calm = s.calm
+    val dlProg = if (r.status == "downloading") (vm.dlProgress[r.app.id] ?: r.progress) else r.progress
     val bg by animateColorAsState(if (picked == true) cs.secondaryContainer else Color.Transparent, label = "pick")
     // While picking a tap toggles the row (rows that can't be uninstalled do nothing); otherwise a long-press starts picking
     Column(modifier.fillMaxWidth().padding(horizontal = 8.dp).background(bg, RoundedCornerShape(20.dp))
         .springClick(onLongClick = if (picked == null) onPick else null) { if (picked == null) vm.selectApp(r.app, "lib") else onPick?.invoke() }
-        .animateContentSize().padding(horizontal = 12.dp, vertical = if (compact) 4.dp else 10.dp)) {
+        .let { if (calm) it else it.animateContentSize() }.padding(horizontal = 12.dp, vertical = if (compact) 4.dp else 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             val size = if (compact) 40.dp else 52.dp
             Box(contentAlignment = Alignment.Center) {
@@ -211,7 +212,7 @@ private fun LibraryRow(vm: MainViewModel, r: MyAppRow, modifier: Modifier, picke
                 if (!compact) Text("${r.app.author} · ${r.app.platform} · ${r.versionDetail}", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(icon, null, Modifier.size(14.dp), tint = c); Spacer(Modifier.width(4.dp))
-                    Text(r.statusLabel, style = MaterialTheme.typography.labelMedium, color = c, maxLines = 1)
+                    Text(if (r.status == "downloading") "${Math.round(dlProg)}%" else r.statusLabel, style = MaterialTheme.typography.labelMedium, color = c, maxLines = 1)
                 }
             }
             val action = r.primaryAction
@@ -242,9 +243,10 @@ private fun LibraryRow(vm: MainViewModel, r: MyAppRow, modifier: Modifier, picke
             }
         }
         if (r.status == "downloading") Row(Modifier.padding(start = if (compact) 52.dp else 68.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            val p by animateFloatAsState(r.progress / 100f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "p")
+            val dlProg = vm.dlProgress[r.app.id] ?: r.progress
+            val p by animateFloatAsState(dlProg / 100f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "p")
             LinearWavyProgressIndicator({ p }, Modifier.weight(1f)); Spacer(Modifier.width(12.dp))
-            Text("${Math.round(r.progress)}%", style = MaterialTheme.typography.labelLarge)
+            Text("${Math.round(dlProg)}%", style = MaterialTheme.typography.labelLarge)
         }
     }
 }

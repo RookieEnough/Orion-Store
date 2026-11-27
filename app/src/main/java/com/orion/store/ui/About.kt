@@ -104,9 +104,11 @@ fun BadgeChip(id: String, onClick: () -> Unit) {
 private fun DevCoin(vm: MainViewModel, profile: DevProfile, slots: List<String>, flipped: Boolean, onTap: () -> Unit) {
     val cs = MaterialTheme.colorScheme; val still = LocalS.current.calm
     val rot by animateFloatAsState(if (flipped) 180f else 0f, MaterialTheme.motionScheme.slowSpatialSpec(), label = "flip")
-    val spin by rememberInfiniteTransition(label = "halo").animateFloat(0f, if (still) 0f else 360f, infiniteRepeatable(tween(30_000, easing = LinearEasing)), label = "s")
+    val spin = if (still) 0f else rememberInfiniteTransition(label = "halo").animateFloat(0f, 360f, infiniteRepeatable(tween(30_000, easing = LinearEasing)), label = "s").value
+    val burstShape = MaterialShapes.SoftBurst.toShape()
+    val coinShape = MaterialShapes.Cookie12Sided.toShape()
     Box(Modifier.size(260.dp, 200.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(176.dp).graphicsLayer { rotationZ = spin }.background(cs.primary.copy(.28f), MaterialShapes.SoftBurst.toShape()))
+        Box(Modifier.size(176.dp).graphicsLayer { rotationZ = spin }.background(cs.primary.copy(.28f), burstShape))
         slots.forEachIndexed { i, id ->
             val (ic, c) = BADGES[id] ?: return@forEachIndexed
             val (bg, fg) = tonal(c)
@@ -119,7 +121,7 @@ private fun DevCoin(vm: MainViewModel, profile: DevProfile, slots: List<String>,
         // Same flip as the pilot card: no mirrored back face, and the shadow fades out edge-on
         Box(Modifier.size(128.dp).graphicsLayer { rotationY = if (rot > 90f) rot - 180f else rot; cameraDistance = 12 * density
                 shadowElevation = 16.dp.toPx() * kotlin.math.abs(kotlin.math.cos(Math.toRadians(rot.toDouble()))).toFloat(); shape = CircleShape }
-            .springClick(MaterialShapes.Cookie12Sided.toShape(), onClick = onTap), contentAlignment = Alignment.Center) {
+            .springClick(coinShape, onClick = onTap), contentAlignment = Alignment.Center) {
             if (rot <= 90f) Box(Modifier.fillMaxSize().background(cs.primaryContainer), contentAlignment = Alignment.Center) {
                 // The initial paints at once; the photo fades over it if it ever loads (proxy, then direct), so a slow or dead link never shows as a wait.
                 Text(profile.name.take(1), fontSize = 60.sp, fontWeight = FontWeight.Black, color = cs.onPrimaryContainer)

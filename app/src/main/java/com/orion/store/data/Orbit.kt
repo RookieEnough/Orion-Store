@@ -640,18 +640,19 @@ object Orbit {
         return listOf("nightly", "daily", "snapshot").any { it in t }
     }
 
-    /** Releases into versions: APK assets that pass the filter, pre-releases only when asked, version read from the tag. */
-    fun versionsOf(o: OrbitApp, rel: List<CatalogProcessor.Release>): List<VersionOption> {
+    /** Releases into versions: APK assets that pass the filter, pre-releases when asked on the entry or globally, version read from the tag. */
+    fun versionsOf(o: OrbitApp, rel: List<CatalogProcessor.Release>, globalIncludePre: Boolean = false): List<VersionOption> {
+        val allowPre = o.includePre || globalIncludePre
         val filter = o.apkFilter.takeIf { it.isNotBlank() }?.let { runCatching { Regex(it, RegexOption.IGNORE_CASE) }.getOrNull() }
         val vre = o.versionRegex.takeIf { it.isNotBlank() }?.let { runCatching { Regex(it) }.getOrNull() }
         val rFilter = o.releaseFilter.takeIf { it.isNotBlank() }?.let { runCatching { Regex(it, RegexOption.IGNORE_CASE) }.getOrNull() }
         return rel.filter { r ->
             if (rFilter != null && !rFilter.containsMatchIn(r.name) && !rFilter.containsMatchIn(r.tag)) return@filter false
-            if (o.verifyLatestTag && !o.includePre) {
+            if (o.verifyLatestTag && !allowPre) {
                 val stream = r.channel ?: CatalogProcessor.detectStream(r.assets.firstOrNull()?.first.orEmpty(), r.tag, r.prerelease, r.name)
                 if (stream != "Stable" || r.prerelease) return@filter false
             }
-            o.includePre || !r.prerelease || channelBuild(r)
+            allowPre || !r.prerelease || channelBuild(r)
         }.mapNotNull { r ->
             val apks = r.assets.filter { (n, u) -> pkgFile(n) || pkgFile(u) }
                 .filter { (n, _) -> filter == null || filter.containsMatchIn(n) }
@@ -664,8 +665,8 @@ object Orbit {
     }
 
     /** Applies [rel] against the entry's current filters; [keepEmptyFallback] preserves previously cached versions during background refreshes. */
-    fun applyReleases(o: OrbitApp, rel: List<CatalogProcessor.Release>, now: Long, keepEmptyFallback: Boolean = false): OrbitApp {
-        val v = versionsOf(o, rel)
+    fun applyReleases(o: OrbitApp, rel: List<CatalogProcessor.Release>, now: Long, keepEmptyFallback: Boolean = false, globalIncludePre: Boolean = false): OrbitApp {
+        val v = versionsOf(o, rel, globalIncludePre)
         val count = rel.sumOf { it.downloads }
         return o.copy(
             versions = if (keepEmptyFallback) v.ifEmpty { o.versions } else v,
@@ -676,10 +677,10 @@ object Orbit {
     }
 
     /** Checks the source again. Errors are kept on the entry, so the Orbit list can say why an app stopped updating. */
-    suspend fun refresh(o: OrbitApp, tokens: HostTokens, now: Long): OrbitApp = runCatching {
+    suspend fun refresh(o: OrbitApp, tokens: HostTokens, now: Long, globalIncludePre: Boolean = false): OrbitApp = runCatching {
         releases(o, tokens)
     }.fold(
-        { rel -> applyReleases(o, rel, now, keepEmptyFallback = true) },
+        { rel -> applyReleases(o, rel, now, keepEmptyFallback = true, globalIncludePre = globalIncludePre) },
         { e -> o.copy(checkedAt = now, error = (e as? HttpError)?.let {
             when {
                 it.code == 429 && sourceOf(o.url) == OrbitSource.GITLAB -> "GitLab is limiting this network. Wait a few minutes, then check again."
@@ -688,9 +689,9 @@ object Orbit {
             }
         } ?: "Couldn't reach the source") })
 
-    suspend fun refreshAll(list: List<OrbitApp>, tokens: HostTokens, now: Long): List<OrbitApp> = coroutineScope {
+    suspend fun refreshAll(list: List<OrbitApp>, tokens: HostTokens, now: Long, globalIncludePre: Boolean = false): List<OrbitApp> = coroutineScope {
         val gate = Semaphore(4)
-        list.map { o -> async { if (o.paused) o else gate.withPermit { refresh(o, tokens, now) } } }.awaitAll()
+        list.map { o -> async { if (o.paused) o else gate.withPermit { refresh(o, tokens, now, globalIncludePre) } } }.awaitAll()
     }
 
     private val META = { html: String, prop: String ->
@@ -713,7 +714,7 @@ object Orbit {
     }
 
     /** A new entry for a link: what the source says about the app (name, author, icon, about, screenshots, package) plus its releases. */
-    suspend fun probe(url: String, tokens: HostTokens, now: Long, base: OrbitApp? = null): OrbitApp {
+    suspend fun probe(url: String, tokens: HostTokens, now: Long, base: OrbitApp? = null, globalIncludePre: Boolean = false): OrbitApp {
         val clean = url.trim()
         var o = base ?: OrbitApp(idFor(clean), clean, addedAt = now)
         when (val src = sourceOf(clean)) {
@@ -746,7 +747,7 @@ object Orbit {
             }
         }
         if (o.name.isBlank()) o = o.copy(name = humanizeRepoName(clean.substringBefore('?').trimEnd('/').substringAfterLast('/').replace(Regex("""\.(apk[sm]?|xapk)$""", RegexOption.IGNORE_CASE), "")))
-        return refresh(o, tokens, now)
+        return refresh(o, tokens, now, globalIncludePre)
     }
 
     // region Obtainium
@@ -788,7 +789,8 @@ object Orbit {
 
     /** One page of the Obtainium apps directory (apps.obtainium.imranr.dev), searchable. */
     suspend fun directory(query: String, page: Int, now: Long): Pair<List<DirectoryApp>, Boolean> {
-        val r = json.parseToJsonElement(Net.text("https://apps.obtainium.imranr.dev/api/apps?limit=30&page=$page&q=${enc(query.trim())}")) as JsonObject
+        val r = (json.parseToJsonElement(Net.text("https://apps.obtainium.imranr.dev/api/apps?limit=30&page=$page&q=${enc(query.trim())}")) as? JsonObject)
+            ?: return emptyList<DirectoryApp>() to false
         val apps = (r["apps"] as? JsonArray).orEmpty().mapNotNull { e ->
             val a = e as? JsonObject ?: return@mapNotNull null
             val about = ((a["description"] as? JsonObject)?.get("en") as? JsonPrimitive)?.contentOrNull.orEmpty()
@@ -827,13 +829,14 @@ object Orbit {
     // endregion
 
     /** Sharing needs a source the catalog's mirror bot can follow, and enough to fill a store page. Empty when ready. */
-    fun publishGaps(o: OrbitApp): List<String> = buildList {
+    fun publishGaps(o: OrbitApp, allowNoShots: Boolean = false): List<String> = buildList {
         val src = sourceOf(o.url)
         if (src !in setOf(OrbitSource.GITHUB, OrbitSource.GITLAB, OrbitSource.CODEBERG)) add("a GitHub, GitLab or Codeberg source")
         if (o.packageName.isNullOrBlank()) add("its package name (install it once)")
         if (o.icon.isBlank()) add("an icon")
+        else if (isLocalMediaUri(o.icon)) add("a public icon URL (local files can't be shared)")
         if (o.about.isBlank()) add("a description")
-        if (o.screenshots.size < 3) add("${3 - o.screenshots.size} more screenshot${if (3 - o.screenshots.size == 1) "" else "s"}")
+        if (!allowNoShots && o.screenshots.size < 3) add("${3 - o.screenshots.size} more screenshot${if (3 - o.screenshots.size == 1) "" else "s"}")
     }
 
     /** The catalog entry an Orbit app becomes when shared: the same JSON the submission form makes. */
@@ -841,8 +844,9 @@ object Orbit {
         val r = repoPath(o.url); val src = sourceOf(o.url)
         // The catalog filters assets by a plain keyword, so only a filter that is plain text carries over
         val kw = o.apkFilter.takeIf { it.isNotBlank() && it.all { c -> c.isLetterOrDigit() || c in "-_." } } ?: "apk"
+        val publicIcon = if (isLocalMediaUri(o.icon)) "" else sanitizeGitHubImageUrl(o.icon)
         return buildJsonObject {
-            put("name", o.name); put("id", slugId(o.name)); put("description", o.about); put("icon", sanitizeGitHubImageUrl(o.icon)); put("repoUrl", o.url)
+            put("name", o.name); put("id", slugId(o.name)); put("description", o.about); put("icon", publicIcon); put("repoUrl", o.url)
             put("githubRepo", if (src == OrbitSource.GITHUB) r?.repoPath.orEmpty() else ""); put("gitlabRepo", if (src == OrbitSource.GITLAB) r?.repoPath.orEmpty() else "")
             put("gitlabDomain", if (src == OrbitSource.GITLAB) r?.domain.orEmpty() else ""); put("codebergRepo", if (src == OrbitSource.CODEBERG) r?.repoPath.orEmpty() else "")
             put("releaseKeyword", kw); put("packageName", o.packageName.orEmpty()); put("category", o.category); put("author", o.author.ifBlank { r?.owner.orEmpty() })
@@ -1101,10 +1105,11 @@ fun OrbitApp.offered(minDays: Int, now: Long = System.currentTimeMillis()): List
 fun Settings.daysFor(o: OrbitApp) = if (o.minAgeDays >= 0) o.minAgeDays else orbitMinAgeDays
 
 /** The catalog-shaped item every Orion screen understands: detail page, versions, downloads, installs, updates, inspector. */
-fun OrbitApp.toItem(minDays: Int = 0, stream: String = "Stable", now: Long = System.currentTimeMillis()): AppItem {
+fun OrbitApp.toItem(minDays: Int = 0, stream: String = "Stable", now: Long = System.currentTimeMillis(), allowPre: Boolean = includePre): AppItem {
     val r = parseRepoSource(url); val src = Orbit.sourceOf(url)
     val shown = offered(minDays, now)
-    val def = shown.firstOrNull { it.type == stream } ?: shown.firstOrNull { it.type == "Stable" } ?: shown.firstOrNull()
+    val def = if (allowPre && stream == "Stable") (newestVersionOption(shown) ?: shown.firstOrNull())
+        else (shown.firstOrNull { it.type == stream } ?: shown.firstOrNull { it.type == "Stable" } ?: shown.firstOrNull())
     val v0 = def?.variants?.firstOrNull()
     return AppItem(id = id, name = name.ifBlank { "Untitled app" }, description = about, icon = icon, version = def?.version ?: "Latest", latestVersion = def?.version ?: "Latest",
         downloadUrl = v0?.url ?: "#", variants = def?.variants.orEmpty(), availableVersions = shown, repoUrl = url,

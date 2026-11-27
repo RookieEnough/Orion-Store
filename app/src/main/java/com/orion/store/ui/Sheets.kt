@@ -91,7 +91,8 @@ fun PickerHeader(title: String, subtitle: String?, onBack: () -> Unit) =
 /** Pulsing placeholder that keeps the final card geometry. */
 @Composable
 fun Skeleton(modifier: Modifier, shape: Shape = RoundedCornerShape(20.dp)) {
-    val a by rememberInfiniteTransition(label = "sk").animateFloat(.45f, .9f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "a")
+    val still = LocalS.current.calm
+    val a = if (still) .65f else rememberInfiniteTransition(label = "sk").animateFloat(.45f, .9f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "a").value
     Box(modifier.clip(shape).graphicsLayer { alpha = a }.background(cs.surfaceContainerHighest))
 }
 
@@ -737,8 +738,8 @@ fun WelcomeSheet(vm: MainViewModel) = OrionSheet(vm::finishWelcome) {
     val still = LocalS.current.calm
     var k by remember { mutableIntStateOf(0) }
     LaunchedEffect(still) { delay(250); k = 1; while (!still) { delay(2200); k++ } }
-    val pulse by rememberInfiniteTransition(label = "re").animateFloat(1f, if (still) 1f else 1.08f,
-        infiniteRepeatable(tween(1400, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "p")
+    val pulse = if (still) 1f else rememberInfiniteTransition(label = "re").animateFloat(1f, 1.08f,
+        infiniteRepeatable(tween(1400, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "p").value
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.BottomCenter) {
             MorphBlob(listOf(MaterialShapes.Circle, MaterialShapes.Cookie12Sided, MaterialShapes.SoftBurst, MaterialShapes.Flower), k, 168.dp, cs.primaryContainer) {

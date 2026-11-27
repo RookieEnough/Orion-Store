@@ -81,11 +81,12 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     // Stable releases only: the version picker and Download see just the stable build. Apps with no stable release keep theirs.
     val app = remember(base, s.resolvedPackageNames, s.stableOnly) { base.copy(packageName = s.resolvedPackageNames[base.id] ?: base.packageName,
         availableVersions = if (s.stableOnly) base.availableVersions.filter { it.type == "Stable" }.ifEmpty { base.availableVersions } else base.availableVersions) }
+    val activeStream = s.streamFor(app)
     val local = s.installedVersions[app.id]
-    val needsUpdate = hasAvailableUpdate(app, local, s.streamOf(app.id), s.installedBuilds[app.id])
+    val needsUpdate = hasAvailableUpdate(app, local, activeStream, s.installedBuilds[app.id])
     val installed = !local.isNullOrEmpty(); val upToDate = installed && !needsUpdate
     val activeId = d.activeDownloads[app.id]; val cleanup = d.pendingCleanup[app.id]?.fileName; val ready = d.readyToInstall[app.id]
-    val status = d.downloadStatus[app.id]; val progress = d.downloadProgress[app.id] ?: 0f
+    val status = d.downloadStatus[app.id]; val progress = vm.dlProgress[app.id] ?: d.downloadProgress[app.id] ?: 0f
     val installing = vm.installingId == app.id; val scanning = vm.scanningId == app.id
     val android = app.installsHere()
     val fallback = app.latestVersion == "Unknown" || app.version == "View on GitHub"
@@ -163,7 +164,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
     }
     fun report() = vm.tracker.open("mailto:${vm.config?.supportEmail ?: Defaults.SUPPORT_EMAIL}?subject=${Uri.encode("Report Issue: ${app.name}")}")
 
-    val shown = target ?: app.availableVersions.firstOrNull { it.type == s.streamOf(app.id) } ?: app.availableVersions.firstOrNull()
+    val shown = target ?: app.availableVersions.firstOrNull { it.type == activeStream } ?: app.availableVersions.firstOrNull()
     // Morphe and other patched builds: their release notes describe the build bot, not the app
     val notesTag = if (app.patches.isNotEmpty() || listOf(app.name, app.author, app.repoUrl, app.githubRepo, app.gitlabRepo).any { "morphe" in it.orEmpty().lowercase() }) "" else shown?.tag.orEmpty()
     // Fetched as the page opens, not when the row scrolls in; null while loading, NOTES_FAILED when the call failed
@@ -269,7 +270,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                                 unavailable -> Sym.Block to "Currently unavailable"
                                 fallback -> Sym.Code to "View on GitHub"
                                 external -> Sym.OpenInNew to "Get from source"
-                                needsUpdate -> Sym.SystemUpdate to "v${local.orEmpty().removePrefix("v")} → v${preferredVersion(app, s.streamOf(app.id)).removePrefix("v")}"
+                                needsUpdate -> Sym.SystemUpdate to "v${local.orEmpty().removePrefix("v")} → v${preferredVersion(app, activeStream).removePrefix("v")}"
                                 app.platform == Platform.PC -> Sym.DesktopWindows to "Get on PC"
                                 else -> Sym.Download to "Download"
                             }
@@ -281,7 +282,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                                 DropdownMenu(ignoreMenu, { ignoreMenu = false }, shape = RoundedCornerShape(20.dp)) {
                                     Text("Ignore update", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
                                     DropdownMenuItem({ Text("Ignore for 1 week") }, { ignore("week") }, leadingIcon = { Icon(Sym.Schedule, null) })
-                                    DropdownMenuItem({ Text("Until next version") }, { ignore("version", preferredVersion(app, s.streamOf(app.id))) }, leadingIcon = { Icon(Sym.SkipNext, null) })
+                                    DropdownMenuItem({ Text("Until next version") }, { ignore("version", preferredVersion(app, activeStream)) }, leadingIcon = { Icon(Sym.SkipNext, null) })
                                     DropdownMenuItem({ Text("Stay on v${local.orEmpty().removePrefix("v")}") }, { ignore("cap", local) }, leadingIcon = { Icon(Sym.Lock, null) })
                                     DropdownMenuItem({ Text("Never show again") }, { ignore("never") }, leadingIcon = { Icon(Sym.Block, null) })
                                 }
@@ -328,9 +329,16 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                             Text(label, style = MaterialTheme.typography.labelMedium, color = labelColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     val divider = @Composable { VerticalDivider(Modifier.padding(vertical = 8.dp), color = cs.outlineVariant) }
-                    Cell({ Text(app.latestVersion.removePrefix("v"), style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis) }, "Version")
+                    val shownVer = (shown?.version ?: app.latestVersion).removePrefix("v")
+                    val shownSize = shown?.variants?.firstOrNull()?.size?.let(CatalogProcessor::formatSize) ?: app.size
+                    Cell({
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(shownVer, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (shown != null && shown.type != "Stable") StreamBadge(shown.type)
+                        }
+                    }, "Version")
                     divider()
-                    Cell({ Text(app.size, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1) }, "Size")
+                    Cell({ Text(shownSize, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1) }, "Size")
                     divider()
                     Cell({ Icon(when (app.platform) { Platform.ANDROID -> Sym.Android; Platform.TV -> Sym.Tv; else -> Sym.DesktopWindows }, null, Modifier.size(24.dp)) }, app.platform)
                     // The package inspector, one tap from the stats: a tonal cookie that names what it found once it has looked
@@ -494,7 +502,7 @@ fun DetailScreen(vm: MainViewModel, base: AppItem) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Target:", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant); Spacer(Modifier.width(6.dp))
                     Text(target?.version ?: app.latestVersion, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.width(6.dp))
-                    StreamBadge(target?.type ?: "Stable")
+                    StreamBadge(target?.type ?: activeStream)
                 }
             }
         }
